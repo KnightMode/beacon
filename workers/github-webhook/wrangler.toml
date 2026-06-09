@@ -19,8 +19,7 @@ INDEXER_URL = "https://your-indexer.example.com"
 [[d1_databases]]
 binding = "DB"
 database_name = "scintel"
-# TODO: paste your D1 database id (output of `wrangler d1 create scintel`)
-database_id = "REPLACE_WITH_D1_DATABASE_ID"
+database_id = "27722a79-10d9-4bfc-aa53-1d65a80c8f79"
 
 # ---- Queue (this worker is BOTH producer and consumer) ----------------------
 [[queues.producers]]
