@@ -82,9 +82,9 @@ CREATE TABLE IF NOT EXISTS repo_index_status (
   repo_id        TEXT PRIMARY KEY REFERENCES repos(id) ON DELETE CASCADE,
   status         TEXT NOT NULL DEFAULT 'PENDING',   -- PENDING|INDEXING|READY|FAILED
   job_type       TEXT,                              -- FULL_INDEX|INCREMENTAL_INDEX
-  total_files    INTEGER NOT NULL DEFAULT 0,
-  indexed_files  INTEGER NOT NULL DEFAULT 0,
-  total_chunks   INTEGER NOT NULL DEFAULT 0,
+  total_files    INTEGER DEFAULT 0,
+  indexed_files  INTEGER DEFAULT 0,
+  total_chunks   INTEGER DEFAULT 0,
   commit_sha     TEXT,
   error          TEXT,
   started_at     TEXT,
