@@ -25,8 +25,12 @@ export interface RetrievalOutcome {
 export async function retrieve(
   env: Env,
   question: string,
+  searchText?: string,
 ): Promise<RetrievalOutcome> {
-  const parsed = parseQuery(question);
+  // searchText may be an enriched follow-up query (prev question + current);
+  // the LLM still receives the real `question` separately.
+  const query = searchText ?? question;
+  const parsed = parseQuery(query);
   const allowlist = await getAllowlistedRepoIds(env);
 
   if (allowlist.length === 0) {
@@ -40,7 +44,7 @@ export async function retrieve(
 
   const [lexical, vectorRaw] = await Promise.all([
     safe(lexicalSearch(env, parsed, allowlist)),
-    safe(vectorSearch(env, question, allowlist)),
+    safe(vectorSearch(env, query, allowlist)),
   ]);
   const vector = await hydrateContent(env, vectorRaw);
 
