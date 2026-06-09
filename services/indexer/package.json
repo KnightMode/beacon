@@ -1,0 +1,28 @@
+{
+  "name": "@scintel/indexer",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "start": "tsx src/server.ts",
+    "dev": "tsx watch src/server.ts",
+    "index": "tsx src/cli.ts",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@scintel/shared": "*",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "tree-sitter-wasms": "^0.1.13",
+    "web-tree-sitter": "^0.22.6"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/node": "^22.10.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.8"
+  }
+}
