@@ -16,6 +16,11 @@ import { retrieve } from './retrieval/pipeline.js';
 import { streamAnswerTokens, NO_RESULTS_TEXT } from './llm.js';
 import { buildCitationBlocks } from './format.js';
 import { buildAnswer } from './answer.js';
+import {
+  fetchThreadHistory,
+  buildRetrievalText,
+  type Turn,
+} from './history.js';
 
 const SLACK_API = 'https://slack.com/api';
 // Flush accumulated tokens to Slack roughly every this many chars to keep the
@@ -48,6 +53,7 @@ export interface StreamTarget {
   userId?: string;
   teamId?: string;
   question: string;
+  messageTs?: string;
 }
 
 export async function call(
@@ -91,6 +97,15 @@ export async function streamAnswer(env: Env, t: StreamTarget): Promise<void> {
     loading_messages: LOADING_MESSAGES,
   }).catch(() => undefined);
 
+  // Pull prior thread messages so follow-ups keep context. Gracefully empty if
+  // the channels:history / groups:history scope is missing.
+  const history = await fetchThreadHistory(
+    env,
+    t.channel,
+    t.threadTs,
+    t.messageTs,
+  ).catch(() => []);
+
   const write = async (chunks: MarkdownChunk[]): Promise<void> => {
     if (!ts) {
       const started = await call(env, 'chat.startStream', {
@@ -110,7 +125,8 @@ export async function streamAnswer(env: Env, t: StreamTarget): Promise<void> {
   };
 
   try {
-    const outcome = await retrieve(env, t.question);
+    const searchText = buildRetrievalText(history, t.question);
+    const outcome = await retrieve(env, t.question, searchText);
 
     if (outcome.packed.used.length === 0) {
       await write([markdown(NO_RESULTS_TEXT)]);
@@ -126,7 +142,12 @@ export async function streamAnswer(env: Env, t: StreamTarget): Promise<void> {
       buffer = '';
     };
 
-    for await (const token of streamAnswerTokens(env, t.question, outcome.packed)) {
+    for await (const token of streamAnswerTokens(
+      env,
+      t.question,
+      outcome.packed,
+      history,
+    )) {
       streamedAny = true;
       buffer += token;
       if (buffer.length >= FLUSH_CHARS) await flush();
@@ -155,14 +176,14 @@ export async function streamAnswer(env: Env, t: StreamTarget): Promise<void> {
       // Stream never opened — fall back to a normal post so the user still gets
       // an answer even when the streaming API is unavailable.
       console.warn('stream failed before start; falling back', { error: message });
-      await fallback(env, t);
+      await fallback(env, t, history);
     }
   }
 }
 
 /** Non-streaming fallback: post the full formatted answer once. */
-async function fallback(env: Env, t: StreamTarget): Promise<void> {
-  const message = await buildAnswer(env, t.question);
+async function fallback(env: Env, t: StreamTarget, history: Turn[]): Promise<void> {
+  const message = await buildAnswer(env, t.question, history);
   await call(env, 'chat.postMessage', {
     channel: t.channel,
     thread_ts: t.threadTs,

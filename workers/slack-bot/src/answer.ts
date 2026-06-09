@@ -6,12 +6,18 @@
 import type { Env } from './env.js';
 import { retrieve } from './retrieval/pipeline.js';
 import { generateAnswer } from './llm.js';
+import { buildRetrievalText, type Turn } from './history.js';
 import { buildAnswerMessage, type SlackMessage } from './format.js';
 
-export async function buildAnswer(env: Env, question: string): Promise<SlackMessage> {
+export async function buildAnswer(
+  env: Env,
+  question: string,
+  history: Turn[] = [],
+): Promise<SlackMessage> {
   try {
-    const outcome = await retrieve(env, question);
-    const answer = await generateAnswer(env, question, outcome.packed);
+    const searchText = buildRetrievalText(history, question);
+    const outcome = await retrieve(env, question, searchText);
+    const answer = await generateAnswer(env, question, outcome.packed, history);
     return buildAnswerMessage(question, answer.text, outcome.packed.citations);
   } catch (err) {
     return buildAnswerMessage(

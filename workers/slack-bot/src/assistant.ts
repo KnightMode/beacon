@@ -11,6 +11,7 @@
 import type { Env } from './env.js';
 import { call } from './stream.js';
 import { buildAnswer } from './answer.js';
+import { fetchThreadHistory } from './history.js';
 
 const LOADING_MESSAGES = [
   'Understanding your question…',
@@ -52,6 +53,7 @@ export interface AssistantMessage {
   userId?: string;
   teamId?: string;
   text: string;
+  messageTs?: string;
 }
 
 export async function handleAssistantMessage(
@@ -68,7 +70,16 @@ export async function handleAssistantMessage(
     loading_messages: LOADING_MESSAGES,
   });
 
-  const message = await buildAnswer(env, m.text);
+  // DM/assistant threads use the im:history scope (already granted), so prior
+  // turns are available for follow-up context.
+  const history = await fetchThreadHistory(
+    env,
+    m.channelId,
+    m.threadTs,
+    m.messageTs,
+  ).catch(() => []);
+
+  const message = await buildAnswer(env, m.text, history);
 
   await call(env, 'chat.postMessage', {
     channel: m.channelId,
