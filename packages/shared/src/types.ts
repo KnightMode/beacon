@@ -1,0 +1,229 @@
+/**
+ * Shared TypeScript types: job payloads, chunk types, graph edges, and D1 row
+ * shapes. These are the contract between the webhook worker, queue, indexer,
+ * and slack-bot worker.
+ */
+
+import type {
+  ChunkType,
+  EdgeType,
+  IndexStatus,
+  JobType,
+} from './constants.js';
+
+// ---------------------------------------------------------------------------
+// Queue job payloads
+// ---------------------------------------------------------------------------
+
+/** Base fields shared by every indexing job placed on the Cloudflare Queue. */
+export interface BaseIndexJob {
+  jobType: JobType;
+  repoId: string;
+  repoFullName: string;
+  /** Commit sha to index against; defaults to repo default branch HEAD. */
+  commitSha?: string;
+  enqueuedAt: string;
+}
+
+export interface FullIndexJob extends BaseIndexJob {
+  jobType: 'FULL_INDEX';
+}
+
+export interface IncrementalIndexJob extends BaseIndexJob {
+  jobType: 'INCREMENTAL_INDEX';
+  /** Files added/modified since last index — re-chunked. */
+  changedFiles: string[];
+  /** Files removed — their chunks/vectors are deleted. */
+  removedFiles: string[];
+}
+
+export type IndexJob = FullIndexJob | IncrementalIndexJob;
+
+// ---------------------------------------------------------------------------
+// Chunk / edge domain types (produced by the indexer)
+// ---------------------------------------------------------------------------
+
+export interface CodeChunk {
+  id: string;
+  repoId: string;
+  fileId: string;
+  path: string;
+  language: string | null;
+  chunkType: ChunkType;
+  symbol: string | null;
+  startLine: number;
+  endLine: number;
+  content: string;
+  contentHash: string;
+  commitSha: string | null;
+  /** Symbols imported within this chunk (used to build IMPORTS edges). */
+  imports: string[];
+  /** Symbols called within this chunk (used to build CALLS edges). */
+  calls: string[];
+  redacted: boolean;
+}
+
+export interface CodeEdge {
+  id: string;
+  repoId: string;
+  edgeType: EdgeType;
+  fromNodeId: string;
+  toNodeId: string;
+  fromSymbol: string | null;
+  toSymbol: string | null;
+  fileId: string | null;
+  startLine: number | null;
+}
+
+/** Metadata stored alongside each vector in Vectorize. */
+export interface VectorMetadata {
+  repo_id: string;
+  repo_full_name: string;
+  path: string;
+  language: string;
+  chunk_type: string;
+  symbol: string;
+  start_line: number;
+  end_line: number;
+  commit_sha: string;
+  [key: string]: string | number | boolean;
+}
+
+// ---------------------------------------------------------------------------
+// D1 row shapes (SQLite -> JS). Booleans come back as 0/1 integers.
+// ---------------------------------------------------------------------------
+
+export interface RepoRow {
+  id: string;
+  github_id: number | null;
+  full_name: string;
+  owner: string;
+  name: string;
+  default_branch: string;
+  private: number;
+  indexing_status: IndexStatus;
+  last_indexed_sha: string | null;
+  last_indexed_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface FileRow {
+  id: string;
+  repo_id: string;
+  path: string;
+  language: string | null;
+  size_bytes: number | null;
+  content_hash: string | null;
+  commit_sha: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ChunkRow {
+  id: string;
+  repo_id: string;
+  file_id: string;
+  path: string;
+  language: string | null;
+  chunk_type: ChunkType;
+  symbol: string | null;
+  start_line: number;
+  end_line: number;
+  content: string;
+  content_hash: string;
+  commit_sha: string | null;
+  embedded: number;
+  redacted: number;
+  created_at: string;
+}
+
+export interface CodeEdgeRow {
+  id: string;
+  repo_id: string;
+  edge_type: EdgeType;
+  from_node_id: string;
+  to_node_id: string;
+  from_symbol: string | null;
+  to_symbol: string | null;
+  file_id: string | null;
+  start_line: number | null;
+  created_at: string;
+}
+
+export interface RepoIndexStatusRow {
+  repo_id: string;
+  status: IndexStatus;
+  job_type: JobType | null;
+  total_files: number;
+  indexed_files: number;
+  total_chunks: number;
+  commit_sha: string | null;
+  error: string | null;
+  started_at: string | null;
+  finished_at: string | null;
+  updated_at: string;
+}
+
+export interface SlackWorkspaceRow {
+  id: string;
+  team_name: string | null;
+  bot_token: string | null;
+  bot_user_id: string | null;
+  installed_at: string;
+}
+
+export interface PrototypeRepoAllowlistRow {
+  repo_id: string;
+  full_name: string;
+  enabled: number;
+  added_by: string | null;
+  created_at: string;
+}
+
+export interface UserRow {
+  id: string;
+  slack_user_id: string | null;
+  slack_team_id: string | null;
+  github_login: string | null;
+  github_id: number | null;
+  github_token_enc: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface GithubUserRepoPermissionRow {
+  id: string;
+  user_id: string;
+  repo_id: string;
+  permission: 'read' | 'write' | 'admin';
+  synced_at: string;
+}
+
+// ---------------------------------------------------------------------------
+// Retrieval types (slack-bot worker)
+// ---------------------------------------------------------------------------
+
+export interface RetrievedChunk {
+  id: string;
+  repoId: string;
+  repoFullName: string;
+  path: string;
+  language: string | null;
+  chunkType: ChunkType;
+  symbol: string | null;
+  startLine: number;
+  endLine: number;
+  content: string;
+  /** Combined relevance score after reranking. */
+  score: number;
+  /** Where the chunk came from, for debugging/observability. */
+  source: 'lexical' | 'vector' | 'graph';
+}
+
+export interface Citation {
+  repoFullName: string;
+  path: string;
+  startLine: number;
+  endLine: number;
+}

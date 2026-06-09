@@ -1,0 +1,31 @@
+name = "scintel-slack-bot"
+main = "src/index.ts"
+compatibility_date = "2024-11-01"
+compatibility_flags = ["nodejs_compat"]
+
+# ---- Vars (non-secret config) ----------------------------------------------
+[vars]
+EMBEDDING_MODEL = "@cf/baai/bge-base-en-v1.5"
+LLM_MODEL = "@cf/meta/llama-3.1-8b-instruct"
+# Bot user id is used to strip the leading mention from app_mention text.
+SLACK_BOT_USER_ID = ""
+
+# ---- Secrets (set via: wrangler secret put <NAME>) --------------------------
+# SLACK_SIGNING_SECRET - verify Slack request signatures
+# SLACK_BOT_TOKEN      - xoxb- token for chat.postMessage (Web API)
+
+# ---- D1 metadata database (shared with the webhook worker) ------------------
+[[d1_databases]]
+binding = "DB"
+database_name = "scintel"
+# TODO: paste the same D1 database id used by the github-webhook worker.
+database_id = "REPLACE_WITH_D1_DATABASE_ID"
+
+# ---- Vectorize --------------------------------------------------------------
+[[vectorize]]
+binding = "VECTORIZE"
+index_name = "code-chunks"
+
+# ---- Workers AI -------------------------------------------------------------
+[ai]
+binding = "AI"
