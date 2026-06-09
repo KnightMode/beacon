@@ -9,11 +9,20 @@ compatibility_flags = ["nodejs_compat"]
 REPO_ALLOWLIST = "your-org/your-repo"
 # Base URL of the deployed indexer HTTP service (Node container).
 INDEXER_URL = "https://your-indexer.example.com"
+# ---- Pipeline dispatch (optional) -------------------------------------------
+# When PIPELINE_DISPATCH_REPO is set (and PIPELINE_DISPATCH_TOKEN secret exists),
+# the queue consumer triggers the GitHub Actions index.yml workflow via
+# repository_dispatch instead of POSTing to INDEXER_URL. Leave empty to keep the
+# existing INDEXER_URL behavior.
+PIPELINE_DISPATCH_REPO = ""      # set to "owner/repo" to enable pipeline dispatch
+PIPELINE_DISPATCH_EVENT = "index-repo"
 
 # ---- Secrets (set via: wrangler secret put <NAME>) --------------------------
 # GITHUB_WEBHOOK_SECRET   - verify X-Hub-Signature-256 on incoming webhooks
 # ADMIN_TOKEN             - bearer token for POST /admin/index
 # INDEXER_SHARED_SECRET   - bearer token the queue consumer sends to the indexer
+# PIPELINE_DISPATCH_TOKEN - GitHub token allowed to create repository_dispatch
+#                           (set via: wrangler secret put PIPELINE_DISPATCH_TOKEN)
 
 # ---- D1 metadata database ---------------------------------------------------
 [[d1_databases]]
