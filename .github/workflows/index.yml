@@ -1,0 +1,66 @@
+name: Index Repository
+
+# Runs the indexer CLI as a CI pipeline. Triggered by the github-webhook worker
+# via repository_dispatch (event type: index-repo) on repo changes, or manually
+# via workflow_dispatch from the Actions tab.
+
+on:
+  repository_dispatch:
+    types: [index-repo]
+  workflow_dispatch:
+    inputs:
+      repo:
+        description: 'owner/repo'
+        required: true
+      job_type:
+        description: 'FULL_INDEX or INCREMENTAL_INDEX'
+        required: false
+        default: 'FULL_INDEX'
+      files:
+        description: 'space-separated changed files (incremental)'
+        required: false
+        default: ''
+      commit_sha:
+        description: 'optional commit sha'
+        required: false
+        default: ''
+
+# Serialize indexings of the same repo so two runs never overlap.
+concurrency:
+  group: index-${{ github.event.client_payload.repo || github.event.inputs.repo }}
+  cancel-in-progress: false
+
+jobs:
+  index:
+    name: Index
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Run indexer
+        working-directory: services/indexer
+        # Untrusted payload fields are passed as env (never interpolated into the
+        # shell) to avoid Actions script injection. The runner validates them.
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PAYLOAD_REPO: ${{ github.event.client_payload.repo }}
+          PAYLOAD_JOBTYPE: ${{ github.event.client_payload.jobType }}
+          PAYLOAD_SHA: ${{ github.event.client_payload.commitSha }}
+          PAYLOAD_FILES_JSON: ${{ toJSON(github.event.client_payload.changedFiles) }}
+          INPUT_REPO: ${{ github.event.inputs.repo }}
+          INPUT_JOBTYPE: ${{ github.event.inputs.job_type }}
+          INPUT_SHA: ${{ github.event.inputs.commit_sha }}
+          INPUT_FILES: ${{ github.event.inputs.files }}
+          # indexer runtime config:
+          GITHUB_PAT: ${{ secrets.INDEXER_GITHUB_PAT }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_D1_DATABASE_ID: '27722a79-10d9-4bfc-aa53-1d65a80c8f79'
+          CLOUDFLARE_VECTORIZE_INDEX: 'code-chunks'
+          # loadConfig requires it but the CLI path does not use it.
+          INDEXER_SHARED_SECRET: 'ci-cli-unused'
+        run: node scripts/ci-index.mjs

@@ -26,6 +26,14 @@ export async function handleIndexBatch(
 }
 
 async function dispatchToIndexer(env: Env, job: IndexJob): Promise<void> {
+  // Prefer the GitHub Actions pipeline when configured: fire a
+  // repository_dispatch that runs the indexer CLI in CI. Falls back to the
+  // direct INDEXER_URL POST when pipeline dispatch is not configured.
+  if (env.PIPELINE_DISPATCH_REPO && env.PIPELINE_DISPATCH_TOKEN) {
+    await dispatchToPipeline(env, job);
+    return;
+  }
+
   const url = `${env.INDEXER_URL.replace(/\/$/, '')}/index`;
   const res = await fetch(url, {
     method: 'POST',
@@ -38,5 +46,34 @@ async function dispatchToIndexer(env: Env, job: IndexJob): Promise<void> {
   if (!res.ok) {
     const text = await res.text().catch(() => '');
     throw new Error(`indexer responded ${res.status}: ${text.slice(0, 500)}`);
+  }
+}
+
+async function dispatchToPipeline(env: Env, job: IndexJob): Promise<void> {
+  const url = `https://api.github.com/repos/${env.PIPELINE_DISPATCH_REPO}/dispatches`;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${env.PIPELINE_DISPATCH_TOKEN}`,
+      accept: 'application/vnd.github+json',
+      'content-type': 'application/json',
+      'user-agent': 'scintel-github-webhook',
+      'x-github-api-version': '2022-11-28',
+    },
+    body: JSON.stringify({
+      event_type: env.PIPELINE_DISPATCH_EVENT || 'index-repo',
+      client_payload: {
+        repo: job.repoFullName,
+        jobType: job.jobType,
+        commitSha: job.commitSha ?? null,
+        changedFiles: (job as { changedFiles?: string[] }).changedFiles ?? [],
+        removedFiles: (job as { removedFiles?: string[] }).removedFiles ?? [],
+      },
+    }),
+  });
+  // GitHub returns 204 No Content on success.
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`repository_dispatch responded ${res.status}: ${text.slice(0, 500)}`);
   }
 }
