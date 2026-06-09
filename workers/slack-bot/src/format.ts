@@ -33,23 +33,7 @@ export function buildAnswerMessage(
     },
   ];
 
-  if (citations.length > 0) {
-    blocks.push({ type: 'divider' });
-    blocks.push({
-      type: 'section',
-      text: { type: 'mrkdwn', text: `*Sources*\n${formatCitations(citations)}` },
-    });
-  }
-
-  blocks.push({
-    type: 'context',
-    elements: [
-      {
-        type: 'mrkdwn',
-        text: 'Answered from indexed repository content. Verify before relying on it.',
-      },
-    ],
-  });
+  blocks.push(...buildCitationBlocks(citations));
 
   return {
     response_type: 'in_channel',
@@ -58,15 +42,42 @@ export function buildAnswerMessage(
   };
 }
 
-function formatCitations(citations: Citation[]): string {
-  const seen = new Set<string>();
-  const lines: string[] = [];
-  for (const c of citations) {
-    const ref = `${c.repoFullName}/${c.path}:${c.startLine}-${c.endLine}`;
-    if (seen.has(ref)) continue;
-    seen.add(ref);
-    lines.push(`• \`${ref}\``);
+/**
+ * Citation + disclaimer blocks, shared by the non-streaming message and the
+ * finalized streamed message (rendered at the bottom via chat.stopStream).
+ */
+export function buildCitationBlocks(citations: Citation[]): SlackBlock[] {
+  const blocks: SlackBlock[] = [];
+  if (citations.length > 0) {
+    blocks.push({ type: 'divider' });
+    blocks.push({
+      type: 'section',
+      text: { type: 'mrkdwn', text: `*Sources*\n${formatCitations(citations)}` },
+    });
   }
+  blocks.push({
+    type: 'context',
+    elements: [
+      {
+        type: 'mrkdwn',
+        text: ':robot_face: Answered from indexed repository content — verify before relying on it.',
+      },
+    ],
+  });
+  return blocks;
+}
+
+function githubUrl(c: Citation): string {
+  const path = c.path.split('/').map(encodeURIComponent).join('/');
+  return `https://github.com/${c.repoFullName}/blob/main/${path}#L${c.startLine}-L${c.endLine}`;
+}
+
+function formatCitations(citations: Citation[]): string {
+  const lines: string[] = [];
+  citations.forEach((c, idx) => {
+    const label = `${c.path}:${c.startLine}-${c.endLine}`;
+    lines.push(`\`[${idx + 1}]\` <${githubUrl(c)}|${label}>`);
+  });
   return lines.join('\n');
 }
 
