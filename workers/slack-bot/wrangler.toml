@@ -18,8 +18,7 @@ SLACK_BOT_USER_ID = ""
 [[d1_databases]]
 binding = "DB"
 database_name = "scintel"
-# TODO: paste the same D1 database id used by the github-webhook worker.
-database_id = "REPLACE_WITH_D1_DATABASE_ID"
+database_id = "27722a79-10d9-4bfc-aa53-1d65a80c8f79"
 
 # ---- Vectorize --------------------------------------------------------------
 [[vectorize]]
