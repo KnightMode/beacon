@@ -1,0 +1,98 @@
+name: Deploy Workers
+
+# Auto-deploy the Cloudflare Workers on every push to main. Verifies first
+# (typecheck + tests), then deploys only the worker(s) affected by the change.
+# The indexer (services/indexer) is a Node container and is not deployed here.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'workers/**'
+      - 'packages/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/deploy.yml'
+  workflow_dispatch: {}
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: Typecheck & test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+
+  changes:
+    name: Detect changed workers
+    needs: verify
+    runs-on: ubuntu-latest
+    outputs:
+      slack: ${{ steps.filter.outputs.slack }}
+      webhook: ${{ steps.filter.outputs.webhook }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            slack:
+              - 'workers/slack-bot/**'
+              - 'packages/**'
+              - 'package.json'
+              - 'package-lock.json'
+              - '.github/workflows/deploy.yml'
+            webhook:
+              - 'workers/github-webhook/**'
+              - 'packages/**'
+              - 'package.json'
+              - 'package-lock.json'
+              - '.github/workflows/deploy.yml'
+
+  deploy-slack-bot:
+    name: Deploy slack-bot
+    needs: changes
+    if: needs.changes.outputs.slack == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Deploy
+        working-directory: workers/slack-bot
+        run: npx wrangler deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+  deploy-github-webhook:
+    name: Deploy github-webhook
+    needs: changes
+    if: needs.changes.outputs.webhook == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Deploy
+        working-directory: workers/github-webhook
+        run: npx wrangler deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
