@@ -1,0 +1,44 @@
+name = "scintel-github-webhook"
+main = "src/index.ts"
+compatibility_date = "2024-11-01"
+compatibility_flags = ["nodejs_compat"]
+
+# ---- Vars (non-secret config) ----------------------------------------------
+[vars]
+# Comma-separated owner/name seed for the allowlist (also stored in D1).
+REPO_ALLOWLIST = "your-org/your-repo"
+# Base URL of the deployed indexer HTTP service (Node container).
+INDEXER_URL = "https://your-indexer.example.com"
+
+# ---- Secrets (set via: wrangler secret put <NAME>) --------------------------
+# GITHUB_WEBHOOK_SECRET   - verify X-Hub-Signature-256 on incoming webhooks
+# ADMIN_TOKEN             - bearer token for POST /admin/index
+# INDEXER_SHARED_SECRET   - bearer token the queue consumer sends to the indexer
+
+# ---- D1 metadata database ---------------------------------------------------
+[[d1_databases]]
+binding = "DB"
+database_name = "scintel"
+# TODO: paste your D1 database id (output of `wrangler d1 create scintel`)
+database_id = "REPLACE_WITH_D1_DATABASE_ID"
+
+# ---- Queue (this worker is BOTH producer and consumer) ----------------------
+[[queues.producers]]
+binding = "INDEX_QUEUE"
+queue = "scintel-index-jobs"
+
+[[queues.consumers]]
+queue = "scintel-index-jobs"
+max_batch_size = 5
+max_batch_timeout = 30
+max_retries = 3
+dead_letter_queue = "scintel-index-jobs-dlq"
+
+# ---- Vectorize (declared for parity; deletes on incremental reindex) --------
+[[vectorize]]
+binding = "VECTORIZE"
+index_name = "code-chunks"
+
+# ---- Workers AI (declared for parity / future in-worker use) ----------------
+[ai]
+binding = "AI"
