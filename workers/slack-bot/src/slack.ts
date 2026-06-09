@@ -110,6 +110,7 @@ export function handleEvent(
             userId: event.user,
             teamId: body.team_id ?? event.team,
             question,
+            messageTs: event.ts,
           }),
         );
       }
@@ -146,6 +147,7 @@ export function handleEvent(
           userId: event.user,
           teamId: body.team_id ?? event.team,
           text: event.text,
+          messageTs: event.ts,
         }),
       );
     }
