@@ -5,8 +5,8 @@ compatibility_flags = ["nodejs_compat"]
 
 # ---- Vars (non-secret config) ----------------------------------------------
 [vars]
-EMBEDDING_MODEL = "@cf/baai/bge-base-en-v1.5"
-LLM_MODEL = "@cf/meta/llama-3.1-8b-instruct"
+EMBEDDING_MODEL = "@cf/google/embeddinggemma-300m"
+LLM_MODEL = "@cf/moonshotai/kimi-k2.6"
 # Bot user id is used to strip the leading mention from app_mention text.
 SLACK_BOT_USER_ID = ""
 
