@@ -12,9 +12,14 @@ import type { Env } from './env.js';
 import { call } from './stream.js';
 import { buildAnswer } from './answer.js';
 import { fetchThreadHistory } from './history.js';
-import { detectIntent, stripCreatePrPrefix } from './intent.js';
+import {
+  detectIntent,
+  stripCreatePrPrefix,
+  parseIndexRepoTarget,
+} from './intent.js';
 import { handleAssistantPrReview } from './actions/prReview.js';
 import { handleAssistantCreatePr } from './actions/createPr.js';
+import { indexRepoAction, indexStatusAction } from './actions/indexRepo.js';
 
 const LOADING_MESSAGES = [
   'Understanding your question…',
@@ -86,6 +91,25 @@ export async function handleAssistantMessage(
     await handleAssistantCreatePr(env, {
       ...m,
       text: stripCreatePrPrefix(m.text),
+    });
+    return;
+  }
+  if (intent === 'index_repo' || intent === 'index_status') {
+    let text: string;
+    try {
+      if (intent === 'index_status') {
+        text = await indexStatusAction(env);
+      } else {
+        const repo = parseIndexRepoTarget(m.text);
+        text = repo ? await indexRepoAction(env, repo) : 'Usage: `index owner/repo`';
+      }
+    } catch (err) {
+      text = `:warning: Index action failed: ${(err as Error).message}`;
+    }
+    await call(env, 'chat.postMessage', {
+      channel: m.channelId,
+      thread_ts: m.threadTs,
+      text,
     });
     return;
   }

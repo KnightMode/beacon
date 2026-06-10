@@ -270,6 +270,18 @@ curl -X POST https://<github-webhook-url>/admin/index \
 In Slack: `/ask-code where do we verify the GitHub webhook signature?`
 or `@yourbot how does the retrieval pipeline rerank chunks?`
 
+### 8. Add repos from Slack (self-serve indexing)
+
+- `@yourbot index owner/repo` — validates the repo, allowlists it, and runs a
+  full index via the `index.yml` GitHub Actions workflow (`repository_dispatch`).
+  Requires: the `INDEXER_GITHUB_PAT` / `CLOUDFLARE_*` Actions secrets on the
+  repo named in `INDEX_DISPATCH_REPO`, and both that PAT and the bot's
+  `GITHUB_PAT` granted read access to the target repo.
+- `@yourbot index status` — per-repo indexing progress (PENDING / INDEXING
+  with file counts / READY / FAILED with the error).
+
+Both also work via `/ask-code index …` and in the assistant pane.
+
 ---
 
 ## Environment variable reference
