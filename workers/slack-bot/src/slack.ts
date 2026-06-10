@@ -5,8 +5,6 @@
  */
 
 import type { Env } from './env.js';
-import { buildAnswer } from './answer.js';
-import { streamAnswer } from './stream.js';
 import {
   handleAssistantMessage,
   handleAssistantThreadStarted,
@@ -18,6 +16,7 @@ import {
 } from './intent.js';
 import { indexRepoAction, indexStatusAction } from './actions/indexRepo.js';
 import { call } from './stream.js';
+import { enqueueAnswer } from './jobs/answerQueue.js';
 import { reviewToResponseUrl, streamPrReview } from './actions/prReview.js';
 import {
   createPrFromThread,
@@ -87,7 +86,7 @@ export function handleSlashCommand(
     ctx.waitUntil(
       intent === 'pr_review'
         ? reviewToResponseUrl(env, question, responseUrl)
-        : answerToResponseUrl(env, question, responseUrl),
+        : enqueueAnswer(env, { kind: 'response_url', question, responseUrl }),
     );
   }
 
@@ -127,19 +126,6 @@ async function runIndexAction(
   } catch (err) {
     return `:warning: Index action failed: ${(err as Error).message}`;
   }
-}
-
-async function answerToResponseUrl(
-  env: Env,
-  question: string,
-  responseUrl: string,
-): Promise<void> {
-  const message = await buildAnswer(env, question);
-  await fetch(responseUrl, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ ...message, replace_original: false }),
-  });
 }
 
 // ---- Events (app_mention + url_verification) -------------------------------
@@ -230,7 +216,7 @@ export function handleEvent(
             ),
           );
         } else {
-          ctx.waitUntil(streamAnswer(env, target));
+          ctx.waitUntil(enqueueAnswer(env, { kind: 'stream', ...target }));
         }
       }
     }

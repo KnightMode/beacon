@@ -14,6 +14,7 @@ import { verifySlackSignature } from './signature.js';
 import { ackJson, handleSlashCommand, handleEvent } from './slack.js';
 import { processCreatePrJob } from './actions/createPr.js';
 import type { CreatePrJob } from './jobs/createPrQueue.js';
+import { processAnswerJob, type AnswerJob } from './jobs/answerQueue.js';
 
 export default {
   async fetch(
@@ -59,15 +60,31 @@ export default {
     return ackJson({ ok: false, error: 'not found' }, 404);
   },
 
-  async queue(batch: MessageBatch<CreatePrJob>, env: Env): Promise<void> {
+  async queue(batch: MessageBatch<unknown>, env: Env): Promise<void> {
+    if (batch.queue === 'scintel-answer-jobs') {
+      for (const message of batch.messages) {
+        try {
+          await processAnswerJob(env, message.body as AnswerJob);
+          message.ack();
+        } catch (err) {
+          console.error('answer queue job failed', {
+            error: (err as Error).message,
+          });
+          message.retry();
+        }
+      }
+      return;
+    }
+
     for (const message of batch.messages) {
+      const job = message.body as CreatePrJob;
       try {
-        await processCreatePrJob(env, message.body);
+        await processCreatePrJob(env, job);
         message.ack();
       } catch (err) {
         console.error('create-pr queue job failed', {
           error: (err as Error).message,
-          channel: message.body.channel,
+          channel: job.channel,
         });
         message.retry();
       }
