@@ -44,23 +44,41 @@ export async function handleReactionAdded(
   env: Env,
   event: ReactionEvent,
 ): Promise<void> {
-  if (event.item.type !== 'message') return;
+  console.log('reaction_added', {
+    reaction: event.reaction,
+    channel: event.item.channel,
+    ts: event.item.ts,
+    user: event.user,
+  });
+
+  if (event.item.type !== 'message') {
+    console.warn('reaction_added ignored: item is not a message', {
+      type: event.item.type,
+    });
+    return;
+  }
 
   const action = reactionAction(event.reaction);
   if (!action) return;
 
-  // Ignore the bot reacting to itself.
-  if (event.user === env.SLACK_BOT_USER_ID) return;
-
-  const threadTs = await resolveThreadRoot(env, event.item.channel, event.item.ts);
-  if (!threadTs) return;
+  // Ignore the bot reacting to itself (when SLACK_BOT_USER_ID is configured).
+  if (env.SLACK_BOT_USER_ID && event.user === env.SLACK_BOT_USER_ID) return;
 
   const channel = event.item.channel;
+  const threadTs = await resolveThreadRoot(env, channel, event.item.ts);
 
   switch (action) {
-    case 'create_pr':
-      await createPrFromThread(env, { channel, threadTs, userId: event.user });
+    case 'create_pr': {
+      const issue = await fetchMessageText(env, channel, event.item.ts);
+      await createPrFromThread(env, {
+        channel,
+        threadTs,
+        userId: event.user,
+        messageTs: event.item.ts,
+        issueHint: issue || undefined,
+      });
       return;
+    }
 
     case 'pr_review': {
       const anchor = await fetchMessageText(env, channel, event.item.ts);
