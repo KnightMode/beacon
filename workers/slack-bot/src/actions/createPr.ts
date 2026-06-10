@@ -6,7 +6,13 @@ import type { Env } from '../env.js';
 import { GitHubClient } from '../github.js';
 import { resolveTargetRepo } from '../repoTarget.js';
 import { retrieve } from '../retrieval/pipeline.js';
-import { generatePrProposal } from '../llm/createPr.js';
+import {
+  applyEdits,
+  generatePrProposal,
+  guessTargetPaths,
+  type PrFileChange,
+  type PrProposal,
+} from '../llm/createPr.js';
 import { call } from '../stream.js';
 import { buildIssueFromThread } from '../slackApi.js';
 import { fetchThreadHistory } from '../history.js';
@@ -133,16 +139,43 @@ async function runCreatePr(env: Env, target: CreatePrTarget): Promise<void> {
     const indexedContext = await fetchIndexedContext(env, issue, repo.fullName);
     log('context-ready', { contextChars: indexedContext.length });
 
+    const { defaultBranch } = await gh.getDefaultBranchSha(repo.owner, repo.repo);
+    const targetPaths = guessTargetPaths(issue, indexedContext, repo.fullName);
+    const fileSnippets: Array<{ path: string; content: string }> = [];
+    for (const path of targetPaths) {
+      const content = await gh.getFileContent(
+        repo.owner,
+        repo.repo,
+        path,
+        defaultBranch,
+      );
+      if (content) fileSnippets.push({ path, content });
+    }
+    log('files-loaded', { paths: fileSnippets.map((f) => f.path) });
+
     const proposal = await generatePrProposal(
       env,
       repo.fullName,
       issue,
       indexedContext,
+      fileSnippets,
       history,
     );
-    log('proposal-ready', { files: proposal.files.length, branch: proposal.branch });
+    log('proposal-ready', {
+      edits: proposal.edits.length,
+      files: proposal.files.length,
+      branch: proposal.branch,
+    });
 
-    if (proposal.files.length === 0) {
+    const fileChanges = await resolveProposalFiles(
+      gh,
+      repo.owner,
+      repo.repo,
+      defaultBranch,
+      proposal,
+    );
+
+    if (fileChanges.length === 0) {
       await postPlain(
         env,
         target.channel,
@@ -152,7 +185,7 @@ async function runCreatePr(env: Env, target: CreatePrTarget): Promise<void> {
       return;
     }
 
-    for (const f of proposal.files) {
+    for (const f of fileChanges) {
       if (new TextEncoder().encode(f.content).length > MAX_FILE_BYTES) {
         throw new Error(`File ${f.path} exceeds size limit`);
       }
@@ -164,7 +197,7 @@ async function runCreatePr(env: Env, target: CreatePrTarget): Promise<void> {
       proposal.branch,
       proposal.title,
       proposal.body,
-      proposal.files,
+      fileChanges,
     );
     log('pr-opened', { number: pr.number, url: pr.htmlUrl });
 
@@ -198,6 +231,34 @@ async function clearThreadStatus(
     thread_ts: threadTs,
     status: '',
   }).catch(() => undefined);
+}
+
+async function resolveProposalFiles(
+  gh: GitHubClient,
+  owner: string,
+  repo: string,
+  defaultBranch: string,
+  proposal: PrProposal,
+): Promise<PrFileChange[]> {
+  if (proposal.files.length > 0) return proposal.files;
+  if (proposal.edits.length === 0) return [];
+
+  const byPath = new Map<string, typeof proposal.edits>();
+  for (const edit of proposal.edits) {
+    const list = byPath.get(edit.path) ?? [];
+    list.push(edit);
+    byPath.set(edit.path, list);
+  }
+
+  const out: PrFileChange[] = [];
+  for (const [path, edits] of byPath) {
+    const base = await gh.getFileContent(owner, repo, path, defaultBranch);
+    if (base === null) {
+      throw new Error(`File not found on ${defaultBranch}: ${path}`);
+    }
+    out.push({ path, content: applyEdits(base, edits) });
+  }
+  return out;
 }
 
 async function fetchIndexedContext(
