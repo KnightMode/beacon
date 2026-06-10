@@ -124,10 +124,14 @@ function validateTool(t: unknown): PlannerTool | null {
   }
 }
 
+/** Truthful progress hook: called at real stage transitions, never cycled. */
+export type ProgressFn = (stage: string) => void;
+
 export async function agenticRetrieve(
   env: Env,
   question: string,
   searchText?: string,
+  onProgress?: ProgressFn,
 ): Promise<RetrievalOutcome> {
   const query = searchText ?? question;
   const parsed = parseQuery(query);
@@ -145,6 +149,7 @@ export async function agenticRetrieve(
   // Turn 0: standard hybrid search seeds the evidence pool.
   const startedAt = Date.now();
   const pool = new Map<string, RetrievedChunk>();
+  onProgress?.('is searching the codebase…');
   await runSearch(env, query, parsed, allowlist, pool);
 
   let turns = 0;
@@ -155,6 +160,11 @@ export async function agenticRetrieve(
 
     const plan = await withDeadline(planNext(env, question, pool), remaining);
     if (!plan || plan.done || plan.tools.length === 0) break;
+    onProgress?.(
+      turns === 0
+        ? 'is following the code trail…'
+        : 'is digging deeper into the code…',
+    );
 
     remaining = PLANNING_BUDGET_MS - (Date.now() - startedAt);
     if (remaining <= 0) break;

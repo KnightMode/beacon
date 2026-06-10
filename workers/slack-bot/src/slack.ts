@@ -216,7 +216,17 @@ export function handleEvent(
             ),
           );
         } else {
-          ctx.waitUntil(enqueueAnswer(env, { kind: 'stream', ...target }));
+          // Show the thinking status immediately from the event handler so
+          // the queue hop doesn't delay the first visible feedback.
+          ctx.waitUntil(
+            call(env, 'assistant.threads.setStatus', {
+              channel_id: event.channel,
+              thread_ts: threadTs,
+              status: 'is reading your question…',
+            })
+              .catch(() => undefined)
+              .then(() => enqueueAnswer(env, { kind: 'stream', ...target })),
+          );
         }
       }
     }
