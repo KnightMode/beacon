@@ -17,6 +17,8 @@ const HELP = `scintel indexer CLI
 
 Usage:
   npm run index -- <owner/repo>                          Run a FULL_INDEX
+  npm run index -- <owner/repo> --force                  Full re-chunk/re-embed
+                                                         (skips no shortcuts)
   npm run index -- <owner/repo> --commit <sha>           FULL_INDEX at a commit
   npm run index -- <owner/repo> --incremental <files...> INCREMENTAL re-index
   npm run index -- <owner/repo> --incremental <files...> --removed <files...>
@@ -44,6 +46,7 @@ async function run(): Promise<void> {
   }
 
   let commitSha: string | undefined;
+  let force = false;
   const incrementalFiles: string[] = [];
   const removedFiles: string[] = [];
   let mode: 'full' | 'incremental' | 'removed' = 'full';
@@ -52,6 +55,8 @@ async function run(): Promise<void> {
     const arg = argv[i]!;
     if (arg === '--commit') {
       commitSha = argv[++i];
+    } else if (arg === '--force') {
+      force = true;
     } else if (arg === '--incremental') {
       mode = 'incremental';
     } else if (arg === '--removed') {
@@ -86,6 +91,7 @@ async function run(): Promise<void> {
           repoId,
           repoFullName,
           commitSha,
+          force,
           enqueuedAt: new Date().toISOString(),
         };
 

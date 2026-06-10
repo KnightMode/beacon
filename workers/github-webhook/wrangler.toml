@@ -38,7 +38,8 @@ queue = "scintel-index-jobs"
 [[queues.consumers]]
 queue = "scintel-index-jobs"
 max_batch_size = 5
-max_batch_timeout = 30
+# Short batch window: a lone push should dispatch to the pipeline within seconds.
+max_batch_timeout = 3
 max_retries = 3
 dead_letter_queue = "scintel-index-jobs-dlq"
 

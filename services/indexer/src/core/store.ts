@@ -44,14 +44,32 @@ export async function setRepoStatus(
   d1: D1Client,
   repoId: string,
   status: IndexStatus,
+  indexedSha?: string,
 ): Promise<void> {
   await d1.exec(
     `UPDATE repos SET indexing_status = ?2,
        last_indexed_at = CASE WHEN ?2 = 'READY' THEN datetime('now') ELSE last_indexed_at END,
+       last_indexed_sha = COALESCE(?3, last_indexed_sha),
        updated_at = datetime('now')
      WHERE id = ?1`,
-    [repoId, status],
+    [repoId, status, indexedSha ?? null],
   );
+}
+
+export async function getRepoIndexInfo(
+  d1: D1Client,
+  repoId: string,
+): Promise<{ lastIndexedSha: string | null; status: string } | null> {
+  const rows = await d1.query<{
+    last_indexed_sha: string | null;
+    indexing_status: string;
+  }>(`SELECT last_indexed_sha, indexing_status FROM repos WHERE id = ?1`, [
+    repoId,
+  ]);
+  const row = rows[0];
+  return row
+    ? { lastIndexedSha: row.last_indexed_sha, status: row.indexing_status }
+    : null;
 }
 
 export interface IndexStatusUpdate {
@@ -140,6 +158,57 @@ export async function chunkIdsForFile(
     [fileId],
   );
   return rows.map((r) => r.id);
+}
+
+/** Existing chunk id -> content_hash map for a file (unchanged-chunk skip). */
+export async function chunkHashesForFile(
+  d1: D1Client,
+  fileId: string,
+): Promise<Map<string, string>> {
+  const rows = await d1.query<{ id: string; content_hash: string }>(
+    `SELECT id, content_hash FROM chunks WHERE file_id = ?1`,
+    [fileId],
+  );
+  return new Map(rows.map((r) => [r.id, r.content_hash]));
+}
+
+/** Stored content hash of a file row, if any (unchanged-file skip). */
+export async function getFileContentHash(
+  d1: D1Client,
+  fileId: string,
+): Promise<string | null> {
+  const rows = await d1.query<{ content_hash: string | null }>(
+    `SELECT content_hash FROM files WHERE id = ?1`,
+    [fileId],
+  );
+  return rows[0]?.content_hash ?? null;
+}
+
+export async function deleteChunksByIds(
+  d1: D1Client,
+  ids: string[],
+): Promise<void> {
+  for (const id of ids) {
+    await d1.exec(`DELETE FROM chunks WHERE id = ?1`, [id]);
+  }
+}
+
+export async function deleteEdgesForFile(
+  d1: D1Client,
+  fileId: string,
+): Promise<void> {
+  await d1.exec(`DELETE FROM code_edges WHERE file_id = ?1`, [fileId]);
+}
+
+export async function countChunksForRepo(
+  d1: D1Client,
+  repoId: string,
+): Promise<number> {
+  const rows = await d1.query<{ n: number }>(
+    `SELECT count(*) AS n FROM chunks WHERE repo_id = ?1`,
+    [repoId],
+  );
+  return rows[0]?.n ?? 0;
 }
 
 export async function deleteFileData(d1: D1Client, fileId: string): Promise<void> {

@@ -32,13 +32,19 @@ import { chunkGeneric } from '../chunking/genericChunker.js';
 import {
   ensureRepoRow,
   setRepoStatus,
+  getRepoIndexInfo,
   updateIndexStatus,
   upsertFile,
   chunkIdsForFile,
+  chunkHashesForFile,
+  getFileContentHash,
+  deleteChunksByIds,
+  deleteEdgesForFile,
   deleteFileData,
   deleteFileRow,
   insertChunks,
   insertEdges,
+  countChunksForRepo,
   repoIdFor,
   fileIdFor,
 } from './store.js';
@@ -82,6 +88,63 @@ export async function indexRepo(
     repoInfo.private,
     repoInfo.id,
   );
+
+  const force = job.jobType === 'FULL_INDEX' && job.force === true;
+  const prior = await getRepoIndexInfo(d1, repoId);
+
+  // Up-to-date shortcut: a non-forced FULL_INDEX of an already-READY repo at
+  // the same commit is a no-op (e.g. App reinstalls, duplicate triggers).
+  if (
+    !force &&
+    job.jobType === 'FULL_INDEX' &&
+    prior?.status === 'READY' &&
+    prior.lastIndexedSha === commitSha
+  ) {
+    log.info('repo already indexed at this commit; skipping', {
+      repo: job.repoFullName,
+      commitSha,
+    });
+    return {
+      repoFullName: job.repoFullName,
+      commitSha,
+      filesIndexed: 0,
+      chunksWritten: 0,
+      edgesWritten: 0,
+      filesRemoved: 0,
+    };
+  }
+
+  // Diff conversion: a non-forced FULL_INDEX of a previously indexed repo
+  // only needs the files that changed since the last indexed commit.
+  let effectiveJob: IndexJob = job;
+  if (
+    !force &&
+    job.jobType === 'FULL_INDEX' &&
+    prior?.lastIndexedSha &&
+    prior.lastIndexedSha !== commitSha
+  ) {
+    const diff = await github
+      .compareCommits(owner, name, prior.lastIndexedSha, commitSha)
+      .catch(() => null);
+    if (diff) {
+      effectiveJob = {
+        jobType: 'INCREMENTAL_INDEX',
+        repoId,
+        repoFullName: job.repoFullName,
+        commitSha,
+        changedFiles: diff.changed,
+        removedFiles: diff.removed,
+        enqueuedAt: job.enqueuedAt,
+      };
+      log.info('full index converted to diff-based incremental', {
+        repo: job.repoFullName,
+        base: prior.lastIndexedSha,
+        changed: diff.changed.length,
+        removed: diff.removed.length,
+      });
+    }
+  }
+
   await setRepoStatus(d1, repoId, 'INDEXING');
   await updateIndexStatus(d1, repoId, {
     status: 'INDEXING',
@@ -96,7 +159,7 @@ export async function indexRepo(
     const byPath = new Map<string, TreeEntry>();
     for (const entry of tree) byPath.set(entry.path, entry);
 
-    const { targets, removed } = selectTargets(job, tree, byPath);
+    const { targets, removed } = selectTargets(effectiveJob, tree, byPath);
 
     // Incremental: remove deleted files entirely.
     let filesRemoved = 0;
@@ -114,12 +177,25 @@ export async function indexRepo(
     let edgesWritten = 0;
 
     for (const entry of targets) {
+      const fileId = fileIdFor(repoId, entry.path);
+      const language = detectLanguage(entry.path);
+
+      // Unchanged-file skip: compare the stored content hash before fetching
+      // chunks. (Git blob sha is over raw bytes; our hash is over the decoded
+      // UTF-8, so we hash the fetched content.)
       const content = await github.getBlobContent(owner, name, entry.sha);
       if (content === null || looksBinary(content)) continue;
-
-      const language = detectLanguage(entry.path);
       const fileHash = await sha256Hex(content);
-      const fileId = await upsertFile(d1, {
+
+      if (!force) {
+        const priorHash = await getFileContentHash(d1, fileId);
+        if (priorHash === fileHash) {
+          filesIndexed++;
+          continue;
+        }
+      }
+
+      await upsertFile(d1, {
         repoId,
         path: entry.path,
         language,
@@ -127,11 +203,6 @@ export async function indexRepo(
         contentHash: fileHash,
         commitSha,
       });
-
-      // Delete-old-then-reindex: clear previous chunks + vectors for this file.
-      const oldIds = await chunkIdsForFile(d1, fileId);
-      if (oldIds.length) await vectorize.deleteByIds(oldIds);
-      await deleteFileData(d1, fileId);
 
       const { chunks, edges } = await produceChunks({
         repoId,
@@ -141,18 +212,42 @@ export async function indexRepo(
         content,
         commitSha,
       });
-      if (chunks.length === 0) {
-        filesIndexed++;
-        continue;
+      redactChunks(chunks);
+
+      if (force) {
+        // True full reindex: clear previous chunks + vectors, re-embed all.
+        const oldIds = await chunkIdsForFile(d1, fileId);
+        if (oldIds.length) await vectorize.deleteByIds(oldIds);
+        await deleteFileData(d1, fileId);
+        await embedAndUpsert(ai, vectorize, job.repoFullName, chunks);
+        await insertChunks(d1, chunks);
+        await insertEdges(d1, edges);
+        chunksWritten += chunks.length;
+      } else {
+        // Chunk-level dedup: embed/write only chunks whose content changed,
+        // delete chunks that no longer exist. Vectorize upsert overwrites
+        // changed ids in place.
+        const existing = await chunkHashesForFile(d1, fileId);
+        const newIds = new Set(chunks.map((c) => c.id));
+        const staleIds = [...existing.keys()].filter((id) => !newIds.has(id));
+        const dirty = chunks.filter(
+          (c) => existing.get(c.id) !== c.contentHash,
+        );
+
+        if (staleIds.length) {
+          await vectorize.deleteByIds(staleIds);
+          await deleteChunksByIds(d1, staleIds);
+        }
+        // Edges are cheap, derived rows: refresh them wholesale per file.
+        await deleteEdgesForFile(d1, fileId);
+        await insertEdges(d1, edges);
+
+        await embedAndUpsert(ai, vectorize, job.repoFullName, dirty);
+        await insertChunks(d1, dirty);
+        chunksWritten += dirty.length;
       }
 
-      redactChunks(chunks);
-      await embedAndUpsert(ai, vectorize, job.repoFullName, chunks);
-      await insertChunks(d1, chunks);
-      await insertEdges(d1, edges);
-
       filesIndexed++;
-      chunksWritten += chunks.length;
       edgesWritten += edges.length;
 
       await updateIndexStatus(d1, repoId, {
@@ -163,16 +258,18 @@ export async function indexRepo(
       });
     }
 
+    // Report the repo's true chunk total, not just this job's writes.
+    const totalChunks = await countChunksForRepo(d1, repoId);
     await updateIndexStatus(d1, repoId, {
       status: 'READY',
       totalFiles: targets.length,
       indexedFiles: filesIndexed,
-      totalChunks: chunksWritten,
+      totalChunks,
       commitSha,
       finishing: true,
       error: null,
     });
-    await setRepoStatus(d1, repoId, 'READY');
+    await setRepoStatus(d1, repoId, 'READY', commitSha);
 
     log.info('indexing complete', {
       repo: job.repoFullName,

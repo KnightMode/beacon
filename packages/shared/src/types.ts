@@ -27,6 +27,12 @@ export interface BaseIndexJob {
 
 export interface FullIndexJob extends BaseIndexJob {
   jobType: 'FULL_INDEX';
+  /**
+   * Force a true full re-chunk/re-embed, bypassing the up-to-date shortcut,
+   * diff-based conversion, and unchanged-content skips. Needed after chunker
+   * or embedding-model changes.
+   */
+  force?: boolean;
 }
 
 export interface IncrementalIndexJob extends BaseIndexJob {
