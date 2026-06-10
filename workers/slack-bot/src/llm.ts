@@ -40,8 +40,33 @@ export interface LlmAnswer {
   text: string;
 }
 
+/**
+ * Workers AI text-generation responses come in two shapes depending on model:
+ * - legacy (llama-style): { response: "..." }
+ * - OpenAI-style (kimi-k2.6 etc.): { choices: [{ message: { content } }] },
+ *   with streaming deltas at choices[0].delta.content (reasoning models may
+ *   emit reasoning_content-only deltas, which must be ignored).
+ */
 interface LlmResponse {
   response?: string;
+  choices?: Array<{
+    message?: { content?: string | null };
+    delta?: { content?: string | null };
+  }>;
+}
+
+function extractText(res: LlmResponse): string {
+  if (typeof res.response === 'string' && res.response.length > 0) {
+    return res.response;
+  }
+  return res.choices?.[0]?.message?.content ?? '';
+}
+
+function extractDelta(res: LlmResponse): string {
+  if (typeof res.response === 'string' && res.response.length > 0) {
+    return res.response;
+  }
+  return res.choices?.[0]?.delta?.content ?? '';
 }
 
 export const NO_RESULTS_TEXT =
@@ -83,11 +108,14 @@ export async function generateAnswer(
 
   const res = (await env.AI.run(env.LLM_MODEL as keyof AiModels, {
     messages: buildMessages(question, packed, history),
-    max_tokens: 800,
+    max_tokens: 1024,
     temperature: 0.2,
+    // Disable reasoning/thinking on models that support it (e.g. Kimi K2.6)
+    // so the token budget goes entirely to the visible answer.
+    chat_template_kwargs: { thinking: false },
   } as never)) as unknown as LlmResponse;
 
-  return { text: res.response?.trim() || 'No answer was generated.' };
+  return { text: extractText(res).trim() || 'No answer was generated.' };
 }
 
 /**
@@ -102,9 +130,10 @@ export async function* streamAnswerTokens(
 ): AsyncGenerator<string> {
   const stream = (await env.AI.run(env.LLM_MODEL as keyof AiModels, {
     messages: buildMessages(question, packed, history),
-    max_tokens: 800,
+    max_tokens: 1024,
     temperature: 0.2,
     stream: true,
+    chat_template_kwargs: { thinking: false },
   } as never)) as unknown as ReadableStream<Uint8Array>;
 
   const reader = stream.getReader();
@@ -125,8 +154,8 @@ export async function* streamAnswerTokens(
         const data = line.slice(5).trim();
         if (data === '[DONE]') return;
         try {
-          const parsed = JSON.parse(data) as { response?: string };
-          if (parsed.response) yield parsed.response;
+          const delta = extractDelta(JSON.parse(data) as LlmResponse);
+          if (delta) yield delta;
         } catch {
           // ignore keep-alive / non-JSON lines
         }
