@@ -393,3 +393,5 @@ language detection, secret scanning, and markdown chunking.
   `REPLACE_WITH_D1_DATABASE_ID` — fill them in before deploying.
 - Workers AI / Vectorize REST endpoints and model availability depend on your
   Cloudflare account; model ids are configurable via env vars.
+
+<!-- dummy PR for testing scintel PR review -->
