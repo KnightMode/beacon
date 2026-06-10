@@ -29,29 +29,37 @@ const jobType = (
 
 const sha = (process.env.PAYLOAD_SHA || process.env.INPUT_SHA || '').trim();
 
-let files = [];
-if (process.env.PAYLOAD_FILES_JSON && process.env.PAYLOAD_FILES_JSON.trim() !== '') {
-  try {
-    const parsed = JSON.parse(process.env.PAYLOAD_FILES_JSON);
-    if (Array.isArray(parsed)) files = parsed;
-  } catch {
-    files = [];
+function fileList(payloadJson, inputText) {
+  let files = [];
+  if (payloadJson && payloadJson.trim() !== '') {
+    try {
+      const parsed = JSON.parse(payloadJson);
+      if (Array.isArray(parsed)) files = parsed;
+    } catch {
+      files = [];
+    }
+  } else if (inputText && inputText.trim() !== '') {
+    files = inputText.split(/\s+/);
   }
-} else if (process.env.INPUT_FILES && process.env.INPUT_FILES.trim() !== '') {
-  files = process.env.INPUT_FILES.split(/\s+/);
+  return files
+    .filter((f) => typeof f === 'string' && f.trim() !== '')
+    .map((f) => f.trim());
 }
-files = files.filter((f) => typeof f === 'string' && f.trim() !== '').map((f) => f.trim());
+
+const files = fileList(process.env.PAYLOAD_FILES_JSON, process.env.INPUT_FILES);
+const removed = fileList(process.env.PAYLOAD_REMOVED_JSON, process.env.INPUT_REMOVED);
 
 const args = ['tsx', 'src/cli.ts', repo];
-if (jobType === 'INCREMENTAL_INDEX' && files.length) {
+if (jobType === 'INCREMENTAL_INDEX' && (files.length || removed.length)) {
   args.push('--incremental', ...files);
+  if (removed.length) args.push('--removed', ...removed);
 }
 if (sha) {
   args.push('--commit', sha);
 }
 
 process.stdout.write(
-  `ci-index: repo=${repo} jobType=${jobType} files=${files.length}` +
+  `ci-index: repo=${repo} jobType=${jobType} files=${files.length} removed=${removed.length}` +
     (sha ? ` commit=${sha}` : '') +
     '\n',
 );
