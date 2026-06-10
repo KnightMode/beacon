@@ -2,6 +2,30 @@ import { describe, it, expect } from 'vitest';
 import { buildFtsMatch } from '../src/retrieval/lexical.js';
 import { parseQuery } from '../src/retrieval/queryUnderstanding.js';
 import { parsePlannerOutput } from '../src/retrieval/agent.js';
+import { detectIntent, parseIndexRepoTarget } from '../src/intent.js';
+
+describe('index intents', () => {
+  it('detects "index owner/repo"', () => {
+    expect(detectIntent('index KnightMode/some-repo')).toBe('index_repo');
+    expect(detectIntent('add repo KnightMode/some-repo')).toBe('index_repo');
+    expect(detectIntent('Index the repository foo/bar')).toBe('index_repo');
+    expect(parseIndexRepoTarget('index KnightMode/some-repo')).toBe(
+      'KnightMode/some-repo',
+    );
+  });
+
+  it('detects "index status"', () => {
+    expect(detectIntent('index status')).toBe('index_status');
+    expect(detectIntent('indexing status')).toBe('index_status');
+  });
+
+  it('does not hijack ordinary questions', () => {
+    expect(detectIntent('how does the indexer chunk markdown?')).toBe('qa');
+    expect(detectIntent('where is the index used in retrieval?')).toBe('qa');
+    expect(detectIntent('review https://github.com/o/r/pull/1')).toBe('pr_review');
+    expect(detectIntent('create pr: add docs')).toBe('create_pr');
+  });
+});
 
 describe('buildFtsMatch', () => {
   it('quotes needles as prefix phrases joined with OR', () => {

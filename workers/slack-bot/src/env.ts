@@ -13,6 +13,8 @@ export interface Env {
   SLACK_BOT_USER_ID: string;
   /** Default `owner/repo` when create-PR issues omit a repo (optional). */
   DEFAULT_PR_REPO?: string;
+  /** Repo whose index.yml workflow is fired (repository_dispatch) for "index owner/repo". */
+  INDEX_DISPATCH_REPO?: string;
 
   // Secrets
   SLACK_SIGNING_SECRET: string;
