@@ -134,6 +134,7 @@ export async function streamAnswer(env: Env, t: StreamTarget): Promise<void> {
     }
 
     let buffer = '';
+    let fullText = '';
     let streamedAny = false;
     let producerDone = false;
 
@@ -162,6 +163,7 @@ export async function streamAnswer(env: Env, t: StreamTarget): Promise<void> {
         history,
       )) {
         buffer += token;
+        fullText += token;
       }
     } catch (err) {
       producerErr = err;
@@ -175,7 +177,7 @@ export async function streamAnswer(env: Env, t: StreamTarget): Promise<void> {
       await write([markdown("I couldn't generate an answer from the indexed content.")]);
     }
 
-    const blocks = buildCitationBlocks(outcome.packed.citations);
+    const blocks = buildCitationBlocks(outcome.packed.citations, fullText);
     await call(env, 'chat.stopStream', {
       channel: t.channel,
       ts,

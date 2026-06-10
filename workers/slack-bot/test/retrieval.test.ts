@@ -3,6 +3,52 @@ import { buildFtsMatch } from '../src/retrieval/lexical.js';
 import { parseQuery } from '../src/retrieval/queryUnderstanding.js';
 import { parsePlannerOutput } from '../src/retrieval/agent.js';
 import { detectIntent, parseIndexRepoTarget } from '../src/intent.js';
+import { scopeAllowlist } from '../src/retrieval/pipeline.js';
+import { citedMarkers } from '../src/format.js';
+
+const REPOS = [
+  'knightmode/slack-code-intelligence',
+  'knightmode/aim',
+  'spf13/viper',
+];
+
+describe('scopeAllowlist', () => {
+  it('scopes to a repo named in the question', () => {
+    expect(scopeAllowlist('how does viper work eli5', REPOS)).toEqual([
+      'spf13/viper',
+    ]);
+  });
+
+  it('scopes on explicit owner/name', () => {
+    expect(scopeAllowlist('explain spf13/viper config layering', REPOS)).toEqual(
+      ['spf13/viper'],
+    );
+  });
+
+  it('matches hyphenated repo names spoken with spaces', () => {
+    expect(
+      scopeAllowlist('how does slack code intelligence chunk markdown?', REPOS),
+    ).toEqual(['knightmode/slack-code-intelligence']);
+  });
+
+  it('keeps all repos when none are mentioned', () => {
+    expect(scopeAllowlist('where is the webhook signature verified?', REPOS)).toEqual(
+      REPOS,
+    );
+  });
+});
+
+describe('citedMarkers', () => {
+  it('collects the markers used in the answer', () => {
+    expect(citedMarkers('Viper layers config [6][7], see also [2].')).toEqual(
+      new Set([2, 6, 7]),
+    );
+  });
+
+  it('is empty when no markers appear', () => {
+    expect(citedMarkers('No citations here.').size).toBe(0);
+  });
+});
 
 describe('index intents', () => {
   it('detects "index owner/repo"', () => {

@@ -45,6 +45,25 @@ export async function retrieveSmart(
   return retrieve(env, question, searchText);
 }
 
+/**
+ * When the question names an indexed repo (e.g. "how does viper work"),
+ * restrict retrieval to it so other repos' content can't pollute the answer.
+ * Falls back to all repos when nothing matches.
+ */
+export function scopeAllowlist(query: string, allowlist: string[]): string[] {
+  const q = query.toLowerCase();
+  const matched = allowlist.filter((id) => {
+    if (q.includes(id)) return true; // explicit owner/name
+    const name = id.split('/')[1] ?? '';
+    if (name.length < 3) return false;
+    const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    if (new RegExp(`\\b${escaped}\\b`).test(q)) return true;
+    const spaced = name.replace(/-/g, ' ');
+    return spaced !== name && q.includes(spaced);
+  });
+  return matched.length > 0 ? matched : allowlist;
+}
+
 export async function retrieve(
   env: Env,
   question: string,
@@ -54,7 +73,7 @@ export async function retrieve(
   // the LLM still receives the real `question` separately.
   const query = searchText ?? question;
   const parsed = parseQuery(query);
-  const allowlist = await getAllowlistedRepoIds(env);
+  const allowlist = scopeAllowlist(query, await getAllowlistedRepoIds(env));
 
   if (allowlist.length === 0) {
     return {
