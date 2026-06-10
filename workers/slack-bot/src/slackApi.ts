@@ -25,6 +25,12 @@ interface RepliesResponse {
   messages?: SlackMessage[];
 }
 
+interface PermalinkResponse {
+  ok: boolean;
+  error?: string;
+  permalink?: string;
+}
+
 /** Fetch the text of a single message by ts (works for thread replies). */
 export async function fetchMessageText(
   env: Env,
@@ -101,9 +107,27 @@ export async function resolveThreadRoot(
       return msg.thread_ts ?? msg.ts ?? messageTs;
     }
 
+    const permalinkUrl =
+      `${SLACK_API}/chat.getPermalink` +
+      `?channel=${encodeURIComponent(channel)}` +
+      `&message_ts=${encodeURIComponent(messageTs)}`;
+    const linkRes = await fetch(permalinkUrl, {
+      headers: { authorization: `Bearer ${env.SLACK_BOT_TOKEN}` },
+    });
+    const link = (await linkRes.json()) as PermalinkResponse;
+    if (link.ok && link.permalink) {
+      try {
+        const threadFromUrl = new URL(link.permalink).searchParams.get('thread_ts');
+        if (threadFromUrl) return threadFromUrl;
+      } catch {
+        // ignore bad URL
+      }
+    }
+
     console.warn('resolveThreadRoot failed', {
       repliesError: replies.error,
       historyError: history.error,
+      permalinkError: link.error,
       channel,
       messageTs,
     });
