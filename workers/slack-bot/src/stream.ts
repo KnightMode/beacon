@@ -12,7 +12,7 @@
  */
 
 import type { Env } from './env.js';
-import { retrieve } from './retrieval/pipeline.js';
+import { retrieveSmart } from './retrieval/pipeline.js';
 import { streamAnswerTokens, NO_RESULTS_TEXT } from './llm.js';
 import { buildCitationBlocks } from './format.js';
 import { buildAnswer } from './answer.js';
@@ -126,7 +126,7 @@ export async function streamAnswer(env: Env, t: StreamTarget): Promise<void> {
 
   try {
     const searchText = buildRetrievalText(history, t.question);
-    const outcome = await retrieve(env, t.question, searchText);
+    const outcome = await retrieveSmart(env, t.question, searchText);
 
     if (outcome.packed.used.length === 0) {
       await write([markdown(NO_RESULTS_TEXT)]);

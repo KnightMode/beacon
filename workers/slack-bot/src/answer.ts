@@ -4,7 +4,7 @@
  */
 
 import type { Env } from './env.js';
-import { retrieve } from './retrieval/pipeline.js';
+import { retrieveSmart } from './retrieval/pipeline.js';
 import { generateAnswer } from './llm.js';
 import { buildRetrievalText, type Turn } from './history.js';
 import { buildAnswerMessage, type SlackMessage } from './format.js';
@@ -16,7 +16,7 @@ export async function buildAnswer(
 ): Promise<SlackMessage> {
   try {
     const searchText = buildRetrievalText(history, question);
-    const outcome = await retrieve(env, question, searchText);
+    const outcome = await retrieveSmart(env, question, searchText);
     const answer = await generateAnswer(env, question, outcome.packed, history);
     return buildAnswerMessage(question, answer.text, outcome.packed.citations);
   } catch (err) {
