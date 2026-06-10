@@ -204,6 +204,7 @@ export function handleEvent(
         handleReactionAdded(env, {
           user: re.user,
           reaction: re.reaction,
+          teamId: body.team_id ?? event.team,
           item: {
             type: re.item.type ?? 'message',
             channel: re.item.channel,
