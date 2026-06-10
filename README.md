@@ -1,4 +1,8 @@
-# Beacon
+<p align="center">
+  <img src="docs/assets/beacon-logo.png" alt="Beacon — codebase intelligence" width="320">
+</p>
+
+<h1 align="center">Beacon</h1>
 
 **Ask your codebase anything — from Slack, with answers grounded in your actual
 code and cited down to the file and line.**
