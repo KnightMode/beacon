@@ -17,6 +17,7 @@ interface ChunkRowLite {
   start_line: number;
   end_line: number;
   content: string;
+  commit_sha: string | null;
 }
 
 function placeholders(n: number): string {
@@ -47,6 +48,7 @@ export async function hydrateContent(
       startLine: row.start_line,
       endLine: row.end_line,
       content: row.content,
+      commitSha: row.commit_sha,
     };
   });
 }
@@ -58,7 +60,7 @@ async function fetchChunkRowsByIds(
   if (ids.length === 0) return [];
   const sql = `
     SELECT c.id, c.repo_id, r.full_name, c.path, c.language, c.chunk_type,
-           c.symbol, c.start_line, c.end_line, c.content
+           c.symbol, c.start_line, c.end_line, c.content, c.commit_sha
     FROM chunks c JOIN repos r ON r.id = c.repo_id
     WHERE c.id IN (${placeholders(ids.length)})`;
   const { results } = await env.DB.prepare(sql).bind(...ids).all<ChunkRowLite>();
@@ -89,7 +91,7 @@ export async function fetchChunksBySymbols(
   ];
   const sql = `
     SELECT c.id, c.repo_id, r.full_name, c.path, c.language, c.chunk_type,
-           c.symbol, c.start_line, c.end_line, c.content
+           c.symbol, c.start_line, c.end_line, c.content, c.commit_sha
     FROM chunks c JOIN repos r ON r.id = c.repo_id
     WHERE c.repo_id IN (${placeholders(allowlist.length)})
       AND c.symbol IN (${placeholders(symbols.length)})
@@ -107,6 +109,7 @@ export async function fetchChunksBySymbols(
     startLine: row.start_line,
     endLine: row.end_line,
     content: row.content,
+    commitSha: row.commit_sha,
     score: 0.3,
     source: 'graph' as const,
   }));

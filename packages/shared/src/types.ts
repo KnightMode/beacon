@@ -221,6 +221,8 @@ export interface RetrievedChunk {
   startLine: number;
   endLine: number;
   content: string;
+  /** Commit sha the chunk was indexed at (for permalink citations). */
+  commitSha: string | null;
   /** Combined relevance score after reranking. */
   score: number;
   /** Where the chunk came from, for debugging/observability. */
@@ -232,4 +234,6 @@ export interface Citation {
   path: string;
   startLine: number;
   endLine: number;
+  /** Commit sha for a stable permalink; falls back to HEAD when absent. */
+  commitSha?: string | null;
 }

@@ -51,6 +51,7 @@ export async function vectorSearch(
       startLine: Number(md.start_line ?? 0),
       endLine: Number(md.end_line ?? 0),
       content: '',
+      commitSha: md.commit_sha ? String(md.commit_sha) : null,
       score: match.score ?? 0,
       source: 'vector' as const,
     });

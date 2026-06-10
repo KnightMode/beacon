@@ -22,6 +22,7 @@ interface LexRow {
   start_line: number;
   end_line: number;
   content: string;
+  commit_sha: string | null;
   rank?: number;
 }
 
@@ -72,7 +73,7 @@ async function ftsSearch(
   const repoPlaceholders = allowlist.map(() => '?').join(',');
   const sql = `
     SELECT c.id, c.repo_id, r.full_name, c.path, c.language, c.chunk_type,
-           c.symbol, c.start_line, c.end_line, c.content,
+           c.symbol, c.start_line, c.end_line, c.content, c.commit_sha,
            bm25(chunks_fts, ${BM25_WEIGHTS}) AS rank
     FROM chunks_fts
     JOIN chunks c ON c.rowid = chunks_fts.rowid
@@ -121,7 +122,7 @@ async function likeSearch(
 
   const sql = `
     SELECT c.id, c.repo_id, r.full_name, c.path, c.language, c.chunk_type,
-           c.symbol, c.start_line, c.end_line, c.content
+           c.symbol, c.start_line, c.end_line, c.content, c.commit_sha
     FROM chunks c
     JOIN repos r ON r.id = c.repo_id
     WHERE c.repo_id IN (${repoPlaceholders})
@@ -153,6 +154,7 @@ function toChunk(row: LexRow, score: number): RetrievedChunk {
     startLine: row.start_line,
     endLine: row.end_line,
     content: row.content,
+    commitSha: row.commit_sha,
     score,
     source: 'lexical' as const,
   };
