@@ -14,7 +14,7 @@ INDEXER_URL = "https://your-indexer.example.com"
 # the queue consumer triggers the GitHub Actions index.yml workflow via
 # repository_dispatch instead of POSTing to INDEXER_URL. Leave empty to keep the
 # existing INDEXER_URL behavior.
-PIPELINE_DISPATCH_REPO = "KnightMode/slack-code-intelligence"
+PIPELINE_DISPATCH_REPO = "KnightMode/beacon"
 PIPELINE_DISPATCH_EVENT = "index-repo"
 
 # ---- Secrets (set via: wrangler secret put <NAME>) --------------------------
