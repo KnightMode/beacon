@@ -48,12 +48,79 @@ export async function getDefaultAllowlistedRepo(
   return { owner, repo, fullName };
 }
 
+/** Match phrases like "ebpf router repo" to allowlisted KnightMode/ebpf-wiremock-router. */
+export async function fuzzyMatchAllowlistedRepo(
+  env: Env,
+  text: string,
+): Promise<RepoTarget | null> {
+  const { results } = await env.DB.prepare(
+    `SELECT r.full_name
+     FROM prototype_repo_allowlist a
+     JOIN repos r ON r.id = a.repo_id
+     WHERE a.enabled = 1`,
+  ).all<{ full_name: string }>();
+
+  const lower = text.toLowerCase();
+  const words =
+    lower.match(/\b[a-z][a-z0-9-]{2,}\b/g)?.filter((w) => !REPO_STOPWORDS.has(w)) ??
+    [];
+
+  let best: { fullName: string; score: number } | null = null;
+  for (const row of results) {
+    const fullName = row.full_name;
+    const slug = (fullName.split('/')[1] ?? '').toLowerCase();
+    if (!slug) continue;
+    const parts = slug.split('-').filter((p) => p.length > 2);
+
+    let score = 0;
+    if (lower.includes(slug) || lower.includes(slug.replace(/-/g, ' '))) {
+      score += 10;
+    }
+    for (const part of parts) {
+      if (words.some((w) => w === part || w.includes(part) || part.includes(w))) {
+        score += 3;
+      }
+    }
+
+    if (!best || score > best.score) {
+      best = { fullName, score };
+    }
+  }
+
+  if (!best || best.score < 3) return null;
+  const [owner, repo] = best.fullName.split('/');
+  if (!owner || !repo) return null;
+  return { owner, repo, fullName: best.fullName };
+}
+
+const REPO_STOPWORDS = new Set([
+  'the',
+  'a',
+  'an',
+  'to',
+  'for',
+  'add',
+  'create',
+  'pr',
+  'repo',
+  'repository',
+  'docs',
+  'doc',
+  'explain',
+  'explaining',
+  'implementation',
+  'eli5',
+]);
+
 export async function resolveTargetRepo(
   env: Env,
   text: string,
 ): Promise<RepoTarget | null> {
   const fromText = parseRepoFromText(text);
   if (fromText) return fromText;
+
+  const fuzzy = await fuzzyMatchAllowlistedRepo(env, text);
+  if (fuzzy) return fuzzy;
 
   const configured = env.DEFAULT_PR_REPO?.trim();
   if (configured) {
