@@ -11,7 +11,13 @@ import {
   handleAssistantMessage,
   handleAssistantThreadStarted,
 } from './assistant.js';
-import { detectIntent, stripCreatePrPrefix } from './intent.js';
+import {
+  detectIntent,
+  stripCreatePrPrefix,
+  parseIndexRepoTarget,
+} from './intent.js';
+import { indexRepoAction, indexStatusAction } from './actions/indexRepo.js';
+import { call } from './stream.js';
 import { reviewToResponseUrl, streamPrReview } from './actions/prReview.js';
 import {
   createPrFromThread,
@@ -64,6 +70,19 @@ export function handleSlashCommand(
     });
   }
 
+  if (intent === 'index_repo' || intent === 'index_status') {
+    if (responseUrl) {
+      ctx.waitUntil(indexActionToResponseUrl(env, intent, question, responseUrl));
+    }
+    return ackJson({
+      response_type: 'ephemeral',
+      text:
+        intent === 'index_repo'
+          ? ':hammer_and_wrench: Starting indexing…'
+          : ':mag: Checking index status…',
+    });
+  }
+
   if (responseUrl) {
     ctx.waitUntil(
       intent === 'pr_review'
@@ -79,6 +98,35 @@ export function handleSlashCommand(
         ? ':mag: Reviewing pull request…'
         : ':mag: Searching indexed repos…',
   });
+}
+
+async function indexActionToResponseUrl(
+  env: Env,
+  intent: 'index_repo' | 'index_status',
+  question: string,
+  responseUrl: string,
+): Promise<void> {
+  const text = await runIndexAction(env, intent, question);
+  await fetch(responseUrl, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ response_type: 'in_channel', text }),
+  });
+}
+
+async function runIndexAction(
+  env: Env,
+  intent: 'index_repo' | 'index_status',
+  text: string,
+): Promise<string> {
+  try {
+    if (intent === 'index_status') return await indexStatusAction(env);
+    const repo = parseIndexRepoTarget(text);
+    if (!repo) return 'Usage: `index owner/repo`';
+    return await indexRepoAction(env, repo);
+  } catch (err) {
+    return `:warning: Index action failed: ${(err as Error).message}`;
+  }
 }
 
 async function answerToResponseUrl(
@@ -171,6 +219,16 @@ export function handleEvent(
           );
         } else if (intent === 'pr_review') {
           ctx.waitUntil(streamPrReview(env, target));
+        } else if (intent === 'index_repo' || intent === 'index_status') {
+          ctx.waitUntil(
+            runIndexAction(env, intent, question).then((text) =>
+              call(env, 'chat.postMessage', {
+                channel: event.channel,
+                thread_ts: threadTs,
+                text,
+              }).then(() => undefined),
+            ),
+          );
         } else {
           ctx.waitUntil(streamAnswer(env, target));
         }

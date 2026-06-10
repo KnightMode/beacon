@@ -13,6 +13,8 @@ AGENTIC_RETRIEVAL = "true"
 SLACK_BOT_USER_ID = ""
 # Default repo for create-PR when the issue does not mention owner/repo (optional).
 DEFAULT_PR_REPO = "KnightMode/slack-code-intelligence"
+# Repo whose .github/workflows/index.yml runs the indexer ("index owner/repo" intent).
+INDEX_DISPATCH_REPO = "KnightMode/slack-code-intelligence"
 
 # ---- Secrets (set via: wrangler secret put <NAME>) --------------------------
 # SLACK_SIGNING_SECRET - verify Slack request signatures

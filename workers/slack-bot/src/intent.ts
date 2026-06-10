@@ -9,7 +9,12 @@ export interface PrReference {
   url: string;
 }
 
-export type UserIntent = 'qa' | 'pr_review' | 'create_pr';
+export type UserIntent =
+  | 'qa'
+  | 'pr_review'
+  | 'create_pr'
+  | 'index_repo'
+  | 'index_status';
 
 const PR_URL =
   /https?:\/\/github\.com\/([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+)\/pull\/(\d+)/i;
@@ -43,6 +48,16 @@ export function parsePrReference(text: string): PrReference | null {
   return null;
 }
 
+const INDEX_REPO =
+  /^\s*(?:index|add)\s+(?:the\s+)?(?:repo(?:sitory)?\s+)?([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+)\s*$/i;
+const INDEX_STATUS = /^\s*index(?:ing)?\s+status\s*$/i;
+
+/** Extract the `owner/name` target of an "index <repo>" request, if any. */
+export function parseIndexRepoTarget(text: string): string | null {
+  const m = text.match(INDEX_REPO);
+  return m ? m[1]! : null;
+}
+
 const REVIEW_VERB = /\b(review|check|audit|look\s+at)\b/i;
 const CREATE_PR_VERB =
   /\b(create|open|raise|make)\s+(a\s+)?(pr|pull\s+request)\b/i;
@@ -54,6 +69,9 @@ export function stripCreatePrPrefix(text: string): string {
 }
 
 export function detectIntent(text: string): UserIntent {
+  if (INDEX_STATUS.test(text)) return 'index_status';
+  if (INDEX_REPO.test(text)) return 'index_repo';
+
   if (CREATE_PR_VERB.test(text) || CREATE_PR_PREFIX.test(text)) {
     return 'create_pr';
   }
