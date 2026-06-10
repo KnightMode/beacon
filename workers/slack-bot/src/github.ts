@@ -54,12 +54,48 @@ export class GitHubClient {
     };
   }
 
+  /**
+   * fetch with retries on transient GitHub failures: 5xx/429/network errors,
+   * plus spurious 401s (observed in production: a create-PR call got 401
+   * "Requires authentication" once and succeeded on retry with the same
+   * token). A 401 means the request was rejected before acting, so retrying
+   * non-idempotent calls is safe. Real auth errors just fail a little slower.
+   */
+  private async request(url: string, init?: RequestInit): Promise<Response> {
+    const attempts = 3;
+    let lastErr: Error | null = null;
+    for (let attempt = 1; attempt <= attempts; attempt++) {
+      try {
+        const res = await fetch(url, init);
+        const retryable =
+          res.status >= 500 ||
+          res.status === 429 ||
+          (res.status === 401 && attempt === 1);
+        if (!retryable) return res;
+        lastErr = new Error(`status ${res.status}`);
+      } catch (err) {
+        lastErr = err as Error;
+      }
+      if (attempt < attempts) {
+        console.warn('GitHub request failed; retrying', {
+          url,
+          attempt,
+          error: lastErr?.message,
+        });
+        await new Promise((r) => setTimeout(r, 400 * attempt * attempt));
+      }
+    }
+    throw new Error(
+      `GitHub request failed after ${attempts} attempts: ${url} (${lastErr?.message})`,
+    );
+  }
+
   async getPullRequest(
     owner: string,
     repo: string,
     number: number,
   ): Promise<PullRequest> {
-    const res = await fetch(`${API}/repos/${owner}/${repo}/pulls/${number}`, {
+    const res = await this.request(`${API}/repos/${owner}/${repo}/pulls/${number}`, {
       headers: this.headers(),
     });
     await assertOk(res, `getPullRequest ${owner}/${repo}#${number}`);
@@ -94,7 +130,7 @@ export class GitHubClient {
     repo: string,
     number: number,
   ): Promise<PullRequestFile[]> {
-    const res = await fetch(
+    const res = await this.request(
       `${API}/repos/${owner}/${repo}/pulls/${number}/files?per_page=100`,
       { headers: this.headers() },
     );
@@ -119,14 +155,14 @@ export class GitHubClient {
     owner: string,
     repo: string,
   ): Promise<{ defaultBranch: string; sha: string }> {
-    const repoRes = await fetch(`${API}/repos/${owner}/${repo}`, {
+    const repoRes = await this.request(`${API}/repos/${owner}/${repo}`, {
       headers: this.headers(),
     });
     await assertOk(repoRes, `getRepo ${owner}/${repo}`);
     const repoBody = (await repoRes.json()) as { default_branch: string };
     const branch = repoBody.default_branch;
 
-    const refRes = await fetch(
+    const refRes = await this.request(
       `${API}/repos/${owner}/${repo}/git/ref/heads/${encodeURIComponent(branch)}`,
       { headers: this.headers() },
     );
@@ -141,7 +177,7 @@ export class GitHubClient {
     branch: string,
     fromSha: string,
   ): Promise<void> {
-    const res = await fetch(`${API}/repos/${owner}/${repo}/git/refs`, {
+    const res = await this.request(`${API}/repos/${owner}/${repo}/git/refs`, {
       method: 'POST',
       headers: { ...this.headers(), 'content-type': 'application/json' },
       body: JSON.stringify({ ref: `refs/heads/${branch}`, sha: fromSha }),
@@ -159,7 +195,7 @@ export class GitHubClient {
     path: string,
     ref: string,
   ): Promise<string | null> {
-    const res = await fetch(
+    const res = await this.request(
       `${API}/repos/${owner}/${repo}/contents/${encodeURIComponent(path)}?ref=${encodeURIComponent(ref)}`,
       { headers: this.headers() },
     );
@@ -183,7 +219,7 @@ export class GitHubClient {
     path: string,
     ref: string,
   ): Promise<string | null> {
-    const res = await fetch(
+    const res = await this.request(
       `${API}/repos/${owner}/${repo}/contents/${encodeURIComponent(path)}?ref=${encodeURIComponent(ref)}`,
       { headers: this.headers() },
     );
@@ -209,7 +245,7 @@ export class GitHubClient {
     };
     if (existingSha) body.sha = existingSha;
 
-    const res = await fetch(
+    const res = await this.request(
       `${API}/repos/${owner}/${repo}/contents/${encodeURIComponent(path)}`,
       {
         method: 'PUT',
@@ -228,7 +264,7 @@ export class GitHubClient {
     head: string,
     base: string,
   ): Promise<CreatedPullRequest> {
-    const res = await fetch(`${API}/repos/${owner}/${repo}/pulls`, {
+    const res = await this.request(`${API}/repos/${owner}/${repo}/pulls`, {
       method: 'POST',
       headers: { ...this.headers(), 'content-type': 'application/json' },
       body: JSON.stringify({ title, body, head, base }),
