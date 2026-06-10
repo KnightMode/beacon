@@ -33,7 +33,7 @@ export function buildAnswerMessage(
     },
   ];
 
-  blocks.push(...buildCitationBlocks(citations));
+  blocks.push(...buildCitationBlocks(citations, answer));
 
   return {
     response_type: 'in_channel',
@@ -42,17 +42,40 @@ export function buildAnswerMessage(
   };
 }
 
+/** [n] markers actually referenced in the answer text. */
+export function citedMarkers(answerText: string): Set<number> {
+  const cited = new Set<number>();
+  for (const m of answerText.matchAll(/\[(\d{1,2})\]/g)) {
+    cited.add(Number(m[1]));
+  }
+  return cited;
+}
+
 /**
  * Citation + disclaimer blocks, shared by the non-streaming message and the
  * finalized streamed message (rendered at the bottom via chat.stopStream).
+ * When the answer text is provided, only the sources the answer actually
+ * cites are listed (retrieval noise the LLM ignored is dropped); original
+ * [n] numbering is preserved.
  */
-export function buildCitationBlocks(citations: Citation[]): SlackBlock[] {
+export function buildCitationBlocks(
+  citations: Citation[],
+  answerText?: string,
+): SlackBlock[] {
+  let entries = citations.map((c, idx) => ({ c, n: idx + 1 }));
+  if (answerText) {
+    const cited = citedMarkers(answerText);
+    if (cited.size > 0) {
+      entries = entries.filter((e) => cited.has(e.n));
+    }
+  }
+
   const blocks: SlackBlock[] = [];
-  if (citations.length > 0) {
+  if (entries.length > 0) {
     blocks.push({ type: 'divider' });
     blocks.push({
       type: 'section',
-      text: { type: 'mrkdwn', text: `*Sources*\n${formatCitations(citations)}` },
+      text: { type: 'mrkdwn', text: `*Sources*\n${formatCitations(entries)}` },
     });
   }
   blocks.push({
@@ -75,13 +98,14 @@ function githubUrl(c: Citation): string {
   return `https://github.com/${c.repoFullName}/blob/${ref}/${path}#L${c.startLine}-L${c.endLine}`;
 }
 
-function formatCitations(citations: Citation[]): string {
-  const lines: string[] = [];
-  citations.forEach((c, idx) => {
-    const label = `${c.path}:${c.startLine}-${c.endLine}`;
-    lines.push(`\`[${idx + 1}]\` <${githubUrl(c)}|${label}>`);
-  });
-  return lines.join('\n');
+function formatCitations(entries: Array<{ c: Citation; n: number }>): string {
+  return entries
+    .map(({ c, n }) => {
+      const repoName = c.repoFullName.split('/')[1] ?? c.repoFullName;
+      const label = `${repoName}/${c.path}:${c.startLine}-${c.endLine}`;
+      return `\`[${n}]\` <${githubUrl(c)}|${label}>`;
+    })
+    .join('\n');
 }
 
 export function buildPrReviewMessage(prUrl: string, review: string): SlackMessage {
