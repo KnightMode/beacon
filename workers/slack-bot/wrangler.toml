@@ -13,6 +13,7 @@ SLACK_BOT_USER_ID = ""
 # ---- Secrets (set via: wrangler secret put <NAME>) --------------------------
 # SLACK_SIGNING_SECRET - verify Slack request signatures
 # SLACK_BOT_TOKEN      - xoxb- token for chat.postMessage (Web API)
+# GITHUB_PAT           - fine-grained PAT (Pull requests: Read, Contents: Read) for PR review
 
 # ---- D1 metadata database (shared with the webhook worker) ------------------
 [[d1_databases]]
