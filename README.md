@@ -113,8 +113,8 @@ slack-code-intelligence/
   producer and consumer; the consumer forwards jobs to the indexer.
 - **DB:** Cloudflare D1 (SQLite) for metadata + graph edges.
 - **Vectors:** Cloudflare Vectorize (`768` dims, cosine).
-- **AI:** Workers AI — embeddings `@cf/baai/bge-base-en-v1.5`, LLM
-  `@cf/meta/llama-3.1-8b-instruct` (both configurable via env vars).
+- **AI:** Workers AI — embeddings `@cf/google/embeddinggemma-300m`, LLM
+  `@cf/moonshotai/kimi-k2.6` (both configurable via env vars).
 - **Indexer:** Node + TypeScript with `web-tree-sitter` (pinned to `0.22.x`) and
   prebuilt grammar wasm from `tree-sitter-wasms`. Languages with full
   tree-sitter chunking: **Go, TypeScript/JavaScript, Python**. Markdown is
@@ -291,7 +291,8 @@ or `@yourbot how does the retrieval pipeline rerank chunks?`
 | `CLOUDFLARE_VECTORIZE_INDEX` | indexer | no | Vectorize index name (default `code-chunks`) |
 | `EMBEDDING_MODEL` | indexer + slack-bot | no | default `@cf/baai/bge-base-en-v1.5` |
 | `EMBEDDING_DIMENSIONS` | indexer | no | default `768` |
-| `LLM_MODEL` | slack-bot | no | default `@cf/meta/llama-3.1-8b-instruct` |
+| `LLM_MODEL` | slack-bot | no | default `@cf/moonshotai/kimi-k2.6` |
+| `AGENTIC_RETRIEVAL` | slack-bot | no (var) | `"false"` disables the Q&A planner loop |
 | `REPO_ALLOWLIST` | github-webhook | no (var) | Comma-separated `owner/name` seed |
 
 See [`.env.example`](./.env.example) for the full annotated list.
@@ -345,10 +346,29 @@ removed files just have their chunks/vectors deleted.
 
 ## How answering works
 
-`query understanding (heuristic) → lexical search (D1 LIKE on symbol/path/
-content) + vector search (Vectorize) → hydrate content → graph expansion (1 hop
-on CALLS/IMPORTS via code_edges) → rerank (exact-symbol boost, chunk-type
-diversity, semantic score) → context packing → LLM`.
+Q&A uses an **agentic retrieval loop** (default; set `AGENTIC_RETRIEVAL = "false"`
+on the slack-bot worker to force single-shot):
+
+1. **Turn 0** runs the standard hybrid search: lexical search (D1 **FTS5**,
+   BM25-ranked over symbol/path/content) + vector search (Vectorize), hydrated
+   from D1.
+2. A small **LLM planner** inspects the evidence and may request up to 3 rounds
+   of follow-up tools — `search`, `read_file`, `callers`, `callees` (the latter
+   two over `code_edges`) — to chase missing definitions or callers.
+3. The pooled evidence goes through `rerank (exact-symbol boost, chunk-type
+   diversity, semantic score) → context packing → LLM answer with citations`.
+
+Any planner failure degrades gracefully: the bot answers with the evidence
+gathered so far, and a hard failure falls back to the single-shot pipeline
+(`query understanding (heuristic) → lexical + vector → graph expansion (1 hop)
+→ rerank → pack → LLM`).
+
+**FTS5 migration:** databases created before `chunks_fts` existed need a one-time
+migration (creates the FTS table + sync triggers and backfills existing chunks):
+
+```bash
+npx wrangler d1 execute scintel --remote --file=packages/shared/migrations/0001_chunks_fts.sql
+```
 
 Retrieval is filtered to `repo_id IN (allowlist)`. The LLM system prompt treats
 repository content strictly as **data, not instructions** (prompt-injection
