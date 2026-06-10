@@ -114,9 +114,27 @@ export async function indexRepo(
     };
   }
 
+  let effectiveJob: IndexJob = job;
+
+  // Escalation: an INCREMENTAL job for a repo identity that has never been
+  // indexed (no last_indexed_sha — e.g. first push after a repo rename or a
+  // brand-new repo) must become a FULL_INDEX. Indexing only the changed files
+  // would mark the repo READY while most of it is missing.
+  if (job.jobType === 'INCREMENTAL_INDEX' && !prior?.lastIndexedSha) {
+    effectiveJob = {
+      jobType: 'FULL_INDEX',
+      repoId,
+      repoFullName: job.repoFullName,
+      commitSha,
+      enqueuedAt: job.enqueuedAt,
+    };
+    log.info('incremental on never-indexed repo; escalating to full index', {
+      repo: job.repoFullName,
+    });
+  }
+
   // Diff conversion: a non-forced FULL_INDEX of a previously indexed repo
   // only needs the files that changed since the last indexed commit.
-  let effectiveJob: IndexJob = job;
   if (
     !force &&
     job.jobType === 'FULL_INDEX' &&
