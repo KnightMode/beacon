@@ -20,11 +20,21 @@ export async function enqueueCreatePr(
     throw new Error('CREATE_PR_QUEUE binding is not configured');
   }
 
-  await call(env, 'chat.postMessage', {
+  const posted = await call(env, 'chat.postMessage', {
     channel: target.channel,
     thread_ts: target.threadTs,
     text: ':hourglass_flowing_sand: Got it — drafting the pull request. This usually takes 1–2 minutes…',
-  }).catch(() => undefined);
+  });
+  if (!posted.ok) {
+    console.error('create-pr queue ack failed', {
+      error: posted.error,
+      channel: target.channel,
+      threadTs: target.threadTs,
+    });
+    throw new Error(
+      `Could not post to Slack (${posted.error ?? 'unknown'}). Is the bot invited to this channel?`,
+    );
+  }
 
   const job: CreatePrJob = {
     ...target,
