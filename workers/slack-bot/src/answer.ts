@@ -13,10 +13,12 @@ export async function buildAnswer(
   env: Env,
   question: string,
   history: Turn[] = [],
+  onProgress?: (stage: string) => void,
 ): Promise<SlackMessage> {
   try {
     const searchText = buildRetrievalText(history, question);
-    const outcome = await retrieveSmart(env, question, searchText);
+    const outcome = await retrieveSmart(env, question, searchText, onProgress);
+    onProgress?.('is drafting a grounded answer…');
     const answer = await generateAnswer(env, question, outcome.packed, history);
     return buildAnswerMessage(question, answer.text, outcome.packed.citations);
   } catch (err) {

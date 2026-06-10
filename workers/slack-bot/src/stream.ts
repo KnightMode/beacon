@@ -23,18 +23,14 @@ import {
 } from './history.js';
 
 const SLACK_API = 'https://slack.com/api';
-// Flush accumulated tokens to Slack roughly every this many chars to keep the
-// stream smooth while staying well under the appendStream rate limit.
-const FLUSH_CHARS = 90;
+// Steady flush cadence for appendStream. Token reading and Slack writes are
+// decoupled (reader fills a buffer, a timer drains it), so the stream renders
+// at an even pace instead of bursting whenever the Slack API round trip ends.
+const FLUSH_INTERVAL_MS = 250;
 
-// Rotating lines for the glowing "thinking" shimmer shown while we work.
-const LOADING_MESSAGES = [
-  'Understanding your question…',
-  'Searching indexed repositories…',
-  'Reading the code graph…',
-  'Pulling the most relevant snippets…',
-  'Drafting a grounded answer…',
-];
+// The thinking status is updated at real stage transitions (understanding →
+// searching → following the trail → drafting) instead of letting Slack cycle
+// a canned list, so it progresses logically and never starts over.
 
 interface SlackResult {
   ok: boolean;
@@ -88,14 +84,16 @@ function markdown(text: string): MarkdownChunk {
 export async function streamAnswer(env: Env, t: StreamTarget): Promise<void> {
   let ts: string | undefined;
 
-  // Show the glowing shimmer immediately (best-effort). It rotates through the
-  // loading messages and auto-clears once the first stream chunk is sent.
-  await call(env, 'assistant.threads.setStatus', {
-    channel_id: t.channel,
-    thread_ts: t.threadTs,
-    status: 'is thinking…',
-    loading_messages: LOADING_MESSAGES,
-  }).catch(() => undefined);
+  // Best-effort status shimmer, updated as the work actually progresses; it
+  // auto-clears once the first stream chunk is sent.
+  const setStatus = (status: string): void => {
+    void call(env, 'assistant.threads.setStatus', {
+      channel_id: t.channel,
+      thread_ts: t.threadTs,
+      status,
+    }).catch(() => undefined);
+  };
+  setStatus('is reading your question…');
 
   // Pull prior thread messages so follow-ups keep context. Gracefully empty if
   // the channels:history / groups:history scope is missing.
@@ -126,7 +124,8 @@ export async function streamAnswer(env: Env, t: StreamTarget): Promise<void> {
 
   try {
     const searchText = buildRetrievalText(history, t.question);
-    const outcome = await retrieveSmart(env, t.question, searchText);
+    const outcome = await retrieveSmart(env, t.question, searchText, setStatus);
+    setStatus('is drafting a grounded answer…');
 
     if (outcome.packed.used.length === 0) {
       await write([markdown(NO_RESULTS_TEXT)]);
@@ -136,23 +135,41 @@ export async function streamAnswer(env: Env, t: StreamTarget): Promise<void> {
 
     let buffer = '';
     let streamedAny = false;
-    const flush = async (): Promise<void> => {
-      if (!buffer) return;
-      await write([markdown(buffer)]);
-      buffer = '';
-    };
+    let producerDone = false;
 
-    for await (const token of streamAnswerTokens(
-      env,
-      t.question,
-      outcome.packed,
-      history,
-    )) {
-      streamedAny = true;
-      buffer += token;
-      if (buffer.length >= FLUSH_CHARS) await flush();
+    // Drain the buffer on a fixed cadence, independent of token arrival and
+    // Slack API latency.
+    const flusher = (async (): Promise<void> => {
+      for (;;) {
+        if (buffer) {
+          const out = buffer;
+          buffer = '';
+          await write([markdown(out)]);
+          streamedAny = true;
+        } else if (producerDone) {
+          return;
+        }
+        await new Promise((r) => setTimeout(r, FLUSH_INTERVAL_MS));
+      }
+    })();
+
+    let producerErr: unknown;
+    try {
+      for await (const token of streamAnswerTokens(
+        env,
+        t.question,
+        outcome.packed,
+        history,
+      )) {
+        buffer += token;
+      }
+    } catch (err) {
+      producerErr = err;
+    } finally {
+      producerDone = true;
     }
-    await flush();
+    await flusher;
+    if (producerErr) throw producerErr;
 
     if (!streamedAny) {
       await write([markdown("I couldn't generate an answer from the indexed content.")]);
