@@ -8,10 +8,12 @@ export interface Env {
   EMBEDDING_MODEL: string;
   LLM_MODEL: string;
   SLACK_BOT_USER_ID: string;
+  /** Default `owner/repo` when create-PR issues omit a repo (optional). */
+  DEFAULT_PR_REPO?: string;
 
   // Secrets
   SLACK_SIGNING_SECRET: string;
   SLACK_BOT_TOKEN: string;
-  /** Fine-grained PAT with Pull requests: Read + Contents: Read (PR review action). */
+  /** Fine-grained PAT: Read for review; Write for create-PR (Contents + Pull requests). */
   GITHUB_PAT?: string;
 }

@@ -9,11 +9,13 @@ EMBEDDING_MODEL = "@cf/google/embeddinggemma-300m"
 LLM_MODEL = "@cf/moonshotai/kimi-k2.6"
 # Bot user id is used to strip the leading mention from app_mention text.
 SLACK_BOT_USER_ID = ""
+# Default repo for create-PR when the issue does not mention owner/repo (optional).
+DEFAULT_PR_REPO = "KnightMode/slack-code-intelligence"
 
 # ---- Secrets (set via: wrangler secret put <NAME>) --------------------------
 # SLACK_SIGNING_SECRET - verify Slack request signatures
 # SLACK_BOT_TOKEN      - xoxb- token for chat.postMessage (Web API)
-# GITHUB_PAT           - fine-grained PAT (Pull requests: Read, Contents: Read) for PR review
+# GITHUB_PAT           - fine-grained PAT (Contents + Pull requests Read/Write) for agent actions
 
 # ---- D1 metadata database (shared with the webhook worker) ------------------
 [[d1_databases]]
