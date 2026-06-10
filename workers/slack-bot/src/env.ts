@@ -12,4 +12,6 @@ export interface Env {
   // Secrets
   SLACK_SIGNING_SECRET: string;
   SLACK_BOT_TOKEN: string;
+  /** Fine-grained PAT with Pull requests: Read + Contents: Read (PR review action). */
+  GITHUB_PAT?: string;
 }

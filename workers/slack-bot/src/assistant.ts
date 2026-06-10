@@ -12,6 +12,8 @@ import type { Env } from './env.js';
 import { call } from './stream.js';
 import { buildAnswer } from './answer.js';
 import { fetchThreadHistory } from './history.js';
+import { detectIntent } from './intent.js';
+import { handleAssistantPrReview } from './actions/prReview.js';
 
 const LOADING_MESSAGES = [
   'Understanding your question…',
@@ -43,6 +45,10 @@ export async function handleAssistantThreadStarted(
         title: 'Retrieval pipeline',
         message: 'How does retrieval combine lexical, vector, and graph search?',
       },
+      {
+        title: 'Review a pull request',
+        message: 'review https://github.com/owner/repo/pull/1',
+      },
     ],
   });
 }
@@ -72,6 +78,11 @@ export async function handleAssistantMessage(
 
   // DM/assistant threads use the im:history scope (already granted), so prior
   // turns are available for follow-up context.
+  if (detectIntent(m.text) === 'pr_review') {
+    await handleAssistantPrReview(env, m);
+    return;
+  }
+
   const history = await fetchThreadHistory(
     env,
     m.channelId,

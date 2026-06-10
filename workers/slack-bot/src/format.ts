@@ -81,6 +81,52 @@ function formatCitations(citations: Citation[]): string {
   return lines.join('\n');
 }
 
+export function buildPrReviewMessage(prUrl: string, review: string): SlackMessage {
+  const blocks: SlackBlock[] = [
+    {
+      type: 'section',
+      text: {
+        type: 'mrkdwn',
+        text: `*PR Review:* <${prUrl}|${prUrl}>`,
+      },
+    },
+    {
+      type: 'section',
+      text: { type: 'mrkdwn', text: truncate(review, 2800) },
+    },
+    {
+      type: 'context',
+      elements: [
+        {
+          type: 'mrkdwn',
+          text: ':mag: Generated from the PR diff and indexed repo context — verify before acting on it.',
+        },
+      ],
+    },
+  ];
+
+  return {
+    response_type: 'in_channel',
+    text: truncate(review, 2800),
+    blocks,
+  };
+}
+
+export function buildPrReviewStreamFooter(prUrl: string): SlackBlock[] {
+  return [
+    { type: 'divider' },
+    {
+      type: 'context',
+      elements: [
+        {
+          type: 'mrkdwn',
+          text: `<${prUrl}|View pull request> · :mag: Review from diff + indexed context`,
+        },
+      ],
+    },
+  ];
+}
+
 function truncate(s: string, max: number): string {
   return s.length <= max ? s : `${s.slice(0, max - 1)}…`;
 }

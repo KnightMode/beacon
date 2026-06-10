@@ -11,6 +11,8 @@ import {
   handleAssistantMessage,
   handleAssistantThreadStarted,
 } from './assistant.js';
+import { detectIntent } from './intent.js';
+import { reviewToResponseUrl, streamPrReview } from './actions/prReview.js';
 
 export function ackJson(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -32,17 +34,25 @@ export function handleSlashCommand(
   if (!question) {
     return ackJson({
       response_type: 'ephemeral',
-      text: 'Usage: `/ask-code <your question about the codebase>`',
+      text:
+        'Usage:\n' +
+        '• `/ask-code <question>` — search indexed repos\n' +
+        '• `/ask-code review <pr-url>` — review a pull request',
     });
   }
 
+  const intent = detectIntent(question);
   if (responseUrl) {
-    ctx.waitUntil(answerToResponseUrl(env, question, responseUrl));
+    ctx.waitUntil(
+      intent === 'pr_review'
+        ? reviewToResponseUrl(env, question, responseUrl)
+        : answerToResponseUrl(env, question, responseUrl),
+    );
   }
 
   return ackJson({
     response_type: 'ephemeral',
-    text: ':mag: Searching indexed repos…',
+    text: intent === 'pr_review' ? ':mag: Reviewing pull request…' : ':mag: Searching indexed repos…',
   });
 }
 
@@ -103,15 +113,18 @@ export function handleEvent(
       const question = stripMention(env, event.text ?? '');
       const threadTs = event.thread_ts ?? event.ts;
       if (question && threadTs) {
+        const target = {
+          channel: event.channel,
+          threadTs,
+          userId: event.user,
+          teamId: body.team_id ?? event.team,
+          question,
+          messageTs: event.ts,
+        };
         ctx.waitUntil(
-          streamAnswer(env, {
-            channel: event.channel,
-            threadTs,
-            userId: event.user,
-            teamId: body.team_id ?? event.team,
-            question,
-            messageTs: event.ts,
-          }),
+          detectIntent(question) === 'pr_review'
+            ? streamPrReview(env, target)
+            : streamAnswer(env, target),
         );
       }
     }
