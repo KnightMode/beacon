@@ -11,8 +11,13 @@ import {
   handleAssistantMessage,
   handleAssistantThreadStarted,
 } from './assistant.js';
-import { detectIntent } from './intent.js';
+import { detectIntent, stripCreatePrPrefix } from './intent.js';
 import { reviewToResponseUrl, streamPrReview } from './actions/prReview.js';
+import {
+  createPrFromThread,
+  createPrSlashAck,
+} from './actions/createPr.js';
+import { handleReactionAdded } from './reactions.js';
 
 export function ackJson(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -37,11 +42,19 @@ export function handleSlashCommand(
       text:
         'Usage:\n' +
         '• `/ask-code <question>` — search indexed repos\n' +
-        '• `/ask-code review <pr-url>` — review a pull request',
+        '• `/ask-code review <pr-url>` — review a pull request\n' +
+        '• Describe an issue in a thread and react with :pr: to open a PR',
     });
   }
 
   const intent = detectIntent(question);
+  if (intent === 'create_pr') {
+    return ackJson({
+      response_type: 'ephemeral',
+      text: createPrSlashAck(),
+    });
+  }
+
   if (responseUrl) {
     ctx.waitUntil(
       intent === 'pr_review'
@@ -52,7 +65,10 @@ export function handleSlashCommand(
 
   return ackJson({
     response_type: 'ephemeral',
-    text: intent === 'pr_review' ? ':mag: Reviewing pull request…' : ':mag: Searching indexed repos…',
+    text:
+      intent === 'pr_review'
+        ? ':mag: Reviewing pull request…'
+        : ':mag: Searching indexed repos…',
   });
 }
 
@@ -91,6 +107,18 @@ interface SlackEventEnvelope {
       thread_ts?: string;
     };
   };
+  event_id?: string;
+}
+
+interface ReactionAddedEvent {
+  type: 'reaction_added';
+  user: string;
+  reaction: string;
+  item: {
+    type: string;
+    channel: string;
+    ts: string;
+  };
 }
 
 export function handleEvent(
@@ -121,11 +149,22 @@ export function handleEvent(
           question,
           messageTs: event.ts,
         };
-        ctx.waitUntil(
-          detectIntent(question) === 'pr_review'
-            ? streamPrReview(env, target)
-            : streamAnswer(env, target),
-        );
+        const intent = detectIntent(question);
+        if (intent === 'create_pr') {
+          ctx.waitUntil(
+            createPrFromThread(env, {
+              channel: event.channel,
+              threadTs,
+              userId: event.user,
+              messageTs: event.ts,
+              issueHint: stripCreatePrPrefix(question),
+            }),
+          );
+        } else if (intent === 'pr_review') {
+          ctx.waitUntil(streamPrReview(env, target));
+        } else {
+          ctx.waitUntil(streamAnswer(env, target));
+        }
       }
     }
     return ackJson({ ok: true });
@@ -137,6 +176,25 @@ export function handleEvent(
     if (at?.channel_id && at.thread_ts) {
       ctx.waitUntil(
         handleAssistantThreadStarted(env, at.channel_id, at.thread_ts),
+      );
+    }
+    return ackJson({ ok: true });
+  }
+
+  // Emoji reaction on a message → agent action without @mention.
+  if (event.type === 'reaction_added') {
+    const re = event as unknown as ReactionAddedEvent;
+    if (re.user && re.reaction && re.item?.channel && re.item?.ts) {
+      ctx.waitUntil(
+        handleReactionAdded(env, {
+          user: re.user,
+          reaction: re.reaction,
+          item: {
+            type: re.item.type,
+            channel: re.item.channel,
+            ts: re.item.ts,
+          },
+        }),
       );
     }
     return ackJson({ ok: true });

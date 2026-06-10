@@ -3,7 +3,7 @@
  *
  * Routes:
  *   POST /slack/commands - `/ask-code` slash command (form-encoded)
- *   POST /slack/events   - Events API (JSON: url_verification, app_mention)
+ *   POST /slack/events   - Events API (app_mention, reaction_added, assistant)
  *   GET  /health         - liveness probe
  *
  * Every Slack request is signature-verified before processing.

@@ -12,8 +12,9 @@ import type { Env } from './env.js';
 import { call } from './stream.js';
 import { buildAnswer } from './answer.js';
 import { fetchThreadHistory } from './history.js';
-import { detectIntent } from './intent.js';
+import { detectIntent, stripCreatePrPrefix } from './intent.js';
 import { handleAssistantPrReview } from './actions/prReview.js';
+import { handleAssistantCreatePr } from './actions/createPr.js';
 
 const LOADING_MESSAGES = [
   'Understanding your question…',
@@ -49,6 +50,10 @@ export async function handleAssistantThreadStarted(
         title: 'Review a pull request',
         message: 'review https://github.com/owner/repo/pull/1',
       },
+      {
+        title: 'Open a pull request',
+        message: 'create pr: add a short comment explaining thread memory in history.ts',
+      },
     ],
   });
 }
@@ -78,8 +83,16 @@ export async function handleAssistantMessage(
 
   // DM/assistant threads use the im:history scope (already granted), so prior
   // turns are available for follow-up context.
-  if (detectIntent(m.text) === 'pr_review') {
+  const intent = detectIntent(m.text);
+  if (intent === 'pr_review') {
     await handleAssistantPrReview(env, m);
+    return;
+  }
+  if (intent === 'create_pr') {
+    await handleAssistantCreatePr(env, {
+      ...m,
+      text: stripCreatePrPrefix(m.text),
+    });
     return;
   }
 
