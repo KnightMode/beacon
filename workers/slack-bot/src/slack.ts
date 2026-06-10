@@ -18,6 +18,7 @@ import {
   createPrSlashAck,
 } from './actions/createPr.js';
 import { handleReactionAdded } from './reactions.js';
+import { reactionsSetupChecklist } from './reactionsSetup.js';
 
 export function ackJson(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -43,7 +44,15 @@ export function handleSlashCommand(
         'Usage:\n' +
         '• `/ask-code <question>` — search indexed repos\n' +
         '• `/ask-code review <pr-url>` — review a pull request\n' +
-        '• Describe an issue in a thread and react with :pr: to open a PR',
+        '• `/ask-code reactions` — emoji reaction setup checklist\n' +
+        '• Describe an issue in a thread and react with :rocket: to open a PR',
+    });
+  }
+
+  if (/^reactions?\b/i.test(question)) {
+    return ackJson({
+      response_type: 'ephemeral',
+      text: reactionsSetupChecklist(),
     });
   }
 
