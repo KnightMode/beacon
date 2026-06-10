@@ -20,6 +20,10 @@ on:
         description: 'space-separated changed files (incremental)'
         required: false
         default: ''
+      removed_files:
+        description: 'space-separated removed files (incremental)'
+        required: false
+        default: ''
       commit_sha:
         description: 'optional commit sha'
         required: false
@@ -51,10 +55,12 @@ jobs:
           PAYLOAD_JOBTYPE: ${{ github.event.client_payload.jobType }}
           PAYLOAD_SHA: ${{ github.event.client_payload.commitSha }}
           PAYLOAD_FILES_JSON: ${{ toJSON(github.event.client_payload.changedFiles) }}
+          PAYLOAD_REMOVED_JSON: ${{ toJSON(github.event.client_payload.removedFiles) }}
           INPUT_REPO: ${{ github.event.inputs.repo }}
           INPUT_JOBTYPE: ${{ github.event.inputs.job_type }}
           INPUT_SHA: ${{ github.event.inputs.commit_sha }}
           INPUT_FILES: ${{ github.event.inputs.files }}
+          INPUT_REMOVED: ${{ github.event.inputs.removed_files }}
           # indexer runtime config:
           GITHUB_PAT: ${{ secrets.INDEXER_GITHUB_PAT }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

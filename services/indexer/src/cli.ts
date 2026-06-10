@@ -4,6 +4,7 @@
  *   npm run index -- <owner/repo>                         # FULL_INDEX
  *   npm run index -- <owner/repo> --commit <sha>          # FULL_INDEX at sha
  *   npm run index -- <owner/repo> --incremental a.go b.ts # INCREMENTAL_INDEX
+ *   npm run index -- <owner/repo> --incremental a.go --removed b.ts
  *   npm run index -- --help
  *
  * `--help` works without any environment configuration.
@@ -18,6 +19,8 @@ Usage:
   npm run index -- <owner/repo>                          Run a FULL_INDEX
   npm run index -- <owner/repo> --commit <sha>           FULL_INDEX at a commit
   npm run index -- <owner/repo> --incremental <files...> INCREMENTAL re-index
+  npm run index -- <owner/repo> --incremental <files...> --removed <files...>
+                                                         also delete removed files
   npm run index -- --help                                Show this help
 
 Environment (see .env.example): GITHUB_PAT, CLOUDFLARE_ACCOUNT_ID,
@@ -42,7 +45,8 @@ async function run(): Promise<void> {
 
   let commitSha: string | undefined;
   const incrementalFiles: string[] = [];
-  let mode: 'full' | 'incremental' = 'full';
+  const removedFiles: string[] = [];
+  let mode: 'full' | 'incremental' | 'removed' = 'full';
 
   for (let i = 1; i < argv.length; i++) {
     const arg = argv[i]!;
@@ -50,8 +54,12 @@ async function run(): Promise<void> {
       commitSha = argv[++i];
     } else if (arg === '--incremental') {
       mode = 'incremental';
+    } else if (arg === '--removed') {
+      mode = 'removed';
     } else if (mode === 'incremental') {
       incrementalFiles.push(arg);
+    } else if (mode === 'removed') {
+      removedFiles.push(arg);
     }
   }
 
@@ -63,14 +71,14 @@ async function run(): Promise<void> {
 
   const repoId = repoIdFor(repoFullName);
   const job: IndexJob =
-    mode === 'incremental'
+    mode !== 'full'
       ? {
           jobType: JOB_TYPES.INCREMENTAL_INDEX,
           repoId,
           repoFullName,
           commitSha,
           changedFiles: incrementalFiles,
-          removedFiles: [],
+          removedFiles,
           enqueuedAt: new Date().toISOString(),
         }
       : {
