@@ -68,6 +68,7 @@ async function dispatchToPipeline(env: Env, job: IndexJob): Promise<void> {
         commitSha: job.commitSha ?? null,
         changedFiles: (job as { changedFiles?: string[] }).changedFiles ?? [],
         removedFiles: (job as { removedFiles?: string[] }).removedFiles ?? [],
+        force: (job as { force?: boolean }).force ?? false,
       },
     }),
   });

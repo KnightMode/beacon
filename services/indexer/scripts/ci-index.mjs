@@ -49,10 +49,17 @@ function fileList(payloadJson, inputText) {
 const files = fileList(process.env.PAYLOAD_FILES_JSON, process.env.INPUT_FILES);
 const removed = fileList(process.env.PAYLOAD_REMOVED_JSON, process.env.INPUT_REMOVED);
 
+const force =
+  (process.env.PAYLOAD_FORCE || process.env.INPUT_FORCE || '')
+    .trim()
+    .toLowerCase() === 'true';
+
 const args = ['tsx', 'src/cli.ts', repo];
 if (jobType === 'INCREMENTAL_INDEX' && (files.length || removed.length)) {
   args.push('--incremental', ...files);
   if (removed.length) args.push('--removed', ...removed);
+} else if (force) {
+  args.push('--force');
 }
 if (sha) {
   args.push('--commit', sha);

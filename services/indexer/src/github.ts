@@ -89,6 +89,46 @@ export class GitHubClient {
     return body.tree.filter((e) => e.type === 'blob');
   }
 
+  /**
+   * Changed/removed files between two commits via the compare API. Returns
+   * null when the diff can't be trusted as complete: unknown base (force
+   * push / GC'd sha) or a result at the API's 300-file cap.
+   */
+  async compareCommits(
+    owner: string,
+    name: string,
+    base: string,
+    head: string,
+  ): Promise<{ changed: string[]; removed: string[] } | null> {
+    const res = await fetch(
+      `${API}/repos/${owner}/${name}/compare/${base}...${head}`,
+      { headers: this.headers() },
+    );
+    if (!res.ok) return null;
+    const body = (await res.json()) as {
+      files?: Array<{
+        filename: string;
+        status: string;
+        previous_filename?: string;
+      }>;
+    };
+    const files = body.files ?? [];
+    if (files.length >= 300) return null; // compare API caps at 300 files
+    const changed: string[] = [];
+    const removed: string[] = [];
+    for (const f of files) {
+      if (f.status === 'removed') {
+        removed.push(f.filename);
+      } else {
+        if (f.status === 'renamed' && f.previous_filename) {
+          removed.push(f.previous_filename);
+        }
+        changed.push(f.filename);
+      }
+    }
+    return { changed, removed };
+  }
+
   /** UTF-8 contents of a blob by its sha. Returns null for binary/oversized. */
   async getBlobContent(
     owner: string,
