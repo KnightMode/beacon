@@ -14,7 +14,7 @@
 
 import type { RetrievedChunk, ChunkType } from '@scintel/shared';
 import type { Env } from '../env.js';
-import type { RetrievalOutcome } from './pipeline.js';
+import { scopeAllowlist, type RetrievalOutcome } from './pipeline.js';
 import { getAllowlistedRepoIds } from '../allowlist.js';
 import { parseQuery, type ParsedQuery } from './queryUnderstanding.js';
 import { lexicalSearch } from './lexical.js';
@@ -135,7 +135,7 @@ export async function agenticRetrieve(
 ): Promise<RetrievalOutcome> {
   const query = searchText ?? question;
   const parsed = parseQuery(query);
-  const allowlist = await getAllowlistedRepoIds(env);
+  const allowlist = scopeAllowlist(query, await getAllowlistedRepoIds(env));
 
   if (allowlist.length === 0) {
     return {
