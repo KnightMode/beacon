@@ -9,7 +9,7 @@
  */
 
 import type { Env } from './env.js';
-import { call } from './stream.js';
+import { call, monotonicStatus } from './stream.js';
 import { buildAnswer } from './answer.js';
 import { fetchThreadHistory } from './history.js';
 import {
@@ -136,14 +136,14 @@ export async function answerAssistantQuestion(
   m: AssistantMessage,
 ): Promise<void> {
   // Status under the composer, advanced at real stage transitions; it clears
-  // the moment we post the reply below.
-  const setStatus = (status: string): void => {
+  // the moment we post the reply below. Monotonic: never repeats or cycles.
+  const setStatus = monotonicStatus((status) => {
     void call(env, 'assistant.threads.setStatus', {
       channel_id: m.channelId,
       thread_ts: m.threadTs,
       status,
     }).catch(() => undefined);
-  };
+  });
   setStatus('is reading your question…');
 
   const history = await fetchThreadHistory(

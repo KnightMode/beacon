@@ -32,6 +32,38 @@ const FLUSH_INTERVAL_MS = 250;
 // searching → following the trail → drafting) instead of letting Slack cycle
 // a canned list, so it progresses logically and never starts over.
 
+/** Ordered stages; the tracker refuses to move backwards or repeat. */
+const STAGE_ORDER = [
+  'is reading your question…',
+  'is searching the codebase…',
+  'is following the code trail…',
+  'is digging deeper into the code…',
+  'is drafting a grounded answer…',
+];
+
+/**
+ * Wraps a raw status setter so the visible stage only ever advances:
+ * unknown stages are allowed once, known stages must be strictly later in
+ * STAGE_ORDER than the last one shown.
+ */
+export function monotonicStatus(
+  set: (status: string) => void,
+): (status: string) => void {
+  let rank = -1;
+  let last = '';
+  return (status: string): void => {
+    const r = STAGE_ORDER.indexOf(status);
+    if (r >= 0) {
+      if (r <= rank) return;
+      rank = r;
+    } else if (status === last) {
+      return;
+    }
+    last = status;
+    set(status);
+  };
+}
+
 interface SlackResult {
   ok: boolean;
   ts?: string;
@@ -85,14 +117,15 @@ export async function streamAnswer(env: Env, t: StreamTarget): Promise<void> {
   let ts: string | undefined;
 
   // Best-effort status shimmer, updated as the work actually progresses; it
-  // auto-clears once the first stream chunk is sent.
-  const setStatus = (status: string): void => {
+  // auto-clears once the first stream chunk is sent. Monotonic: stages only
+  // ever move forward, never cycle.
+  const setStatus = monotonicStatus((status) => {
     void call(env, 'assistant.threads.setStatus', {
       channel_id: t.channel,
       thread_ts: t.threadTs,
       status,
     }).catch(() => undefined);
-  };
+  });
   setStatus('is reading your question…');
 
   // Pull prior thread messages so follow-ups keep context. Gracefully empty if
