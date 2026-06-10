@@ -9,6 +9,7 @@
  * the current content; removed files just have their chunks/vectors deleted.
  */
 
+import { shouldIndexFile } from '@scintel/shared';
 import type { Env } from './env.js';
 import { upsertRepo, addToAllowlist, repoIdFor } from './db.js';
 import { enqueueFullIndex, enqueueIncrementalIndex } from './jobs.js';
@@ -98,6 +99,18 @@ async function handlePush(env: Env, payload: PushPayload): Promise<Response> {
   }
   // A removed-then-readded file should count as changed.
   for (const f of changed) removed.delete(f);
+
+  // Only files the indexer would actually index should cost a pipeline run —
+  // pushes touching just lockfiles, CI configs, binaries, etc. are ignored.
+  for (const f of changed) {
+    if (!shouldIndexFile(f).include) changed.delete(f);
+  }
+  for (const f of removed) {
+    if (!shouldIndexFile(f).include) removed.delete(f);
+  }
+  if (changed.size === 0 && removed.size === 0) {
+    return json({ ok: true, ignored: 'no-indexable-changes', repo: repo.full_name });
+  }
 
   await upsertRepo(env, {
     githubId: repo.id ?? null,
