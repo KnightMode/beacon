@@ -36,13 +36,39 @@ export class GitHubClient {
     };
   }
 
+  /**
+   * GET with retries on transient failures (5xx, 429, network errors). A
+   * single GitHub hiccup must not kill a whole indexing run that makes
+   * hundreds of API calls.
+   */
+  private async request(url: string, attempts = 3): Promise<Response> {
+    let lastErr: Error | null = null;
+    for (let attempt = 1; attempt <= attempts; attempt++) {
+      try {
+        const res = await fetch(url, { headers: this.headers() });
+        if (res.status < 500 && res.status !== 429) return res;
+        lastErr = new Error(`status ${res.status}`);
+      } catch (err) {
+        lastErr = err as Error;
+      }
+      if (attempt < attempts) {
+        const delay = 500 * attempt * attempt;
+        log.warn('GitHub request failed; retrying', {
+          url,
+          attempt,
+          error: lastErr?.message,
+        });
+        await new Promise((r) => setTimeout(r, delay));
+      }
+    }
+    throw new Error(`GitHub request failed after ${attempts} attempts: ${url} (${lastErr?.message})`);
+  }
+
   async getRepo(
     owner: string,
     name: string,
   ): Promise<{ default_branch: string; private: boolean; id: number }> {
-    const res = await fetch(`${API}/repos/${owner}/${name}`, {
-      headers: this.headers(),
-    });
+    const res = await this.request(`${API}/repos/${owner}/${name}`);
     await assertOk(res, `getRepo ${owner}/${name}`);
     const body = (await res.json()) as {
       default_branch: string;
@@ -57,9 +83,8 @@ export class GitHubClient {
     name: string,
     branch: string,
   ): Promise<string> {
-    const res = await fetch(
+    const res = await this.request(
       `${API}/repos/${owner}/${name}/branches/${encodeURIComponent(branch)}`,
-      { headers: this.headers() },
     );
     await assertOk(res, `getBranch ${owner}/${name}@${branch}`);
     const body = (await res.json()) as { commit: { sha: string } };
@@ -72,9 +97,8 @@ export class GitHubClient {
     name: string,
     commitSha: string,
   ): Promise<TreeEntry[]> {
-    const res = await fetch(
+    const res = await this.request(
       `${API}/repos/${owner}/${name}/git/trees/${commitSha}?recursive=1`,
-      { headers: this.headers() },
     );
     await assertOk(res, `getTree ${owner}/${name}@${commitSha}`);
     const body = (await res.json()) as {
@@ -100,9 +124,8 @@ export class GitHubClient {
     base: string,
     head: string,
   ): Promise<{ changed: string[]; removed: string[] } | null> {
-    const res = await fetch(
+    const res = await this.request(
       `${API}/repos/${owner}/${name}/compare/${base}...${head}`,
-      { headers: this.headers() },
     );
     if (!res.ok) return null;
     const body = (await res.json()) as {
@@ -135,9 +158,8 @@ export class GitHubClient {
     name: string,
     blobSha: string,
   ): Promise<string | null> {
-    const res = await fetch(
+    const res = await this.request(
       `${API}/repos/${owner}/${name}/git/blobs/${blobSha}`,
-      { headers: this.headers() },
     );
     await assertOk(res, `getBlob ${owner}/${name}/${blobSha}`);
     const body = (await res.json()) as {
