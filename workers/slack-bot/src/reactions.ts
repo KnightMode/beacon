@@ -39,6 +39,8 @@ export function reactionAction(
 export interface ReactionEvent {
   user: string;
   reaction: string;
+  /** Slack workspace id — required for chat.startStream from reaction triggers. */
+  teamId?: string;
   item: {
     type: string;
     channel: string;
@@ -119,6 +121,7 @@ export async function handleReactionAdded(
           channel,
           threadTs,
           userId: event.user,
+          teamId: event.teamId,
           question: `review ${ref.url}`,
           messageTs: event.item.ts,
         });
@@ -131,6 +134,7 @@ export async function handleReactionAdded(
           channel,
           threadTs,
           userId: event.user,
+          teamId: event.teamId,
           question,
           messageTs: event.item.ts,
         });
@@ -146,6 +150,7 @@ export async function handleReactionAdded(
         channel,
         threadTs,
         userId: event.user,
+        teamId: event.teamId,
         question,
         messageTs: event.item.ts,
       });
