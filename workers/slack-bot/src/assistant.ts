@@ -21,13 +21,7 @@ import { handleAssistantPrReview } from './actions/prReview.js';
 import { handleAssistantCreatePr } from './actions/createPr.js';
 import { indexRepoAction, indexStatusAction } from './actions/indexRepo.js';
 
-const LOADING_MESSAGES = [
-  'Understanding your question…',
-  'Searching indexed repositories…',
-  'Reading the code graph…',
-  'Pulling the most relevant snippets…',
-  'Drafting a grounded answer…',
-];
+// Status text is updated at real stage transitions (no auto-cycling list).
 
 export async function handleAssistantThreadStarted(
   env: Env,
@@ -82,7 +76,6 @@ export async function handleAssistantMessage(
       channel_id: m.channelId,
       thread_ts: m.threadTs,
       status: 'is reviewing…',
-      loading_messages: LOADING_MESSAGES,
     });
     await handleAssistantPrReview(env, m);
     return;
@@ -116,7 +109,13 @@ export async function handleAssistantMessage(
 
   // Q&A runs on the answer queue when available — waitUntil gets cancelled
   // ~30s after the response, which can kill retrieval + answering mid-flight.
+  // Show the status before enqueueing so the queue hop doesn't delay it.
   if (env.ANSWER_QUEUE) {
+    await call(env, 'assistant.threads.setStatus', {
+      channel_id: m.channelId,
+      thread_ts: m.threadTs,
+      status: 'is reading your question…',
+    }).catch(() => undefined);
     await env.ANSWER_QUEUE.send({
       kind: 'assistant',
       channelId: m.channelId,
@@ -131,20 +130,21 @@ export async function handleAssistantMessage(
   await answerAssistantQuestion(env, m);
 }
 
-/** The actual assistant Q&A: shimmer, retrieval + LLM, posted reply. */
+/** The actual assistant Q&A: staged status, retrieval + LLM, posted reply. */
 export async function answerAssistantQuestion(
   env: Env,
   m: AssistantMessage,
 ): Promise<void> {
-  // Show the glowing, rotating "thinking" indicator under the composer. It
-  // stays up (rotating through LOADING_MESSAGES) for the whole retrieval + LLM
-  // run, then clears the moment we post the reply below.
-  await call(env, 'assistant.threads.setStatus', {
-    channel_id: m.channelId,
-    thread_ts: m.threadTs,
-    status: 'is thinking…',
-    loading_messages: LOADING_MESSAGES,
-  });
+  // Status under the composer, advanced at real stage transitions; it clears
+  // the moment we post the reply below.
+  const setStatus = (status: string): void => {
+    void call(env, 'assistant.threads.setStatus', {
+      channel_id: m.channelId,
+      thread_ts: m.threadTs,
+      status,
+    }).catch(() => undefined);
+  };
+  setStatus('is reading your question…');
 
   const history = await fetchThreadHistory(
     env,
@@ -153,7 +153,7 @@ export async function answerAssistantQuestion(
     m.messageTs,
   ).catch(() => []);
 
-  const message = await buildAnswer(env, m.text, history);
+  const message = await buildAnswer(env, m.text, history, setStatus);
 
   await call(env, 'chat.postMessage', {
     channel: m.channelId,

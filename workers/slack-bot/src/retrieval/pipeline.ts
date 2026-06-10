@@ -14,7 +14,7 @@ import { graphExpand } from './graph.js';
 import { hydrateContent } from './db.js';
 import { rerank } from './rerank.js';
 import { packContext, type PackedContext } from './pack.js';
-import { agenticRetrieve } from './agent.js';
+import { agenticRetrieve, type ProgressFn } from './agent.js';
 
 export interface RetrievalOutcome {
   parsed: ParsedQuery;
@@ -31,10 +31,11 @@ export async function retrieveSmart(
   env: Env,
   question: string,
   searchText?: string,
+  onProgress?: ProgressFn,
 ): Promise<RetrievalOutcome> {
   if (env.AGENTIC_RETRIEVAL !== 'false') {
     try {
-      return await agenticRetrieve(env, question, searchText);
+      return await agenticRetrieve(env, question, searchText, onProgress);
     } catch (err) {
       console.error('agentic retrieval failed; falling back to single-shot', {
         error: (err as Error).message,
