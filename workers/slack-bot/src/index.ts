@@ -12,6 +12,8 @@
 import type { Env } from './env.js';
 import { verifySlackSignature } from './signature.js';
 import { ackJson, handleSlashCommand, handleEvent } from './slack.js';
+import { processCreatePrJob } from './actions/createPr.js';
+import type { CreatePrJob } from './jobs/createPrQueue.js';
 
 export default {
   async fetch(
@@ -55,5 +57,20 @@ export default {
     }
 
     return ackJson({ ok: false, error: 'not found' }, 404);
+  },
+
+  async queue(batch: MessageBatch<CreatePrJob>, env: Env): Promise<void> {
+    for (const message of batch.messages) {
+      try {
+        await processCreatePrJob(env, message.body);
+        message.ack();
+      } catch (err) {
+        console.error('create-pr queue job failed', {
+          error: (err as Error).message,
+          channel: message.body.channel,
+        });
+        message.retry();
+      }
+    }
   },
 };

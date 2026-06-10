@@ -71,20 +71,14 @@ export async function handleAssistantMessage(
   env: Env,
   m: AssistantMessage,
 ): Promise<void> {
-  // Show the glowing, rotating "thinking" indicator under the composer. It
-  // stays up (rotating through LOADING_MESSAGES) for the whole retrieval + LLM
-  // run, then clears the moment we post the reply below.
-  await call(env, 'assistant.threads.setStatus', {
-    channel_id: m.channelId,
-    thread_ts: m.threadTs,
-    status: 'is thinking…',
-    loading_messages: LOADING_MESSAGES,
-  });
-
-  // DM/assistant threads use the im:history scope (already granted), so prior
-  // turns are available for follow-up context.
   const intent = detectIntent(m.text);
   if (intent === 'pr_review') {
+    await call(env, 'assistant.threads.setStatus', {
+      channel_id: m.channelId,
+      thread_ts: m.threadTs,
+      status: 'is reviewing…',
+      loading_messages: LOADING_MESSAGES,
+    });
     await handleAssistantPrReview(env, m);
     return;
   }
@@ -95,6 +89,16 @@ export async function handleAssistantMessage(
     });
     return;
   }
+
+  // Show the glowing, rotating "thinking" indicator under the composer. It
+  // stays up (rotating through LOADING_MESSAGES) for the whole retrieval + LLM
+  // run, then clears the moment we post the reply below.
+  await call(env, 'assistant.threads.setStatus', {
+    channel_id: m.channelId,
+    thread_ts: m.threadTs,
+    status: 'is thinking…',
+    loading_messages: LOADING_MESSAGES,
+  });
 
   const history = await fetchThreadHistory(
     env,
