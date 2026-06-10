@@ -31,3 +31,15 @@ index_name = "code-chunks"
 # ---- Workers AI -------------------------------------------------------------
 [ai]
 binding = "AI"
+
+# ---- Queue (create-PR runs here — waitUntil is capped at 30s) ---------------
+[[queues.producers]]
+binding = "CREATE_PR_QUEUE"
+queue = "scintel-create-pr-jobs"
+
+[[queues.consumers]]
+queue = "scintel-create-pr-jobs"
+max_batch_size = 1
+max_batch_timeout = 5
+max_retries = 2
+dead_letter_queue = "scintel-create-pr-jobs-dlq"
