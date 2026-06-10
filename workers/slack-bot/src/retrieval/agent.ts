@@ -294,6 +294,7 @@ interface AgentChunkRow {
   start_line: number;
   end_line: number;
   content: string;
+  commit_sha: string | null;
 }
 
 function placeholders(n: number): string {
@@ -316,6 +317,7 @@ function rowToChunk(
     startLine: row.start_line,
     endLine: row.end_line,
     content: row.content,
+    commitSha: row.commit_sha,
     score,
     source,
   };
@@ -345,7 +347,7 @@ async function readFileChunks(
 
   const sql = `
     SELECT c.id, c.repo_id, r.full_name, c.path, c.language, c.chunk_type,
-           c.symbol, c.start_line, c.end_line, c.content
+           c.symbol, c.start_line, c.end_line, c.content, c.commit_sha
     FROM chunks c JOIN repos r ON r.id = c.repo_id
     WHERE c.repo_id IN (${placeholders(allowlist.length)})
       AND (c.path = ? OR c.path LIKE ?)
@@ -368,7 +370,7 @@ async function fetchCallers(
 ): Promise<RetrievedChunk[]> {
   const sql = `
     SELECT DISTINCT c.id, c.repo_id, r.full_name, c.path, c.language,
-           c.chunk_type, c.symbol, c.start_line, c.end_line, c.content
+           c.chunk_type, c.symbol, c.start_line, c.end_line, c.content, c.commit_sha
     FROM code_edges e
     JOIN chunks c ON c.id = e.from_node_id
     JOIN repos r ON r.id = c.repo_id
