@@ -12,7 +12,7 @@ export interface Env {
   INDEXER_URL: string;
 
   // pipeline dispatch (optional; falls back to INDEXER_URL when unset)
-  PIPELINE_DISPATCH_REPO?: string;   // e.g. "KnightMode/slack-code-intelligence"
+  PIPELINE_DISPATCH_REPO?: string;   // e.g. "KnightMode/beacon"
   PIPELINE_DISPATCH_EVENT?: string;  // default "index-repo"
   PIPELINE_DISPATCH_TOKEN?: string;  // secret: GitHub token allowed to create repository_dispatch
 
