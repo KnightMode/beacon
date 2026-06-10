@@ -153,6 +153,30 @@ export class GitHubClient {
     await assertOk(res, `createBranch ${owner}/${repo}@${branch}`);
   }
 
+  async getFileContent(
+    owner: string,
+    repo: string,
+    path: string,
+    ref: string,
+  ): Promise<string | null> {
+    const res = await fetch(
+      `${API}/repos/${owner}/${repo}/contents/${encodeURIComponent(path)}?ref=${encodeURIComponent(ref)}`,
+      { headers: this.headers() },
+    );
+    if (res.status === 404) return null;
+    await assertOk(res, `getFileContent ${owner}/${repo}/${path}`);
+    const body = (await res.json()) as { content?: string; encoding?: string };
+    if (body.encoding !== 'base64' || !body.content) return null;
+    try {
+      const binary = atob(body.content.replace(/\n/g, ''));
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+      return new TextDecoder().decode(bytes);
+    } catch {
+      return null;
+    }
+  }
+
   async getFileSha(
     owner: string,
     repo: string,
