@@ -69,6 +69,26 @@ export async function streamPrReview(env: Env, t: StreamTarget): Promise<void> {
 
   try {
     const ctx = await buildPrContext(env, gh, ref);
+
+    // chat.startStream requires recipient_team_id (reaction triggers used to omit it).
+    if (!t.teamId) {
+      const review = await generatePrReview(
+        env,
+        ctx.prSummary,
+        ctx.diffContext,
+        ctx.indexedContext,
+        history,
+      );
+      const message = buildPrReviewMessage(ref.url, review);
+      await call(env, 'chat.postMessage', {
+        channel: t.channel,
+        thread_ts: t.threadTs,
+        text: message.text,
+        blocks: message.blocks,
+      });
+      return;
+    }
+
     let ts: string | undefined;
 
     const write = async (text: string): Promise<void> => {
