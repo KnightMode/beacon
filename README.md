@@ -1,4 +1,4 @@
-# Slack Code Intelligence Bot
+# Beacon
 
 **Ask your codebase anything — from Slack, with answers grounded in your actual
 code and cited down to the file and line.**
