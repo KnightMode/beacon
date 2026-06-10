@@ -26,11 +26,12 @@ import { packContext } from './pack.js';
 const MAX_TURNS = 3;
 const MAX_TOOLS_PER_TURN = 3;
 const MAX_POOL = 60;
-// Hard wall-clock budget for the whole planning phase (turn-0 search included).
-// The Q&A path runs inside ctx.waitUntil, which Cloudflare cancels ~30s after
-// the response is sent — retrieval must leave most of that window for
-// streaming the final answer.
-const PLANNING_BUDGET_MS = 8_000;
+// Hard wall-clock budget for the whole planning phase (turn-0 search
+// included), enforced both between turns and within each turn via races —
+// a single slow planner call or tool round can't blow past it. Q&A runs on
+// the answer queue (no 30s waitUntil cap), so this is purely a latency/UX
+// bound on how long users wait before the answer starts streaming.
+const PLANNING_BUDGET_MS = 10_000;
 const EVIDENCE_LINES = 24;
 const SNIPPET_CHARS = 160;
 
@@ -149,18 +150,26 @@ export async function agenticRetrieve(
   let turns = 0;
   for (; turns < MAX_TURNS; turns++) {
     if (pool.size >= MAX_POOL) break;
-    if (Date.now() - startedAt > PLANNING_BUDGET_MS) break;
-    const plan = await planNext(env, question, pool);
+    let remaining = PLANNING_BUDGET_MS - (Date.now() - startedAt);
+    if (remaining <= 0) break;
+
+    const plan = await withDeadline(planNext(env, question, pool), remaining);
     if (!plan || plan.done || plan.tools.length === 0) break;
-    await Promise.all(
-      plan.tools.map((t) =>
-        execTool(env, t, allowlist, pool).catch((err) =>
-          console.warn('agent tool failed', {
-            tool: t.tool,
-            error: (err as Error).message,
-          }),
+
+    remaining = PLANNING_BUDGET_MS - (Date.now() - startedAt);
+    if (remaining <= 0) break;
+    await withDeadline(
+      Promise.all(
+        plan.tools.map((t) =>
+          execTool(env, t, allowlist, pool).catch((err) =>
+            console.warn('agent tool failed', {
+              tool: t.tool,
+              error: (err as Error).message,
+            }),
+          ),
         ),
       ),
+      remaining,
     );
   }
 
@@ -409,6 +418,23 @@ async function fetchCallees(
 
   const symbols = results.map((r) => r.to_symbol).filter(Boolean).slice(0, 10);
   return fetchChunksBySymbols(env, symbols, allowlist, 8);
+}
+
+/**
+ * Resolve to null once the deadline passes; the underlying work continues but
+ * the loop stops waiting for it (pool writes from late tools are simply
+ * unused).
+ */
+async function withDeadline<T>(p: Promise<T>, ms: number): Promise<T | null> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<null>((resolve) => {
+    timer = setTimeout(() => resolve(null), ms);
+  });
+  try {
+    return await Promise.race([p, timeout]);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 async function safe(p: Promise<RetrievedChunk[]>): Promise<RetrievedChunk[]> {

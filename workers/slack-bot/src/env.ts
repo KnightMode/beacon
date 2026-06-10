@@ -4,6 +4,7 @@ export interface Env {
   VECTORIZE: VectorizeIndex;
   AI: Ai;
   CREATE_PR_QUEUE?: Queue<import('./jobs/createPrQueue.js').CreatePrJob>;
+  ANSWER_QUEUE?: Queue<import('./jobs/answerQueue.js').AnswerJob>;
 
   // Vars
   EMBEDDING_MODEL: string;

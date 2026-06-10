@@ -114,6 +114,28 @@ export async function handleAssistantMessage(
     return;
   }
 
+  // Q&A runs on the answer queue when available — waitUntil gets cancelled
+  // ~30s after the response, which can kill retrieval + answering mid-flight.
+  if (env.ANSWER_QUEUE) {
+    await env.ANSWER_QUEUE.send({
+      kind: 'assistant',
+      channelId: m.channelId,
+      threadTs: m.threadTs,
+      text: m.text,
+      userId: m.userId,
+      teamId: m.teamId,
+      messageTs: m.messageTs,
+    });
+    return;
+  }
+  await answerAssistantQuestion(env, m);
+}
+
+/** The actual assistant Q&A: shimmer, retrieval + LLM, posted reply. */
+export async function answerAssistantQuestion(
+  env: Env,
+  m: AssistantMessage,
+): Promise<void> {
   // Show the glowing, rotating "thinking" indicator under the composer. It
   // stays up (rotating through LOADING_MESSAGES) for the whole retrieval + LLM
   // run, then clears the moment we post the reply below.
