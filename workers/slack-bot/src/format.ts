@@ -69,7 +69,10 @@ export function buildCitationBlocks(citations: Citation[]): SlackBlock[] {
 
 function githubUrl(c: Citation): string {
   const path = c.path.split('/').map(encodeURIComponent).join('/');
-  return `https://github.com/${c.repoFullName}/blob/main/${path}#L${c.startLine}-L${c.endLine}`;
+  // Permalink to the indexed commit; HEAD resolves to the default branch
+  // (whatever its name) when the sha is unavailable.
+  const ref = c.commitSha || 'HEAD';
+  return `https://github.com/${c.repoFullName}/blob/${ref}/${path}#L${c.startLine}-L${c.endLine}`;
 }
 
 function formatCitations(citations: Citation[]): string {
