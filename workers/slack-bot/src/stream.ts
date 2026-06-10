@@ -22,7 +22,7 @@ import {
   type Turn,
 } from './history.js';
 
-function log(level: string, msg: string, fields?: Record<string, unknown>): void {
+function log(level: 'info' | 'warn' | 'error', msg: string, fields?: Record<string, unknown>): void {
   const line = { level, msg, ts: new Date().toISOString(), ...fields };
   const out = level === 'error' ? console.error : console.log;
   out(JSON.stringify(line));
@@ -77,7 +77,7 @@ export async function call(
   });
   const result = (await res.json()) as SlackResult;
   if (!result.ok) {
-    console.warn(`slack ${method} failed`, { error: result.error });
+    log('warn', `slack ${method} failed`, { method, error: result.error });
   }
   return result;
 }
@@ -93,8 +93,7 @@ function markdown(text: string): MarkdownChunk {
  */
 export async function streamAnswer(env: Env, t: StreamTarget): Promise<void> {
   let ts: string | undefined;
-  const startMs = Date.now();
-  log('info', 'streamAnswer started', { channel: t.channel, threadTs: t.threadTs, userId: t.userId });
+  log('info', 'streamAnswer start', { channel: t.channel, threadTs: t.threadTs, userId: t.userId });
 
   // Show the glowing shimmer immediately (best-effort). It rotates through the
   // loading messages and auto-clears once the first stream chunk is sent.
@@ -113,6 +112,7 @@ export async function streamAnswer(env: Env, t: StreamTarget): Promise<void> {
     t.threadTs,
     t.messageTs,
   ).catch(() => []);
+  log('info', 'streamAnswer history loaded', { channel: t.channel, turns: history.length });
 
   const write = async (chunks: MarkdownChunk[]): Promise<void> => {
     if (!ts) {
@@ -127,6 +127,7 @@ export async function streamAnswer(env: Env, t: StreamTarget): Promise<void> {
         throw new Error(`startStream: ${started.error ?? 'unknown'}`);
       }
       ts = started.ts;
+      log('info', 'streamAnswer stream opened', { channel: t.channel, ts });
     } else {
       await call(env, 'chat.appendStream', { channel: t.channel, ts, chunks });
     }
@@ -134,21 +135,24 @@ export async function streamAnswer(env: Env, t: StreamTarget): Promise<void> {
 
   try {
     const searchText = buildRetrievalText(history, t.question);
+    log('info', 'streamAnswer retrieving', { channel: t.channel });
     const outcome = await retrieveSmart(env, t.question, searchText);
-    log('info', 'retrieval complete', { channel: t.channel, threadTs: t.threadTs, chunksUsed: outcome.packed.used.length, durationMs: Date.now() - startMs });
+    log('info', 'streamAnswer retrieval done', { channel: t.channel, chunksUsed: outcome.packed.used.length });
 
     if (outcome.packed.used.length === 0) {
-      log('info', 'no results; stopping stream', { channel: t.channel, threadTs: t.threadTs });
       await write([markdown(NO_RESULTS_TEXT)]);
       await call(env, 'chat.stopStream', { channel: t.channel, ts });
+      log('info', 'streamAnswer stopped (no results)', { channel: t.channel, ts });
       return;
     }
 
     let buffer = '';
     let streamedAny = false;
+    let flushCount = 0;
     const flush = async (): Promise<void> => {
       if (!buffer) return;
       await write([markdown(buffer)]);
+      flushCount += 1;
       buffer = '';
     };
 
@@ -174,10 +178,10 @@ export async function streamAnswer(env: Env, t: StreamTarget): Promise<void> {
       ts,
       ...(blocks.length ? { blocks } : {}),
     });
-    log('info', 'streamAnswer finished', { channel: t.channel, threadTs: t.threadTs, durationMs: Date.now() - startMs });
+    log('info', 'streamAnswer stopped', { channel: t.channel, ts, streamedAny, flushCount });
   } catch (err) {
     const message = (err as Error).message;
-    log('error', 'streamAnswer failed', { channel: t.channel, threadTs: t.threadTs, error: message, durationMs: Date.now() - startMs });
+    log('error', 'streamAnswer error', { channel: t.channel, ts, error: message });
     if (ts) {
       await call(env, 'chat.stopStream', {
         channel: t.channel,
@@ -187,7 +191,7 @@ export async function streamAnswer(env: Env, t: StreamTarget): Promise<void> {
     } else {
       // Stream never opened — fall back to a normal post so the user still gets
       // an answer even when the streaming API is unavailable.
-      log('warn', 'stream failed before start; falling back', { channel: t.channel, threadTs: t.threadTs, error: message });
+      log('warn', 'streamAnswer fallback to non-streaming', { channel: t.channel, error: message });
       await fallback(env, t, history);
     }
   }
