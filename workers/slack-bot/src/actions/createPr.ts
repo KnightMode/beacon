@@ -142,7 +142,11 @@ async function runCreatePr(env: Env, target: CreatePrTarget): Promise<void> {
     const { defaultBranch } = await gh.getDefaultBranchSha(repo.owner, repo.repo);
     const targetPaths = guessTargetPaths(issue, indexedContext, repo.fullName);
     const fileSnippets: Array<{ path: string; content: string }> = [];
-    for (const path of targetPaths) {
+    const pathsToLoad = new Set(targetPaths);
+    if (/\b(docs?|eli5|explain|readme)\b/i.test(issue)) {
+      pathsToLoad.add('README.md');
+    }
+    for (const path of pathsToLoad) {
       const content = await gh.getFileContent(
         repo.owner,
         repo.repo,
@@ -151,7 +155,7 @@ async function runCreatePr(env: Env, target: CreatePrTarget): Promise<void> {
       );
       if (content) fileSnippets.push({ path, content });
     }
-    log('files-loaded', { paths: fileSnippets.map((f) => f.path) });
+    log('files-loaded', { paths: fileSnippets.map((f) => f.path), repo: repo.fullName });
 
     const proposal = await generatePrProposal(
       env,
