@@ -11,6 +11,7 @@ import { call } from '../stream.js';
 import { buildIssueFromThread } from '../slackApi.js';
 import { fetchThreadHistory } from '../history.js';
 import type { AssistantMessage } from '../assistant.js';
+import { enqueueCreatePr, type CreatePrJob } from '../jobs/createPrQueue.js';
 
 const CREATE_LOADING = [
   'Reading the issue…',
@@ -39,20 +40,35 @@ export interface CreatePrTarget {
   issueHint?: string;
 }
 
-/** Create a PR from a channel thread (emoji reaction or @mention). */
+/** Enqueue create-PR (Slack event handlers — must finish within waitUntil limits). */
 export async function createPrFromThread(
   env: Env,
   target: CreatePrTarget,
 ): Promise<void> {
-  await runCreatePr(env, target);
+  try {
+    await enqueueCreatePr(env, target);
+  } catch (err) {
+    console.error('create-pr enqueue failed', { error: (err as Error).message });
+    await postPlain(
+      env,
+      target.channel,
+      target.threadTs,
+      `:warning: Could not start pull request: ${(err as Error).message}`,
+    );
+  }
 }
 
-/** Assistant pane: create PR from message + thread context. */
+/** Queue consumer entrypoint. */
+export async function processCreatePrJob(env: Env, job: CreatePrJob): Promise<void> {
+  await runCreatePr(env, job);
+}
+
+/** Assistant pane: enqueue create PR from message + thread context. */
 export async function handleAssistantCreatePr(
   env: Env,
   m: AssistantMessage,
 ): Promise<void> {
-  await runCreatePr(env, {
+  await createPrFromThread(env, {
     channel: m.channelId,
     threadTs: m.threadTs,
     userId: m.userId,
@@ -62,51 +78,61 @@ export async function handleAssistantCreatePr(
 }
 
 async function runCreatePr(env: Env, target: CreatePrTarget): Promise<void> {
-  const gh = GitHubClient.fromEnv(env);
-  if (!gh) {
-    await postPlain(env, target.channel, target.threadTs, createPrMissingPatMessage());
-    return;
-  }
+  const log = (step: string, extra: Record<string, unknown> = {}): void => {
+    console.log('create-pr', { step, channel: target.channel, threadTs: target.threadTs, ...extra });
+  };
 
-  await call(env, 'assistant.threads.setStatus', {
-    channel_id: target.channel,
-    thread_ts: target.threadTs,
-    status: 'is opening a pull request…',
-    loading_messages: CREATE_LOADING,
-  }).catch(() => undefined);
+  try {
+    const gh = GitHubClient.fromEnv(env);
+    if (!gh) {
+      await postPlain(env, target.channel, target.threadTs, createPrMissingPatMessage());
+      return;
+    }
 
-  const history = await fetchThreadHistory(
+    await call(env, 'assistant.threads.setStatus', {
+      channel_id: target.channel,
+      thread_ts: target.threadTs,
+      status: 'is opening a pull request…',
+      loading_messages: CREATE_LOADING,
+    }).catch(() => undefined);
+
+    log('start');
+
+    const history = await fetchThreadHistory(
     env,
     target.channel,
     target.threadTs,
     target.messageTs,
-  ).catch(() => []);
+    ).catch(() => []);
 
-  const threadIssue = await buildIssueFromThread(env, target.channel, target.threadTs);
-  const issue = target.issueHint?.trim() || threadIssue;
-  if (!issue) {
-    await postPlain(
-      env,
-      target.channel,
-      target.threadTs,
-      'Describe the issue in this thread first, then react with :pr: or :rocket: to open a pull request.',
-    );
-    return;
-  }
+    const threadIssue = await buildIssueFromThread(env, target.channel, target.threadTs);
+    const issue = target.issueHint?.trim() || threadIssue;
+    if (!issue) {
+      await postPlain(
+        env,
+        target.channel,
+        target.threadTs,
+        'Describe the issue in this thread first, then react with :pr: or :rocket: to open a pull request.',
+      );
+      return;
+    }
 
-  const repo = await resolveTargetRepo(env, issue);
-  if (!repo) {
-    await postPlain(
-      env,
-      target.channel,
-      target.threadTs,
-      'No target repository found. Set `DEFAULT_PR_REPO` on the worker or mention `owner/repo` in the issue.',
-    );
-    return;
-  }
+    const repo = await resolveTargetRepo(env, issue);
+    if (!repo) {
+      await postPlain(
+        env,
+        target.channel,
+        target.threadTs,
+        'No target repository found. Set `DEFAULT_PR_REPO` on the worker or mention `owner/repo` in the issue.',
+      );
+      return;
+    }
 
-  try {
+    log('repo-resolved', { repo: repo.fullName });
+
     const indexedContext = await fetchIndexedContext(env, issue, repo.fullName);
+    log('context-ready', { contextChars: indexedContext.length });
+
     const proposal = await generatePrProposal(
       env,
       repo.fullName,
@@ -114,6 +140,7 @@ async function runCreatePr(env: Env, target: CreatePrTarget): Promise<void> {
       indexedContext,
       history,
     );
+    log('proposal-ready', { files: proposal.files.length, branch: proposal.branch });
 
     if (proposal.files.length === 0) {
       await postPlain(
@@ -139,6 +166,7 @@ async function runCreatePr(env: Env, target: CreatePrTarget): Promise<void> {
       proposal.body,
       proposal.files,
     );
+    log('pr-opened', { number: pr.number, url: pr.htmlUrl });
 
     await postPlain(
       env,
@@ -147,13 +175,29 @@ async function runCreatePr(env: Env, target: CreatePrTarget): Promise<void> {
       `:white_check_mark: Opened pull request <${pr.htmlUrl}|#${pr.number}: ${proposal.title}>`,
     );
   } catch (err) {
+    const message = (err as Error).message;
+    log('failed', { error: message });
     await postPlain(
       env,
       target.channel,
       target.threadTs,
-      `:warning: Could not create pull request: ${(err as Error).message}`,
+      `:warning: Could not create pull request: ${message}`,
     );
+  } finally {
+    await clearThreadStatus(env, target.channel, target.threadTs);
   }
+}
+
+async function clearThreadStatus(
+  env: Env,
+  channel: string,
+  threadTs: string,
+): Promise<void> {
+  await call(env, 'assistant.threads.setStatus', {
+    channel_id: channel,
+    thread_ts: threadTs,
+    status: '',
+  }).catch(() => undefined);
 }
 
 async function fetchIndexedContext(

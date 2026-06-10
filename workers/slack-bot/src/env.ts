@@ -3,6 +3,7 @@ export interface Env {
   DB: D1Database;
   VECTORIZE: VectorizeIndex;
   AI: Ai;
+  CREATE_PR_QUEUE?: Queue<import('./jobs/createPrQueue.js').CreatePrJob>;
 
   // Vars
   EMBEDDING_MODEL: string;

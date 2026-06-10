@@ -86,7 +86,7 @@ export async function generatePrProposal(
 ): Promise<PrProposal> {
   const res = (await env.AI.run(env.LLM_MODEL, {
     messages: buildMessages(repoFullName, issue, indexedContext, history),
-    max_tokens: 8_192,
+    max_tokens: 4_096,
     thinking: false,
   })) as LlmResponse;
 
