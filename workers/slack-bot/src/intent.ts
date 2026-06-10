@@ -9,7 +9,7 @@ export interface PrReference {
   url: string;
 }
 
-export type UserIntent = 'qa' | 'pr_review';
+export type UserIntent = 'qa' | 'pr_review' | 'create_pr';
 
 const PR_URL =
   /https?:\/\/github\.com\/([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+)\/pull\/(\d+)/i;
@@ -44,8 +44,20 @@ export function parsePrReference(text: string): PrReference | null {
 }
 
 const REVIEW_VERB = /\b(review|check|audit|look\s+at)\b/i;
+const CREATE_PR_VERB =
+  /\b(create|open|raise|make)\s+(a\s+)?(pr|pull\s+request)\b/i;
+const CREATE_PR_PREFIX = /^\s*create\s+pr\s*:\s*/i;
+
+/** Strip a leading `create pr:` prefix from issue text. */
+export function stripCreatePrPrefix(text: string): string {
+  return text.replace(CREATE_PR_PREFIX, '').trim();
+}
 
 export function detectIntent(text: string): UserIntent {
+  if (CREATE_PR_VERB.test(text) || CREATE_PR_PREFIX.test(text)) {
+    return 'create_pr';
+  }
+
   const pr = parsePrReference(text);
   if (!pr) return 'qa';
   // Require an explicit review verb or a bare PR URL (common paste pattern).

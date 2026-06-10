@@ -1,6 +1,5 @@
 /**
- * Minimal GitHub REST client for agent actions (PR review). Read-only for
- * Phase 1; uses the same fine-grained PAT as the indexer.
+ * GitHub REST client for agent actions: PR review (read) and create PR (write).
  */
 
 import type { Env } from './env.js';
@@ -26,6 +25,16 @@ export interface PullRequestFile {
   additions: number;
   deletions: number;
   patch: string | null;
+}
+
+export interface CreatedPullRequest {
+  number: number;
+  htmlUrl: string;
+}
+
+export interface FileChange {
+  path: string;
+  content: string;
 }
 
 export class GitHubClient {
@@ -105,6 +114,138 @@ export class GitHubClient {
       patch: f.patch,
     }));
   }
+
+  async getDefaultBranchSha(
+    owner: string,
+    repo: string,
+  ): Promise<{ defaultBranch: string; sha: string }> {
+    const repoRes = await fetch(`${API}/repos/${owner}/${repo}`, {
+      headers: this.headers(),
+    });
+    await assertOk(repoRes, `getRepo ${owner}/${repo}`);
+    const repoBody = (await repoRes.json()) as { default_branch: string };
+    const branch = repoBody.default_branch;
+
+    const refRes = await fetch(
+      `${API}/repos/${owner}/${repo}/git/ref/heads/${encodeURIComponent(branch)}`,
+      { headers: this.headers() },
+    );
+    await assertOk(refRes, `getRef ${owner}/${repo}@${branch}`);
+    const refBody = (await refRes.json()) as { object: { sha: string } };
+    return { defaultBranch: branch, sha: refBody.object.sha };
+  }
+
+  async createBranch(
+    owner: string,
+    repo: string,
+    branch: string,
+    fromSha: string,
+  ): Promise<void> {
+    const res = await fetch(`${API}/repos/${owner}/${repo}/git/refs`, {
+      method: 'POST',
+      headers: { ...this.headers(), 'content-type': 'application/json' },
+      body: JSON.stringify({ ref: `refs/heads/${branch}`, sha: fromSha }),
+    });
+    if (res.status === 422) {
+      // Branch already exists — reuse it for subsequent file commits.
+      return;
+    }
+    await assertOk(res, `createBranch ${owner}/${repo}@${branch}`);
+  }
+
+  async getFileSha(
+    owner: string,
+    repo: string,
+    path: string,
+    ref: string,
+  ): Promise<string | null> {
+    const res = await fetch(
+      `${API}/repos/${owner}/${repo}/contents/${encodeURIComponent(path)}?ref=${encodeURIComponent(ref)}`,
+      { headers: this.headers() },
+    );
+    if (res.status === 404) return null;
+    await assertOk(res, `getFileSha ${owner}/${repo}/${path}`);
+    const body = (await res.json()) as { sha?: string };
+    return body.sha ?? null;
+  }
+
+  async upsertFile(
+    owner: string,
+    repo: string,
+    path: string,
+    content: string,
+    branch: string,
+    message: string,
+  ): Promise<void> {
+    const existingSha = await this.getFileSha(owner, repo, path, branch);
+    const body: Record<string, string> = {
+      message,
+      content: encodeBase64(content),
+      branch,
+    };
+    if (existingSha) body.sha = existingSha;
+
+    const res = await fetch(
+      `${API}/repos/${owner}/${repo}/contents/${encodeURIComponent(path)}`,
+      {
+        method: 'PUT',
+        headers: { ...this.headers(), 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      },
+    );
+    await assertOk(res, `upsertFile ${owner}/${repo}/${path}`);
+  }
+
+  async createPullRequest(
+    owner: string,
+    repo: string,
+    title: string,
+    body: string,
+    head: string,
+    base: string,
+  ): Promise<CreatedPullRequest> {
+    const res = await fetch(`${API}/repos/${owner}/${repo}/pulls`, {
+      method: 'POST',
+      headers: { ...this.headers(), 'content-type': 'application/json' },
+      body: JSON.stringify({ title, body, head, base }),
+    });
+    await assertOk(res, `createPullRequest ${owner}/${repo}`);
+    const pr = (await res.json()) as { number: number; html_url: string };
+    return { number: pr.number, htmlUrl: pr.html_url };
+  }
+
+  /** Create branch, commit files, and open a PR against the default branch. */
+  async createPullRequestFromChanges(
+    owner: string,
+    repo: string,
+    branch: string,
+    title: string,
+    body: string,
+    files: FileChange[],
+  ): Promise<CreatedPullRequest> {
+    const { defaultBranch, sha } = await this.getDefaultBranchSha(owner, repo);
+    await this.createBranch(owner, repo, branch, sha);
+
+    for (const file of files) {
+      await this.upsertFile(
+        owner,
+        repo,
+        file.path,
+        file.content,
+        branch,
+        `${title} (${file.path})`,
+      );
+    }
+
+    return this.createPullRequest(owner, repo, title, body, branch, defaultBranch);
+  }
+}
+
+function encodeBase64(text: string): string {
+  const bytes = new TextEncoder().encode(text);
+  let binary = '';
+  for (const b of bytes) binary += String.fromCharCode(b);
+  return btoa(binary);
 }
 
 async function assertOk(res: Response, label: string): Promise<void> {
