@@ -14,12 +14,34 @@ import { graphExpand } from './graph.js';
 import { hydrateContent } from './db.js';
 import { rerank } from './rerank.js';
 import { packContext, type PackedContext } from './pack.js';
+import { agenticRetrieve } from './agent.js';
 
 export interface RetrievalOutcome {
   parsed: ParsedQuery;
   allowlist: string[];
   packed: PackedContext;
   candidates: number;
+}
+
+/**
+ * Q&A entry point: agentic retrieval (planner loop) unless disabled via the
+ * AGENTIC_RETRIEVAL var; any agent failure falls back to single-shot retrieve.
+ */
+export async function retrieveSmart(
+  env: Env,
+  question: string,
+  searchText?: string,
+): Promise<RetrievalOutcome> {
+  if (env.AGENTIC_RETRIEVAL !== 'false') {
+    try {
+      return await agenticRetrieve(env, question, searchText);
+    } catch (err) {
+      console.error('agentic retrieval failed; falling back to single-shot', {
+        error: (err as Error).message,
+      });
+    }
+  }
+  return retrieve(env, question, searchText);
 }
 
 export async function retrieve(
