@@ -21,6 +21,7 @@ import {
   buildRetrievalText,
   type Turn,
 } from './history.js';
+import { log } from '../../../services/indexer/src/logger.js';
 
 const SLACK_API = 'https://slack.com/api';
 // Flush accumulated tokens to Slack roughly every this many chars to keep the
@@ -71,7 +72,7 @@ export async function call(
   });
   const result = (await res.json()) as SlackResult;
   if (!result.ok) {
-    console.warn(`slack ${method} failed`, { error: result.error });
+    log.warn(`slack ${method} failed`, { error: result.error });
   }
   return result;
 }
@@ -175,7 +176,7 @@ export async function streamAnswer(env: Env, t: StreamTarget): Promise<void> {
     } else {
       // Stream never opened — fall back to a normal post so the user still gets
       // an answer even when the streaming API is unavailable.
-      console.warn('stream failed before start; falling back', { error: message });
+      log.warn('stream failed before start; falling back', { error: message });
       await fallback(env, t, history);
     }
   }
