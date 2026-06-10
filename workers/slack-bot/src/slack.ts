@@ -184,18 +184,26 @@ export function handleEvent(
   // Emoji reaction on a message → agent action without @mention.
   if (event.type === 'reaction_added') {
     const re = event as unknown as ReactionAddedEvent;
+    console.log('slack event reaction_added', {
+      reaction: re.reaction,
+      hasItem: Boolean(re.item),
+      channel: re.item?.channel,
+      ts: re.item?.ts,
+    });
     if (re.user && re.reaction && re.item?.channel && re.item?.ts) {
       ctx.waitUntil(
         handleReactionAdded(env, {
           user: re.user,
           reaction: re.reaction,
           item: {
-            type: re.item.type,
+            type: re.item.type ?? 'message',
             channel: re.item.channel,
             ts: re.item.ts,
           },
         }),
       );
+    } else {
+      console.warn('reaction_added missing fields', { user: re.user, reaction: re.reaction });
     }
     return ackJson({ ok: true });
   }
