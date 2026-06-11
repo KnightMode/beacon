@@ -9,15 +9,13 @@ code and cited down to the file and line.**
 
 ## Demo
 
-<!--
-  For an inline video player, GitHub requires the mp4 to be uploaded through
-  its web editor: edit this file on github.com, drag beacon-demo.mp4 onto the
-  line below, and GitHub will replace it with a playable user-attachments URL.
--->
+<p align="center">
+  <img src="docs/assets/beacon-demo.gif" alt="Beacon demo — grounded Q&A, PR creation, PR review, and self-serve indexing, all from Slack" width="900">
+</p>
 
-🎬 **[Watch the 2-minute demo](docs/assets/beacon-demo.mp4)** — grounded Q&A
-with citations, PR creation from a thread, PR review, and self-serve indexing,
-all without leaving Slack.
+🎬 **[Watch the full 2-minute demo](docs/assets/beacon-demo.mp4)** — grounded
+Q&A with citations, PR creation from a thread, PR review, and self-serve
+indexing, all without leaving Slack.
 
 ```
 you   ▸ @bot why does the create-PR flow go through a queue instead of waitUntil?
