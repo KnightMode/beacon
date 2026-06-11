@@ -6,6 +6,7 @@
 
 import type { IndexerConfig } from './config.js';
 import { log } from './logger.js';
+import { gunzipSync } from 'node:zlib';
 
 const API = 'https://api.github.com';
 
@@ -173,6 +174,104 @@ export class GitHubClient {
       return null;
     }
   }
+
+  /**
+   * Download the repo tarball at a ref once and return repo-relative path → UTF-8
+   * content. Replaces one git/blobs call per indexed file.
+   */
+  async downloadTarball(
+    owner: string,
+    name: string,
+    ref: string,
+  ): Promise<Map<string, string>> {
+    const res = await this.request(
+      `${API}/repos/${owner}/${name}/tarball/${encodeURIComponent(ref)}`,
+    );
+    await assertOk(res, `tarball ${owner}/${name}@${ref}`);
+    const gz = Buffer.from(await res.arrayBuffer());
+    const tar = gunzipSync(gz);
+    return parseTarToPathMap(tar);
+  }
+}
+
+function parseTarToPathMap(tar: Buffer): Map<string, string> {
+  const raw = parseTarEntries(tar);
+  const files = new Map<string, string>();
+  for (const [fullPath, content] of raw) {
+    const slash = fullPath.indexOf('/');
+    if (slash < 0) continue;
+    const rel = fullPath.slice(slash + 1);
+    if (!rel) continue;
+    files.set(rel, content.toString('utf-8'));
+  }
+  return files;
+}
+
+function parseTarEntries(tar: Buffer): Map<string, Buffer> {
+  const files = new Map<string, Buffer>();
+  let offset = 0;
+  // Paths longer than the 100-byte ustar name field arrive in a pax extended
+  // header ('x') or GNU longname ('L') entry that precedes the file entry.
+  let pendingPath: string | null = null;
+  while (offset + 512 <= tar.length) {
+    const header = tar.subarray(offset, offset + 512);
+    if (header.every((b) => b === 0)) break;
+
+    const name = readTarString(header, 0, 100);
+    const prefix = readTarString(header, 345, 155);
+    const fullName = prefix ? `${prefix}/${name}` : name;
+    const size = parseInt(readTarString(header, 124, 12), 8) || 0;
+    const type = header[156] ?? 0;
+
+    offset += 512;
+    const data = tar.subarray(offset, offset + size);
+    offset += Math.ceil(size / 512) * 512;
+
+    if (type === 120) {
+      // 'x' pax extended header: records are "<len> <key>=<value>\n".
+      pendingPath = parsePaxPath(data) ?? pendingPath;
+      continue;
+    }
+    if (type === 76) {
+      // 'L' GNU longname: data is the NUL-terminated path of the next entry.
+      pendingPath = data.toString('utf-8').replace(/\0+$/, '') || pendingPath;
+      continue;
+    }
+    if (type === 0 || type === 48) {
+      files.set(pendingPath ?? fullName, data);
+    }
+    pendingPath = null;
+  }
+  return files;
+}
+
+function parsePaxPath(data: Buffer): string | null {
+  const text = data.toString('utf-8');
+  let pos = 0;
+  while (pos < text.length) {
+    const space = text.indexOf(' ', pos);
+    if (space < 0) break;
+    const len = parseInt(text.slice(pos, space), 10);
+    if (!Number.isFinite(len) || len <= 0) break;
+    const record = text.slice(space + 1, pos + len);
+    const eq = record.indexOf('=');
+    if (eq >= 0 && record.slice(0, eq) === 'path') {
+      return record.slice(eq + 1).replace(/\n$/, '');
+    }
+    pos += len;
+  }
+  return null;
+}
+
+function readTarString(buf: Buffer, start: number, len: number): string {
+  const end = start + len;
+  let out = '';
+  for (let i = start; i < end; i++) {
+    const b = buf[i] ?? 0;
+    if (b === 0) break;
+    out += String.fromCharCode(b);
+  }
+  return out;
 }
 
 async function assertOk(res: Response, ctx: string): Promise<void> {

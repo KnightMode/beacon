@@ -197,6 +197,7 @@ CREATE INDEX IF NOT EXISTS idx_edges_repo_id          ON code_edges (repo_id);
 CREATE INDEX IF NOT EXISTS idx_edges_from_node_id     ON code_edges (from_node_id);
 CREATE INDEX IF NOT EXISTS idx_edges_to_node_id       ON code_edges (to_node_id);
 CREATE INDEX IF NOT EXISTS idx_edges_repo_type        ON code_edges (repo_id, edge_type);
+CREATE INDEX IF NOT EXISTS idx_edges_repo_type_to_symbol ON code_edges (repo_id, edge_type, to_symbol);
 CREATE INDEX IF NOT EXISTS idx_allowlist_enabled      ON prototype_repo_allowlist (enabled);
 CREATE INDEX IF NOT EXISTS idx_ci_triage_repo         ON ci_triage_runs (repo_id);
 CREATE INDEX IF NOT EXISTS idx_perms_user             ON github_user_repo_permissions (user_id);
