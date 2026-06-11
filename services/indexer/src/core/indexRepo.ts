@@ -37,7 +37,7 @@ import {
   upsertFile,
   chunkIdsForFile,
   chunkHashesForFile,
-  getFileContentHash,
+  getFileContentHashes,
   deleteChunksByIds,
   deleteEdgesForFile,
   deleteFileData,
@@ -51,6 +51,9 @@ import {
 import { log } from '../logger.js';
 
 const EMBED_BATCH = 50;
+const FILE_CONCURRENCY = 6;
+const EMBED_IN_FLIGHT = 2;
+const STATUS_UPDATE_INTERVAL = 25;
 
 export interface IndexResult {
   repoFullName: string;
@@ -194,80 +197,54 @@ export async function indexRepo(
     let chunksWritten = 0;
     let edgesWritten = 0;
 
-    for (const entry of targets) {
-      const fileId = fileIdFor(repoId, entry.path);
-      const language = detectLanguage(entry.path);
+    const tarball =
+      targets.length > 0
+        ? await github.downloadTarball(owner, name, commitSha)
+        : new Map<string, string>();
+    const priorHashes = await getFileContentHashes(
+      d1,
+      targets.map((e) => fileIdFor(repoId, e.path)),
+    );
 
-      // Unchanged-file skip: compare the stored content hash before fetching
-      // chunks. (Git blob sha is over raw bytes; our hash is over the decoded
-      // UTF-8, so we hash the fetched content.)
-      const content = await github.getBlobContent(owner, name, entry.sha);
-      if (content === null || looksBinary(content)) continue;
-      const fileHash = await sha256Hex(content);
+    const progress = { filesIndexed: 0, chunksWritten: 0 };
 
-      if (!force) {
-        const priorHash = await getFileContentHash(d1, fileId);
-        if (priorHash === fileHash) {
-          filesIndexed++;
-          continue;
-        }
-      }
-
-      await upsertFile(d1, {
+    const fileStats = await mapPool(targets, FILE_CONCURRENCY, async (entry) => {
+      const stat = await indexOneFile({
+        d1,
+        vectorize,
+        ai,
+        github,
+        owner,
+        name,
         repoId,
-        path: entry.path,
-        language,
-        sizeBytes: entry.size ?? content.length,
-        contentHash: fileHash,
+        repoFullName: job.repoFullName,
         commitSha,
+        force,
+        entry,
+        tarball,
+        priorHashes,
       });
-
-      const { chunks, edges } = await produceChunks({
-        repoId,
-        fileId,
-        path: entry.path,
-        language,
-        content,
-        commitSha,
-      });
-      redactChunks(chunks);
-
-      if (force) {
-        // True full reindex: clear previous chunks + vectors, re-embed all.
-        const oldIds = await chunkIdsForFile(d1, fileId);
-        if (oldIds.length) await vectorize.deleteByIds(oldIds);
-        await deleteFileData(d1, fileId);
-        await embedAndUpsert(ai, vectorize, job.repoFullName, chunks);
-        await insertChunks(d1, chunks);
-        await insertEdges(d1, edges);
-        chunksWritten += chunks.length;
-      } else {
-        // Chunk-level dedup: embed/write only chunks whose content changed,
-        // delete chunks that no longer exist. Vectorize upsert overwrites
-        // changed ids in place.
-        const existing = await chunkHashesForFile(d1, fileId);
-        const newIds = new Set(chunks.map((c) => c.id));
-        const staleIds = [...existing.keys()].filter((id) => !newIds.has(id));
-        const dirty = chunks.filter(
-          (c) => existing.get(c.id) !== c.contentHash,
-        );
-
-        if (staleIds.length) {
-          await vectorize.deleteByIds(staleIds);
-          await deleteChunksByIds(d1, staleIds);
-        }
-        // Edges are cheap, derived rows: refresh them wholesale per file.
-        await deleteEdgesForFile(d1, fileId);
-        await insertEdges(d1, edges);
-
-        await embedAndUpsert(ai, vectorize, job.repoFullName, dirty);
-        await insertChunks(d1, dirty);
-        chunksWritten += dirty.length;
+      if (stat.indexed) progress.filesIndexed++;
+      progress.chunksWritten += stat.chunksWritten;
+      const n = progress.filesIndexed;
+      if (n % STATUS_UPDATE_INTERVAL === 0) {
+        await updateIndexStatus(d1, repoId, {
+          status: 'INDEXING',
+          indexedFiles: n,
+          totalChunks: progress.chunksWritten,
+          totalFiles: targets.length,
+        });
       }
+      return stat;
+    });
 
-      filesIndexed++;
-      edgesWritten += edges.length;
+    for (const stat of fileStats) {
+      if (stat.indexed) filesIndexed++;
+      chunksWritten += stat.chunksWritten;
+      edgesWritten += stat.edgesWritten;
+    }
 
+    if (filesIndexed > 0 && filesIndexed % STATUS_UPDATE_INTERVAL !== 0) {
       await updateIndexStatus(d1, repoId, {
         status: 'INDEXING',
         indexedFiles: filesIndexed,
@@ -335,6 +312,131 @@ function selectTargets(
   return { targets, removed: [] };
 }
 
+interface FileIndexStat {
+  indexed: boolean;
+  chunksWritten: number;
+  edgesWritten: number;
+}
+
+interface IndexOneFileInput {
+  d1: D1Client;
+  vectorize: VectorizeClient;
+  ai: WorkersAIClient;
+  github: GitHubClient;
+  owner: string;
+  name: string;
+  repoId: string;
+  repoFullName: string;
+  commitSha: string;
+  force: boolean;
+  entry: TreeEntry;
+  tarball: Map<string, string>;
+  priorHashes: Map<string, string>;
+}
+
+async function indexOneFile(input: IndexOneFileInput): Promise<FileIndexStat> {
+  const { d1, vectorize, ai, repoId, repoFullName, commitSha, force, entry, tarball, priorHashes } =
+    input;
+  const fileId = fileIdFor(repoId, entry.path);
+  const language = detectLanguage(entry.path);
+
+  // Tarball is the fast path; fall back to the blob API for any path the tar
+  // parser failed to surface so no tree entry is ever silently dropped.
+  let raw = tarball.get(entry.path);
+  if (raw === undefined) {
+    log.warn('file missing from tarball; falling back to blob API', {
+      repo: repoFullName,
+      path: entry.path,
+    });
+    raw =
+      (await input.github.getBlobContent(input.owner, input.name, entry.sha)) ??
+      undefined;
+  }
+  if (raw === undefined || looksBinary(raw)) {
+    return { indexed: false, chunksWritten: 0, edgesWritten: 0 };
+  }
+  const content = raw;
+  const fileHash = await sha256Hex(content);
+
+  if (!force) {
+    const priorHash = priorHashes.get(fileId);
+    if (priorHash === fileHash) {
+      return { indexed: true, chunksWritten: 0, edgesWritten: 0 };
+    }
+  }
+
+  await upsertFile(d1, {
+    repoId,
+    path: entry.path,
+    language,
+    sizeBytes: entry.size ?? content.length,
+    contentHash: fileHash,
+    commitSha,
+  });
+
+  const { chunks, edges } = await produceChunks({
+    repoId,
+    fileId,
+    path: entry.path,
+    language,
+    content,
+    commitSha,
+  });
+  redactChunks(chunks);
+
+  let chunksWritten = 0;
+
+  if (force) {
+    const oldIds = await chunkIdsForFile(d1, fileId);
+    if (oldIds.length) await vectorize.deleteByIds(oldIds);
+    await deleteFileData(d1, fileId);
+    await embedAndUpsert(ai, vectorize, repoFullName, chunks);
+    await insertChunks(d1, chunks);
+    await insertEdges(d1, edges);
+    chunksWritten = chunks.length;
+  } else {
+    const existing = await chunkHashesForFile(d1, fileId);
+    const newIds = new Set(chunks.map((c) => c.id));
+    const staleIds = [...existing.keys()].filter((id) => !newIds.has(id));
+    const dirty = chunks.filter((c) => existing.get(c.id) !== c.contentHash);
+
+    if (staleIds.length) {
+      await vectorize.deleteByIds(staleIds);
+      await deleteChunksByIds(d1, staleIds);
+    }
+    await deleteEdgesForFile(d1, fileId);
+    await insertEdges(d1, edges);
+
+    await embedAndUpsert(ai, vectorize, repoFullName, dirty);
+    await insertChunks(d1, dirty);
+    chunksWritten = dirty.length;
+  }
+
+  return { indexed: true, chunksWritten, edgesWritten: edges.length };
+}
+
+async function mapPool<T, R>(
+  items: T[],
+  concurrency: number,
+  fn: (item: T) => Promise<R>,
+): Promise<R[]> {
+  if (items.length === 0) return [];
+  const results: R[] = new Array(items.length);
+  let next = 0;
+  const workers = Array.from(
+    { length: Math.min(concurrency, items.length) },
+    async () => {
+      for (;;) {
+        const i = next++;
+        if (i >= items.length) return;
+        results[i] = await fn(items[i]!);
+      }
+    },
+  );
+  await Promise.all(workers);
+  return results;
+}
+
 interface ProduceInput {
   repoId: string;
   fileId: string;
@@ -376,28 +478,43 @@ async function embedAndUpsert(
   repoFullName: string,
   chunks: CodeChunk[],
 ): Promise<void> {
+  const batches: CodeChunk[][] = [];
   for (let i = 0; i < chunks.length; i += EMBED_BATCH) {
-    const batch = chunks.slice(i, i + EMBED_BATCH);
-    const texts = batch.map((c) =>
-      buildEmbeddingText({
-        repoFullName,
-        path: c.path,
-        language: c.language,
-        chunkType: c.chunkType,
-        symbol: c.symbol,
-        imports: c.imports,
-        calls: c.calls,
-        content: c.content,
-      }),
-    );
-    const vectors = await ai.embed(texts);
-    const upserts: UpsertVector[] = batch.map((c, idx) => ({
-      id: c.id,
-      values: vectors[idx] ?? [],
-      metadata: toMetadata(repoFullName, c),
-    }));
-    await vectorize.upsert(upserts.filter((v) => v.values.length > 0));
+    batches.push(chunks.slice(i, i + EMBED_BATCH));
   }
+  if (batches.length === 0) return;
+
+  let next = 0;
+  const workers = Array.from(
+    { length: Math.min(EMBED_IN_FLIGHT, batches.length) },
+    async () => {
+      for (;;) {
+        const i = next++;
+        if (i >= batches.length) return;
+        const batch = batches[i]!;
+        const texts = batch.map((c) =>
+          buildEmbeddingText({
+            repoFullName,
+            path: c.path,
+            language: c.language,
+            chunkType: c.chunkType,
+            symbol: c.symbol,
+            imports: c.imports,
+            calls: c.calls,
+            content: c.content,
+          }),
+        );
+        const vectors = await ai.embed(texts);
+        const upserts: UpsertVector[] = batch.map((c, idx) => ({
+          id: c.id,
+          values: vectors[idx] ?? [],
+          metadata: toMetadata(repoFullName, c),
+        }));
+        await vectorize.upsert(upserts.filter((v) => v.values.length > 0));
+      }
+    },
+  );
+  await Promise.all(workers);
 }
 
 function toMetadata(repoFullName: string, c: CodeChunk): VectorMetadata {

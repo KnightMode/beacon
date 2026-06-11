@@ -48,7 +48,7 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      - run: npm ci
+      - run: npm ci --workspace=@scintel/indexer --include-workspace-root
       - name: Run indexer
         working-directory: services/indexer
         # Untrusted payload fields are passed as env (never interpolated into the
