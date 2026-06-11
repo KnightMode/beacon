@@ -145,6 +145,26 @@ CREATE TABLE IF NOT EXISTS prototype_repo_allowlist (
   created_at  TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+-- ---- CI triage: per-repo Slack notify channel --------------------------------
+CREATE TABLE IF NOT EXISTS ci_notify_channels (
+  repo_id     TEXT PRIMARY KEY REFERENCES repos(id) ON DELETE CASCADE,
+  channel_id  TEXT NOT NULL,                        -- Slack channel id ("C…")
+  added_by    TEXT,                                 -- Slack user id
+  created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+-- ---- CI triage: processed-run dedupe -----------------------------------------
+-- One row per (run, attempt) claims the triage; dedupes GitHub webhook
+-- redeliveries and queue retries. message_ts is set once posted to Slack.
+CREATE TABLE IF NOT EXISTS ci_triage_runs (
+  run_id      INTEGER NOT NULL,
+  run_attempt INTEGER NOT NULL,
+  repo_id     TEXT NOT NULL,
+  message_ts  TEXT,
+  created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (run_id, run_attempt)
+);
+
 -- ---- Future production auth (NOT used by prototype) --------------------------
 CREATE TABLE IF NOT EXISTS users (
   id                TEXT PRIMARY KEY,               -- internal user id
@@ -178,4 +198,5 @@ CREATE INDEX IF NOT EXISTS idx_edges_from_node_id     ON code_edges (from_node_i
 CREATE INDEX IF NOT EXISTS idx_edges_to_node_id       ON code_edges (to_node_id);
 CREATE INDEX IF NOT EXISTS idx_edges_repo_type        ON code_edges (repo_id, edge_type);
 CREATE INDEX IF NOT EXISTS idx_allowlist_enabled      ON prototype_repo_allowlist (enabled);
+CREATE INDEX IF NOT EXISTS idx_ci_triage_repo         ON ci_triage_runs (repo_id);
 CREATE INDEX IF NOT EXISTS idx_perms_user             ON github_user_repo_permissions (user_id);
