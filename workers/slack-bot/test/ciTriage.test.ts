@@ -207,3 +207,37 @@ describe('notify_repo intent', () => {
     expect(detectIntent('create pr: fix the parser')).toBe('create_pr');
   });
 });
+
+describe('classifyTransient regressions', () => {
+  it('a lint --timeout flag must not make a compile error transient (live incident)', () => {
+    const excerpt = [
+      '##[group]Run golangci/golangci-lint-action@v4',
+      'Running [golangci-lint run --timeout=5m] in [apps/backend] ...',
+      'internal/agents/router.go:16:3: unknown field agents in struct literal of type Router (typecheck)',
+      'internal/agents/router.go:22:4: r.agents undefined (type *Router has no field or method agents) (typecheck)',
+      '##[error]golangci-lint exit with code 1',
+    ].join('\n');
+    expect(classifyTransient(excerpt).transient).toBe(false);
+  });
+
+  it('code-failure signatures win over transient signals in the same log', () => {
+    const excerpt = [
+      'fetch flaky-service: ETIMEDOUT',
+      '--- FAIL: TestRouterFallback (0.51s)',
+      '##[error]Process completed with exit code 1.',
+    ].join('\n');
+    expect(classifyTransient(excerpt).transient).toBe(false);
+  });
+
+  it('still flags a genuine runner timeout', () => {
+    const excerpt =
+      '##[error]The job running on runner X has exceeded the maximum execution time of 360 minutes.';
+    const result = classifyTransient(excerpt);
+    expect(result).toEqual({ transient: true, reason: 'timeout' });
+  });
+
+  it('bare "timeout" wording alone is not transient', () => {
+    const excerpt = 'configured timeout: 5m\n##[error]tests failed';
+    expect(classifyTransient(excerpt).transient).toBe(false);
+  });
+});

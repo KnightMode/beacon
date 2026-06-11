@@ -89,19 +89,41 @@ const TRANSIENT_PATTERNS: Array<{ re: RegExp; reason: string }> = [
     re: /lost communication with the server|runner has received a shutdown signal/i,
     reason: 'runner infrastructure',
   },
-  { re: /\btimed? ?out\b/i, reason: 'timeout' },
+  // Failure phrasings only — never bare "timeout", which shows up in command
+  // flags like golangci-lint's `--timeout=5m` (misclassified a real compile
+  // error as transient once).
+  {
+    re: /\btimed out\b|\btimeout exceeded\b|exceeded the maximum execution time|deadline exceeded/i,
+    reason: 'timeout',
+  },
+];
+
+/**
+ * Signatures that prove the code itself is broken: compile/type errors, test
+ * assertion failures, lint findings. When any of these is present the failure
+ * is never classified transient, no matter what else the log mentions.
+ */
+const CODE_FAILURE_PATTERNS: RegExp[] = [
+  /--- FAIL:/, // go test
+  /\(typecheck\)|undeclared name|unknown field|cannot use .+ as|syntax error/i, // go compile / golangci-lint
+  /error TS\d+/, // tsc
+  /AssertionError|assertion failed/i,
+  /compilation (error|failed)/i,
 ];
 
 /**
  * Deterministic transient/infra classifier. Runs over the (already
- * error-focused) excerpt; the first matching signature wins. Code failures —
- * assertion failures, compile/type errors, lint — match nothing here and
- * proceed to full triage.
+ * error-focused) excerpt. Code-failure signatures take precedence: a log
+ * that proves the code is broken goes to full triage even if it also
+ * mentions a timeout or rate limit somewhere.
  */
 export function classifyTransient(excerpt: string): {
   transient: boolean;
   reason?: string;
 } {
+  for (const re of CODE_FAILURE_PATTERNS) {
+    if (re.test(excerpt)) return { transient: false };
+  }
   for (const { re, reason } of TRANSIENT_PATTERNS) {
     if (re.test(excerpt)) return { transient: true, reason };
   }
