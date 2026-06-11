@@ -12,6 +12,7 @@
 import type { Env } from './env.js';
 import { verifySlackSignature } from './signature.js';
 import { ackJson, handleSlashCommand, handleEvent } from './slack.js';
+import { handleEvalAsk } from './eval.js';
 import { processCreatePrJob } from './actions/createPr.js';
 import { processTriageJob } from './actions/ciTriage.js';
 import type { CreatePrJob } from './jobs/createPrQueue.js';
@@ -32,6 +33,12 @@ export default {
 
     if (request.method !== 'POST') {
       return ackJson({ ok: false, error: 'not found' }, 404);
+    }
+
+    // Eval harness endpoint (Bearer EVAL_TOKEN) — not a Slack request, so it
+    // is routed before Slack signature verification.
+    if (url.pathname === '/eval/ask') {
+      return handleEvalAsk(env, request);
     }
 
     const rawBody = await request.text();

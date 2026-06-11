@@ -1,0 +1,52 @@
+name: Eval
+
+# Runs the eval harness (packages/eval) against a deployed slack-bot worker.
+# Manual for now: run after deploys or retrieval changes to measure answer
+# quality. Requires the EVAL_ENDPOINT and EVAL_TOKEN repo secrets (the worker's
+# base URL and its EVAL_TOKEN secret).
+
+on:
+  workflow_dispatch:
+    inputs:
+      agentic:
+        description: Use agentic retrieval
+        type: boolean
+        default: true
+      fail_under:
+        description: Fail if composite mean is below this score (0 disables)
+        type: string
+        default: '0'
+
+jobs:
+  eval:
+    name: Run golden-set eval
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Validate golden dataset (offline)
+        run: npm run validate --workspace packages/eval
+      - name: Run eval
+        run: >
+          npm run eval --workspace packages/eval --
+          --agentic ${{ inputs.agentic }}
+          --fail-under ${{ inputs.fail_under }}
+        env:
+          EVAL_ENDPOINT: ${{ secrets.EVAL_ENDPOINT }}
+          EVAL_TOKEN: ${{ secrets.EVAL_TOKEN }}
+      # Always upload, even when --fail-under made the eval step exit non-zero,
+      # so the report is downloadable from the run's Artifacts section.
+      # if-no-files-found: warn avoids masking a real failure (e.g. a failed
+      # preflight) with a confusing "no artifact" error.
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-report-${{ github.run_number }}
+          path: packages/eval/results/
+          if-no-files-found: warn
+          retention-days: 30
