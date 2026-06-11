@@ -1,0 +1,166 @@
+[
+  {
+    "id": "slack-signature-verification",
+    "question": "Where are Slack request signatures verified, and how does the verification work?",
+    "expectedFiles": [{ "path": "workers/slack-bot/src/signature.ts" }],
+    "answerMust": ["hmac|sha-?256|signing secret", "timestamp"],
+    "notes": "Core security path; the answer should land on signature.ts."
+  },
+  {
+    "id": "hybrid-retrieval",
+    "question": "How does the retrieval pipeline combine lexical and vector search results before answering?",
+    "expectedFiles": [
+      { "path": "workers/slack-bot/src/retrieval/pipeline.ts" },
+      { "path": "workers/slack-bot/src/retrieval/rerank.ts" }
+    ],
+    "answerMust": ["rerank|merge|combin"]
+  },
+  {
+    "id": "context-packing-budget",
+    "question": "What limits how much retrieved code is packed into the LLM prompt for Q&A?",
+    "expectedFiles": [{ "path": "workers/slack-bot/src/retrieval/pack.ts" }],
+    "answerMust": ["budget", "character|char"]
+  },
+  {
+    "id": "agentic-planner-stop",
+    "question": "How does the agentic retrieval planner decide when to stop gathering more evidence?",
+    "expectedFiles": [{ "path": "workers/slack-bot/src/retrieval/agent.ts" }],
+    "answerMust": ["done|budget|turn"]
+  },
+  {
+    "id": "ci-failure-triage",
+    "question": "What happens when a GitHub Actions workflow run fails on an indexed repository?",
+    "expectedFiles": [
+      { "path": "workers/github-webhook/src/webhook.ts" },
+      { "path": "workers/slack-bot/src/actions/ciTriage.ts" }
+    ],
+    "answerMust": ["triage", "queue"]
+  },
+  {
+    "id": "markdown-chunking",
+    "question": "How does the indexer chunk markdown files?",
+    "expectedFiles": [
+      { "path": "services/indexer/src/chunking/markdownChunker.ts" }
+    ],
+    "answerMust": ["heading"]
+  },
+  {
+    "id": "incremental-indexing",
+    "question": "On a push to the default branch, how does the system decide which files to re-index?",
+    "expectedFiles": [
+      { "path": "workers/github-webhook/src/webhook.ts" },
+      { "path": "workers/github-webhook/src/jobs.ts" }
+    ],
+    "answerMust": ["changed|added|modified", "removed|deleted"]
+  },
+  {
+    "id": "secret-redaction",
+    "question": "How does the indexer prevent secrets like API keys from being embedded or sent to the LLM?",
+    "expectedFiles": [{ "path": "packages/shared/src/utils/secrets.ts" }],
+    "answerMust": ["redact", "regex|pattern|key|token"]
+  },
+  {
+    "id": "file-filtering",
+    "question": "How does the indexer decide which files in a repository to skip and not index?",
+    "expectedFiles": [{ "path": "packages/shared/src/utils/fileFilter.ts" }],
+    "answerMust": ["ignor|skip", "directory|extension|minified|binary|size"]
+  },
+  {
+    "id": "query-understanding",
+    "question": "How are candidate symbols and keywords extracted from a user's question before search?",
+    "expectedFiles": [
+      { "path": "workers/slack-bot/src/retrieval/queryUnderstanding.ts" }
+    ],
+    "answerMust": ["symbol|camelcase|snake_case", "stopword|term"]
+  },
+  {
+    "id": "lexical-bm25-weights",
+    "question": "How does lexical search rank results, and how are symbol, path, and content matches weighted?",
+    "expectedFiles": [{ "path": "workers/slack-bot/src/retrieval/lexical.ts" }],
+    "answerMust": ["bm25", "fts|full.?text"]
+  },
+  {
+    "id": "vector-search-embedding",
+    "question": "How is a question turned into a vector and matched against the code index?",
+    "expectedFiles": [{ "path": "workers/slack-bot/src/retrieval/vector.ts" }],
+    "answerMust": ["embed", "vectorize|topk|query"]
+  },
+  {
+    "id": "graph-expansion-edges",
+    "question": "How does retrieval pull in the definitions of functions that the seed code calls?",
+    "expectedFiles": [{ "path": "workers/slack-bot/src/retrieval/graph.ts" }],
+    "answerMust": ["calls|edge", "code_edges|symbol|hop"]
+  },
+  {
+    "id": "repo-allowlist-auth",
+    "question": "How does the bot restrict which repositories a query is allowed to search?",
+    "expectedFiles": [{ "path": "workers/slack-bot/src/allowlist.ts" }],
+    "answerMust": ["allowlist", "enabled|repo_id|table"]
+  },
+  {
+    "id": "thread-history-followups",
+    "question": "How does the bot keep context from earlier messages so follow-up questions make sense?",
+    "expectedFiles": [{ "path": "workers/slack-bot/src/history.ts" }],
+    "answerMust": ["thread|history|replies", "follow.?up|previous|context"]
+  },
+  {
+    "id": "pr-review-flow",
+    "question": "When reviewing a pull request, where does the bot get the diff and surrounding context from?",
+    "expectedFiles": [{ "path": "workers/slack-bot/src/actions/prReview.ts" }],
+    "answerMust": ["diff", "github|indexed|context"]
+  },
+  {
+    "id": "emoji-reaction-triggers",
+    "question": "Which emoji reactions trigger the bot, and what does each one do?",
+    "expectedFiles": [{ "path": "workers/slack-bot/src/reactions.ts" }],
+    "answerMust": ["reaction|emoji", "review|pr|answer"]
+  },
+  {
+    "id": "embedding-text-metadata",
+    "question": "What metadata gets prepended to a code chunk before it is embedded, and why?",
+    "expectedFiles": [
+      { "path": "packages/shared/src/utils/embeddingText.ts" }
+    ],
+    "answerMust": ["repo|path|symbol", "embed|retrieval"]
+  },
+  {
+    "id": "code-chunking-treesitter",
+    "question": "How does the indexer split source code into semantic chunks like functions and classes?",
+    "expectedFiles": [
+      { "path": "services/indexer/src/chunking/codeChunker.ts" }
+    ],
+    "answerMust": ["tree.?sitter", "function|class|symbol"]
+  },
+  {
+    "id": "prompt-injection-defense",
+    "question": "How does the answer model avoid following malicious instructions hidden in indexed code?",
+    "expectedFiles": [{ "path": "workers/slack-bot/src/llm.ts" }],
+    "answerMust": ["untrusted|data|inject", "instruction|context"]
+  },
+  {
+    "id": "intent-routing",
+    "question": "How does the bot decide whether a message is a question, a PR review, or a create-PR request?",
+    "expectedFiles": [{ "path": "workers/slack-bot/src/intent.ts" }],
+    "answerMust": ["intent", "review|pull request|index"]
+  },
+  {
+    "id": "negative-k8s-certs",
+    "question": "How do we rotate the Kubernetes ingress TLS certificates in production?",
+    "expectNoAnswer": true,
+    "answerMustNot": ["kubectl|cert-manager"],
+    "notes": "Nothing in the index covers this; a correct answer abstains and invents nothing."
+  },
+  {
+    "id": "negative-hr-policy",
+    "question": "What is the company's paid time off and parental leave policy?",
+    "expectNoAnswer": true,
+    "notes": "HR policy is not code; the bot must not fabricate a policy."
+  },
+  {
+    "id": "negative-unrelated-tech",
+    "question": "How is our Stripe billing webhook signature validated for subscription renewals?",
+    "expectNoAnswer": true,
+    "answerMustNot": ["stripe"],
+    "notes": "Beacon validates GitHub/Slack signatures, not Stripe; abstaining is correct."
+  }
+]

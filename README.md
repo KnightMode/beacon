@@ -172,9 +172,11 @@ access control.
 Foundations are in place; these are the highest-leverage next steps, roughly
 in order:
 
-1. **Eval harness** — a golden set of real questions with expected citations,
-   scored in CI (citation precision/recall + LLM-judge). Every retrieval
-   change becomes measurable instead of vibes.
+1. **Eval harness** — ✅ shipped (`packages/eval`): a 24-case golden set with
+   expected citations scored against the deployed worker via `POST /eval/ask`
+   (citation P/R/F1 + groundedness + regex checks; offline dataset validation +
+   preflight; manual `Eval` workflow in CI). Next: grow the golden set from
+   real usage and add an LLM-judge.
 2. **Feedback loop** — capture :+1:/:-1: on answers into D1 to grow the eval
    set from real usage and surface bad-answer patterns.
 3. **Cross-encoder reranking** — a real reranker over the top ~50 candidates
@@ -201,6 +203,9 @@ in order:
 npm run typecheck      # all workspaces
 npm test               # vitest: signatures, chunking, filters, retrieval, intents
 npm run dry-run        # wrangler deploy --dry-run for both workers
+
+# Answer-quality eval against the deployed worker (see packages/eval/README.md)
+EVAL_ENDPOINT=https://... EVAL_TOKEN=... npm run eval --workspace packages/eval
 ```
 
 MIT licensed.
