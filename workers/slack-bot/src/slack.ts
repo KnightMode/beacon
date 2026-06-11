@@ -13,8 +13,10 @@ import {
   detectIntent,
   stripCreatePrPrefix,
   parseIndexRepoTarget,
+  parseNotifyTarget,
 } from './intent.js';
 import { indexRepoAction, indexStatusAction } from './actions/indexRepo.js';
+import { setNotifyChannel } from './notifyChannels.js';
 import { call } from './stream.js';
 import { enqueueAnswer } from './jobs/answerQueue.js';
 import { reviewToResponseUrl, streamPrReview } from './actions/prReview.js';
@@ -66,6 +68,15 @@ export function handleSlashCommand(
     return ackJson({
       response_type: 'ephemeral',
       text: createPrSlashAck(),
+    });
+  }
+
+  if (intent === 'notify_repo') {
+    return ackJson({
+      response_type: 'ephemeral',
+      text:
+        'To register CI-failure notifications, @mention me in the channel ' +
+        'that should receive them: `@bot notify owner/repo here`.',
     });
   }
 
@@ -215,6 +226,24 @@ export function handleEvent(
               }).then(() => undefined),
             ),
           );
+        } else if (intent === 'notify_repo') {
+          const notify = parseNotifyTarget(question);
+          if (notify) {
+            ctx.waitUntil(
+              setNotifyChannel(
+                env,
+                notify.repo,
+                notify.channelId ?? event.channel,
+                event.user,
+              ).then((text) =>
+                call(env, 'chat.postMessage', {
+                  channel: event.channel,
+                  thread_ts: threadTs,
+                  text,
+                }).then(() => undefined),
+              ),
+            );
+          }
         } else {
           // Show the thinking status immediately from the event handler so
           // the queue hop doesn't delay the first visible feedback.

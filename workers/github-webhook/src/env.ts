@@ -1,9 +1,10 @@
-import type { IndexJob } from '@scintel/shared';
+import type { IndexJob, TriageJob } from '@scintel/shared';
 
 export interface Env {
   // Bindings
   DB: D1Database;
   INDEX_QUEUE: Queue<IndexJob>;
+  TRIAGE_QUEUE: Queue<TriageJob>;
   VECTORIZE: VectorizeIndex;
   AI: Ai;
 

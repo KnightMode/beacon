@@ -35,6 +35,11 @@ database_id = "27722a79-10d9-4bfc-aa53-1d65a80c8f79"
 binding = "INDEX_QUEUE"
 queue = "scintel-index-jobs"
 
+# CI-failure triage jobs; consumed by the slack-bot worker.
+[[queues.producers]]
+binding = "TRIAGE_QUEUE"
+queue = "scintel-triage-jobs"
+
 [[queues.consumers]]
 queue = "scintel-index-jobs"
 max_batch_size = 5

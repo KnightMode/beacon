@@ -11,8 +11,12 @@
 
 import { shouldIndexFile } from '@scintel/shared';
 import type { Env } from './env.js';
-import { upsertRepo, addToAllowlist, repoIdFor } from './db.js';
-import { enqueueFullIndex, enqueueIncrementalIndex } from './jobs.js';
+import { upsertRepo, addToAllowlist, isAllowlisted, repoIdFor } from './db.js';
+import {
+  enqueueFullIndex,
+  enqueueIncrementalIndex,
+  enqueueTriage,
+} from './jobs.js';
 
 interface GithubRepoLite {
   id?: number;
@@ -39,6 +43,20 @@ interface PushPayload {
   }>;
 }
 
+export interface WorkflowRunPayload {
+  action: string;
+  workflow_run: {
+    id: number;
+    run_attempt?: number;
+    conclusion: string | null;
+    name: string;
+    head_branch: string;
+    head_sha: string;
+    html_url: string;
+  };
+  repository: GithubRepoLite;
+}
+
 export async function handleWebhookEvent(
   env: Env,
   event: string,
@@ -52,6 +70,8 @@ export async function handleWebhookEvent(
       return handleInstallation(env, payload as InstallationPayload);
     case 'push':
       return handlePush(env, payload as PushPayload);
+    case 'workflow_run':
+      return handleWorkflowRun(env, payload as WorkflowRunPayload);
     default:
       return json({ ok: true, ignored: event });
   }
@@ -133,6 +153,49 @@ async function handlePush(env: Env, payload: PushPayload): Promise<Response> {
     repo: repo.full_name,
     changed: changed.size,
     removed: removed.size,
+  });
+}
+
+/**
+ * Pure filter for workflow_run events: returns a skip reason, or null when
+ * the run should be triaged. Failures on any branch qualify; the pipeline
+ * dispatch repo is excluded so the indexing workflow's own failures don't
+ * loop back through triage.
+ */
+export function workflowRunSkipReason(
+  payload: WorkflowRunPayload,
+  pipelineDispatchRepo: string | undefined,
+): string | null {
+  if (payload.action !== 'completed') return 'not-completed';
+  if (payload.workflow_run.conclusion !== 'failure') return 'not-failure';
+  if (
+    pipelineDispatchRepo &&
+    payload.repository.full_name.toLowerCase() ===
+      pipelineDispatchRepo.toLowerCase()
+  ) {
+    return 'pipeline-repo';
+  }
+  return null;
+}
+
+async function handleWorkflowRun(
+  env: Env,
+  payload: WorkflowRunPayload,
+): Promise<Response> {
+  const skip = workflowRunSkipReason(payload, env.PIPELINE_DISPATCH_REPO);
+  if (skip) return json({ ok: true, ignored: skip });
+
+  const fullName = payload.repository.full_name;
+  if (!(await isAllowlisted(env, repoIdFor(fullName)))) {
+    return json({ ok: true, ignored: 'not-allowlisted', repo: fullName });
+  }
+
+  await enqueueTriage(env, payload);
+  return json({
+    ok: true,
+    repo: fullName,
+    enqueued: true,
+    runId: payload.workflow_run.id,
   });
 }
 
