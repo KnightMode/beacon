@@ -20,6 +20,8 @@ export interface Env {
   // Secrets
   SLACK_SIGNING_SECRET: string;
   SLACK_BOT_TOKEN: string;
+  /** Enables POST /eval/ask for the eval harness; route is 404 when unset. */
+  EVAL_TOKEN?: string;
   /** Fine-grained PAT: Read for review; Write for create-PR (Contents + Pull requests). */
   GITHUB_PAT?: string;
 }
