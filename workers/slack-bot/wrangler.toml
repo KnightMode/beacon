@@ -3,6 +3,10 @@ main = "src/index.ts"
 compatibility_date = "2024-11-01"
 compatibility_flags = ["nodejs_compat"]
 
+# Run close to D1 / Vectorize backends (many sequential subrequests per request).
+[placement]
+mode = "smart"
+
 # ---- Vars (non-secret config) ----------------------------------------------
 [vars]
 EMBEDDING_MODEL = "@cf/google/embeddinggemma-300m"

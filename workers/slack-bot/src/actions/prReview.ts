@@ -10,7 +10,7 @@ import { retrieve } from '../retrieval/pipeline.js';
 import { generatePrReview, streamPrReviewTokens } from '../llm/review.js';
 import { buildPrReviewMessage, buildPrReviewStreamFooter } from '../format.js';
 import { call, type StreamTarget } from '../stream.js';
-import { fetchThreadHistory } from '../history.js';
+import { fetchThreadHistory, type Turn } from '../history.js';
 import type { AssistantMessage } from '../assistant.js';
 
 const MAX_FILES = 20;
@@ -60,17 +60,11 @@ export async function streamPrReview(env: Env, t: StreamTarget): Promise<void> {
     loading_messages: REVIEW_LOADING,
   }).catch(() => undefined);
 
-  const history = await fetchThreadHistory(
-    env,
-    t.channel,
-    t.threadTs,
-    t.messageTs,
-  ).catch(() => []);
-
   try {
-    const ctx = await buildPrContext(env, gh, ref);
+    const { ctx, history } = await buildPrContext(env, gh, ref, {
+      history: fetchThreadHistory(env, t.channel, t.threadTs, t.messageTs),
+    });
 
-    // chat.startStream requires recipient_team_id (reaction triggers used to omit it).
     if (!t.teamId) {
       const review = await generatePrReview(
         env,
@@ -89,59 +83,14 @@ export async function streamPrReview(env: Env, t: StreamTarget): Promise<void> {
       return;
     }
 
-    let ts: string | undefined;
-
-    const write = async (text: string): Promise<void> => {
-      if (!ts) {
-        const started = await call(env, 'chat.startStream', {
-          channel: t.channel,
-          thread_ts: t.threadTs,
-          recipient_user_id: t.userId,
-          recipient_team_id: t.teamId,
-          chunks: [{ type: 'markdown_text', text }],
-        });
-        if (!started.ok || !started.ts) {
-          throw new Error(`startStream: ${started.error ?? 'unknown'}`);
-        }
-        ts = started.ts;
-      } else {
-        await call(env, 'chat.appendStream', {
-          channel: t.channel,
-          ts,
-          chunks: [{ type: 'markdown_text', text }],
-        });
-      }
-    };
-
-    let buffer = '';
-    let streamedAny = false;
-    const flush = async (): Promise<void> => {
-      if (!buffer) return;
-      await write(buffer);
-      buffer = '';
-    };
-
-    for await (const token of streamPrReviewTokens(
-      env,
-      ctx.prSummary,
-      ctx.diffContext,
-      ctx.indexedContext,
-      history,
-    )) {
-      streamedAny = true;
-      buffer += token;
-      if (buffer.length >= FLUSH_CHARS) await flush();
-    }
-    await flush();
-
-    if (!streamedAny) {
-      await write("I couldn't generate a review from this pull request.");
-    }
-
-    await call(env, 'chat.stopStream', {
+    await streamPrReviewReply(env, {
       channel: t.channel,
-      ts,
-      blocks: buildPrReviewStreamFooter(ref.url),
+      threadTs: t.threadTs,
+      userId: t.userId,
+      teamId: t.teamId,
+      prUrl: ref.url,
+      ctx,
+      history,
     });
   } catch (err) {
     await postPlain(
@@ -153,7 +102,7 @@ export async function streamPrReview(env: Env, t: StreamTarget): Promise<void> {
   }
 }
 
-/** PR review for the assistant pane (shimmer → single post). */
+/** PR review for the assistant pane — streams when team/user ids are available. */
 export async function handleAssistantPrReview(
   env: Env,
   m: AssistantMessage,
@@ -185,15 +134,24 @@ export async function handleAssistantPrReview(
     loading_messages: REVIEW_LOADING,
   });
 
-  const history = await fetchThreadHistory(
-    env,
-    m.channelId,
-    m.threadTs,
-    m.messageTs,
-  ).catch(() => []);
-
   try {
-    const ctx = await buildPrContext(env, gh, ref);
+    const { ctx, history } = await buildPrContext(env, gh, ref, {
+      history: fetchThreadHistory(env, m.channelId, m.threadTs, m.messageTs),
+    });
+
+    if (m.teamId && m.userId) {
+      await streamPrReviewReply(env, {
+        channel: m.channelId,
+        threadTs: m.threadTs,
+        userId: m.userId,
+        teamId: m.teamId,
+        prUrl: ref.url,
+        ctx,
+        history,
+      });
+      return;
+    }
+
     const review = await generatePrReview(
       env,
       ctx.prSummary,
@@ -250,7 +208,7 @@ export async function reviewToResponseUrl(
   }
 
   try {
-    const ctx = await buildPrContext(env, gh, ref);
+    const { ctx } = await buildPrContext(env, gh, ref);
     const review = await generatePrReview(
       env,
       ctx.prSummary,
@@ -281,14 +239,30 @@ interface PrContextBundle {
   indexedContext: string;
 }
 
+interface BuildPrContextResult {
+  ctx: PrContextBundle;
+  history: Turn[];
+}
+
 async function buildPrContext(
   env: Env,
   gh: GitHubClient,
   ref: { owner: string; repo: string; number: number; url: string },
-): Promise<PrContextBundle> {
-  const [pr, files] = await Promise.all([
+  options?: { history?: Promise<Turn[]> },
+): Promise<BuildPrContextResult> {
+  const historyP = options?.history?.catch(() => []) ?? Promise.resolve([]);
+  const ghDataP = Promise.all([
     gh.getPullRequest(ref.owner, ref.repo, ref.number),
     gh.listPullRequestFiles(ref.owner, ref.repo, ref.number),
+  ]);
+  const indexedP = ghDataP.then(([pr, files]) =>
+    fetchIndexedContext(env, ref, pr, files),
+  );
+
+  const [[pr, files], history, indexedContext] = await Promise.all([
+    ghDataP,
+    historyP,
+    indexedP,
   ]);
 
   const prSummary = [
@@ -303,9 +277,104 @@ async function buildPrContext(
     .join('\n');
 
   const diffContext = formatDiff(files);
-  const indexedContext = await fetchIndexedContext(env, ref, pr, files);
 
-  return { prSummary, diffContext, indexedContext };
+  return {
+    ctx: { prSummary, diffContext, indexedContext },
+    history,
+  };
+}
+
+interface StreamPrReviewReplyTarget {
+  channel: string;
+  threadTs: string;
+  userId?: string;
+  teamId: string;
+  prUrl: string;
+  ctx: PrContextBundle;
+  history: Turn[];
+}
+
+async function streamPrReviewReply(
+  env: Env,
+  t: StreamPrReviewReplyTarget,
+): Promise<void> {
+  let ts: string | undefined;
+
+  const write = async (text: string): Promise<void> => {
+    if (!ts) {
+      const started = await call(env, 'chat.startStream', {
+        channel: t.channel,
+        thread_ts: t.threadTs,
+        recipient_user_id: t.userId,
+        recipient_team_id: t.teamId,
+        chunks: [{ type: 'markdown_text', text }],
+      });
+      if (!started.ok || !started.ts) {
+        throw new Error(`startStream: ${started.error ?? 'unknown'}`);
+      }
+      ts = started.ts;
+    } else {
+      await call(env, 'chat.appendStream', {
+        channel: t.channel,
+        ts,
+        chunks: [{ type: 'markdown_text', text }],
+      });
+    }
+  };
+
+  let buffer = '';
+  let streamedAny = false;
+  const flush = async (): Promise<void> => {
+    if (!buffer) return;
+    await write(buffer);
+    buffer = '';
+  };
+
+  try {
+    for await (const token of streamPrReviewTokens(
+      env,
+      t.ctx.prSummary,
+      t.ctx.diffContext,
+      t.ctx.indexedContext,
+      t.history,
+    )) {
+      streamedAny = true;
+      buffer += token;
+      if (buffer.length >= FLUSH_CHARS) await flush();
+    }
+    await flush();
+
+    if (!streamedAny) {
+      await write("I couldn't generate a review from this pull request.");
+    }
+
+    await call(env, 'chat.stopStream', {
+      channel: t.channel,
+      ts,
+      blocks: buildPrReviewStreamFooter(t.prUrl),
+    });
+  } catch (err) {
+    // Stream never opened (e.g. startStream unavailable in this surface) —
+    // fall back to a single non-streaming post so the user still gets a review.
+    if (ts) throw err;
+    console.warn('pr review stream failed before start; falling back', {
+      error: (err as Error).message,
+    });
+    const review = await generatePrReview(
+      env,
+      t.ctx.prSummary,
+      t.ctx.diffContext,
+      t.ctx.indexedContext,
+      t.history,
+    );
+    const message = buildPrReviewMessage(t.prUrl, review);
+    await call(env, 'chat.postMessage', {
+      channel: t.channel,
+      thread_ts: t.threadTs,
+      text: message.text,
+      blocks: message.blocks,
+    });
+  }
 }
 
 function formatDiff(files: import('../github.js').PullRequestFile[]): string {

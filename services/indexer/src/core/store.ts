@@ -184,6 +184,28 @@ export async function getFileContentHash(
   return rows[0]?.content_hash ?? null;
 }
 
+/** Batch lookup of stored content hashes (one query per batch). */
+export async function getFileContentHashes(
+  d1: D1Client,
+  fileIds: string[],
+): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  const BATCH = 200;
+  for (let i = 0; i < fileIds.length; i += BATCH) {
+    const batch = fileIds.slice(i, i + BATCH);
+    if (batch.length === 0) continue;
+    const placeholders = batch.map(() => '?').join(',');
+    const rows = await d1.query<{ id: string; content_hash: string | null }>(
+      `SELECT id, content_hash FROM files WHERE id IN (${placeholders})`,
+      batch,
+    );
+    for (const row of rows) {
+      if (row.content_hash) out.set(row.id, row.content_hash);
+    }
+  }
+  return out;
+}
+
 export async function deleteChunksByIds(
   d1: D1Client,
   ids: string[],

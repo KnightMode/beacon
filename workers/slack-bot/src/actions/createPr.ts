@@ -104,14 +104,14 @@ async function runCreatePr(env: Env, target: CreatePrTarget): Promise<void> {
 
     log('start');
 
-    const history = await fetchThreadHistory(
-    env,
-    target.channel,
-    target.threadTs,
-    target.messageTs,
+    const historyPromise = fetchThreadHistory(
+      env,
+      target.channel,
+      target.threadTs,
+      target.messageTs,
     ).catch(() => []);
-
-    const threadIssue = await buildIssueFromThread(env, target.channel, target.threadTs);
+    const threadIssuePromise = buildIssueFromThread(env, target.channel, target.threadTs);
+    const [history, threadIssue] = await Promise.all([historyPromise, threadIssuePromise]);
     const issue = target.issueHint?.trim() || threadIssue;
     if (!issue) {
       await postPlain(
@@ -136,25 +136,32 @@ async function runCreatePr(env: Env, target: CreatePrTarget): Promise<void> {
 
     log('repo-resolved', { repo: repo.fullName });
 
-    const indexedContext = await fetchIndexedContext(env, issue, repo.fullName);
+    const indexedContextPromise = fetchIndexedContext(env, issue, repo.fullName);
+    const branchPromise = gh.getDefaultBranchSha(repo.owner, repo.repo);
+    const [{ defaultBranch }, indexedContext] = await Promise.all([
+      branchPromise,
+      indexedContextPromise,
+    ]);
     log('context-ready', { contextChars: indexedContext.length });
 
-    const { defaultBranch } = await gh.getDefaultBranchSha(repo.owner, repo.repo);
     const targetPaths = guessTargetPaths(issue, indexedContext, repo.fullName);
-    const fileSnippets: Array<{ path: string; content: string }> = [];
     const pathsToLoad = new Set(targetPaths);
     if (/\b(docs?|eli5|explain|readme)\b/i.test(issue)) {
       pathsToLoad.add('README.md');
     }
-    for (const path of pathsToLoad) {
-      const content = await gh.getFileContent(
-        repo.owner,
-        repo.repo,
-        path,
-        defaultBranch,
-      );
-      if (content) fileSnippets.push({ path, content });
-    }
+    const fileSnippets = (
+      await Promise.all(
+        [...pathsToLoad].map(async (path) => {
+          const content = await gh.getFileContent(
+            repo.owner,
+            repo.repo,
+            path,
+            defaultBranch,
+          );
+          return content ? { path, content } : null;
+        }),
+      )
+    ).filter((f): f is { path: string; content: string } => f !== null);
     log('files-loaded', { paths: fileSnippets.map((f) => f.path), repo: repo.fullName });
 
     const proposal = await generatePrProposal(

@@ -110,21 +110,31 @@ async function buildMessage(
 
   const failedSteps: string[] = [];
   const excerpts: string[] = [];
-  for (const fj of failedJobs.slice(0, MAX_FAILED_JOBS)) {
-    const steps = fj.steps
-      .filter((s) => s.conclusion === 'failure')
-      .map((s) => `${fj.name} › ${s.name}`);
-    failedSteps.push(...(steps.length > 0 ? steps : [fj.name]));
-    try {
-      const log = await gh.getJobLogs(owner, repo, fj.id);
-      excerpts.push(extractErrorExcerpt(log, EXCERPT_BUDGET));
-    } catch (err) {
-      console.warn('ci triage: job log fetch failed', {
-        repo: job.repoFullName,
-        jobId: fj.id,
-        error: (err as Error).message,
-      });
-    }
+  const jobsToFetch = failedJobs.slice(0, MAX_FAILED_JOBS);
+  const logResults = await Promise.all(
+    jobsToFetch.map(async (fj) => {
+      const steps = fj.steps
+        .filter((s) => s.conclusion === 'failure')
+        .map((s) => `${fj.name} › ${s.name}`);
+      try {
+        const log = await gh.getJobLogs(owner, repo, fj.id);
+        return {
+          steps: steps.length > 0 ? steps : [fj.name],
+          excerpt: extractErrorExcerpt(log, EXCERPT_BUDGET),
+        };
+      } catch (err) {
+        console.warn('ci triage: job log fetch failed', {
+          repo: job.repoFullName,
+          jobId: fj.id,
+          error: (err as Error).message,
+        });
+        return { steps: steps.length > 0 ? steps : [fj.name], excerpt: '' };
+      }
+    }),
+  );
+  for (const result of logResults) {
+    failedSteps.push(...result.steps);
+    if (result.excerpt) excerpts.push(result.excerpt);
   }
 
   let excerpt = excerpts.join('\n…\n');
@@ -146,17 +156,6 @@ async function buildMessage(
     return buildTransientMessage(job, transient.reason ?? 'infrastructure');
   }
 
-  let commitDiff = '';
-  try {
-    commitDiff = formatCommitDiff(await gh.getCommitDiff(owner, repo, job.headSha));
-  } catch (err) {
-    console.warn('ci triage: commit diff fetch failed', {
-      repo: job.repoFullName,
-      sha: job.headSha,
-      error: (err as Error).message,
-    });
-  }
-
   const errLine =
     topErrorLine(excerpt) ??
     excerpt.split('\n').find((l) => l.trim()) ??
@@ -166,18 +165,36 @@ async function buildMessage(
     `(workflow ${job.workflowName}${failedSteps[0] ? `, step ${failedSteps[0]}` : ''})`;
   const searchText = [question, ...harvestPaths(excerpt)].join(' ');
 
-  let indexedContext = '';
-  let citations: Citation[] = [];
-  try {
-    const outcome = await retrieveSmart(env, question, searchText);
-    indexedContext = outcome.packed.contextText;
-    citations = outcome.packed.citations;
-  } catch (err) {
-    console.warn('ci triage: retrieval failed; triaging from logs only', {
-      repo: job.repoFullName,
-      error: (err as Error).message,
+  const commitDiffPromise = gh
+    .getCommitDiff(owner, repo, job.headSha)
+    .then((diff) => formatCommitDiff(diff))
+    .catch((err) => {
+      console.warn('ci triage: commit diff fetch failed', {
+        repo: job.repoFullName,
+        sha: job.headSha,
+        error: (err as Error).message,
+      });
+      return '';
     });
-  }
+
+  const retrievalPromise = retrieveSmart(env, question, searchText)
+    .then((outcome) => ({
+      indexedContext: outcome.packed.contextText,
+      citations: outcome.packed.citations,
+    }))
+    .catch((err) => {
+      console.warn('ci triage: retrieval failed; triaging from logs only', {
+        repo: job.repoFullName,
+        error: (err as Error).message,
+      });
+      return { indexedContext: '', citations: [] as Citation[] };
+    });
+
+  const [commitDiff, retrieval] = await Promise.all([
+    commitDiffPromise,
+    retrievalPromise,
+  ]);
+  const { indexedContext, citations } = retrieval;
 
   const analysis = await generateTriage(env, {
     repoFullName: job.repoFullName,
