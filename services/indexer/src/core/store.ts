@@ -190,7 +190,8 @@ export async function getFileContentHashes(
   fileIds: string[],
 ): Promise<Map<string, string>> {
   const out = new Map<string, string>();
-  const BATCH = 200;
+  // D1 caps bound parameters at 100 per query (error 7500 above that).
+  const BATCH = 100;
   for (let i = 0; i < fileIds.length; i += BATCH) {
     const batch = fileIds.slice(i, i + BATCH);
     if (batch.length === 0) continue;
