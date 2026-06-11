@@ -13,7 +13,9 @@ import type { Env } from './env.js';
 import { verifySlackSignature } from './signature.js';
 import { ackJson, handleSlashCommand, handleEvent } from './slack.js';
 import { processCreatePrJob } from './actions/createPr.js';
+import { processTriageJob } from './actions/ciTriage.js';
 import type { CreatePrJob } from './jobs/createPrQueue.js';
+import type { TriageJob } from '@scintel/shared';
 import { processAnswerJob, type AnswerJob } from './jobs/answerQueue.js';
 
 export default {
@@ -69,6 +71,24 @@ export default {
         } catch (err) {
           console.error('answer queue job failed', {
             error: (err as Error).message,
+          });
+          message.retry();
+        }
+      }
+      return;
+    }
+
+    if (batch.queue === 'scintel-triage-jobs') {
+      for (const message of batch.messages) {
+        const job = message.body as TriageJob;
+        try {
+          await processTriageJob(env, job);
+          message.ack();
+        } catch (err) {
+          console.error('triage queue job failed', {
+            error: (err as Error).message,
+            repo: job.repoFullName,
+            runId: job.runId,
           });
           message.retry();
         }

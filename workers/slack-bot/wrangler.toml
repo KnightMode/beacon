@@ -58,3 +58,11 @@ max_batch_size = 1
 max_batch_timeout = 1
 max_retries = 1
 dead_letter_queue = "scintel-answer-jobs-dlq"
+
+# CI-failure triage jobs, produced by the github-webhook worker.
+[[queues.consumers]]
+queue = "scintel-triage-jobs"
+max_batch_size = 1
+max_batch_timeout = 5
+max_retries = 2
+dead_letter_queue = "scintel-triage-jobs-dlq"

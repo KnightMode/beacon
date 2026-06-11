@@ -154,6 +154,6 @@ export function buildPrReviewStreamFooter(prUrl: string): SlackBlock[] {
   ];
 }
 
-function truncate(s: string, max: number): string {
+export function truncate(s: string, max: number): string {
   return s.length <= max ? s : `${s.slice(0, max - 1)}…`;
 }

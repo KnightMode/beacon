@@ -45,6 +45,27 @@ export interface IncrementalIndexJob extends BaseIndexJob {
 
 export type IndexJob = FullIndexJob | IncrementalIndexJob;
 
+/**
+ * CI-failure triage job, produced by the github-webhook worker when a
+ * workflow_run completes with conclusion=failure on an allowlisted repo,
+ * consumed by the slack-bot worker. Deliberately NOT part of the IndexJob
+ * union: it travels on its own queue (`scintel-triage-jobs`).
+ */
+export interface TriageJob {
+  jobType: 'CI_TRIAGE';
+  repoId: string;
+  repoFullName: string;
+  /** workflow_run.id — stable across re-runs of the same workflow run. */
+  runId: number;
+  /** workflow_run.run_attempt — increments on re-run; dedupe key with runId. */
+  runAttempt: number;
+  workflowName: string;
+  headBranch: string;
+  headSha: string;
+  runHtmlUrl: string;
+  enqueuedAt: string;
+}
+
 // ---------------------------------------------------------------------------
 // Chunk / edge domain types (produced by the indexer)
 // ---------------------------------------------------------------------------

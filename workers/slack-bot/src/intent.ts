@@ -14,7 +14,8 @@ export type UserIntent =
   | 'pr_review'
   | 'create_pr'
   | 'index_repo'
-  | 'index_status';
+  | 'index_status'
+  | 'notify_repo';
 
 const PR_URL =
   /https?:\/\/github\.com\/([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+)\/pull\/(\d+)/i;
@@ -58,6 +59,24 @@ export function parseIndexRepoTarget(text: string): string | null {
   return m ? m[1]! : null;
 }
 
+// "notify owner/repo here" or "notify owner/repo #channel" (Slack delivers
+// channel mentions as <#C0123ABC|name>).
+const NOTIFY_REPO =
+  /^\s*notify\s+([A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+)\s+(?:in\s+)?(?:(here)|<#([A-Z0-9]+)(?:\|[^>]*)?>)\s*$/i;
+
+export interface NotifyTarget {
+  repo: string;
+  /** Slack channel id, or null for "here" (the channel of the message). */
+  channelId: string | null;
+}
+
+/** Extract the target of a "notify <repo> here|#channel" request, if any. */
+export function parseNotifyTarget(text: string): NotifyTarget | null {
+  const m = text.match(NOTIFY_REPO);
+  if (!m) return null;
+  return { repo: m[1]!, channelId: m[3] ?? null };
+}
+
 const REVIEW_VERB = /\b(review|check|audit|look\s+at)\b/i;
 const CREATE_PR_VERB =
   /\b(create|open|raise|make)\s+(a\s+)?(pr|pull\s+request)\b/i;
@@ -69,6 +88,7 @@ export function stripCreatePrPrefix(text: string): string {
 }
 
 export function detectIntent(text: string): UserIntent {
+  if (NOTIFY_REPO.test(text)) return 'notify_repo';
   if (INDEX_STATUS.test(text)) return 'index_status';
   if (INDEX_REPO.test(text)) return 'index_repo';
 
