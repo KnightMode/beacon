@@ -1,3 +1,4 @@
+
 <p align="center">
   <img src="docs/assets/beacon-logo.png" alt="Beacon — codebase intelligence" width="320">
 </p>
@@ -9,13 +10,7 @@ code and cited down to the file and line.**
 
 ## Demo
 
-<p align="center">
-  <img src="docs/assets/beacon-demo.gif" alt="Beacon demo — grounded Q&A, PR creation, PR review, and self-serve indexing, all from Slack" width="900">
-</p>
-
-🎬 **[Watch the full 2-minute demo](docs/assets/beacon-demo.mp4)** — grounded
-Q&A with citations, PR creation from a thread, PR review, and self-serve
-indexing, all without leaving Slack.
+https://github.com/user-attachments/assets/011c8d06-e78d-4856-93fd-5f3bab9542a6
 
 ```
 you   ▸ @bot why does the create-PR flow go through a queue instead of waitUntil?
