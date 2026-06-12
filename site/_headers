@@ -1,0 +1,15 @@
+# Cloudflare Pages headers
+# HTML must always revalidate so visitors pick up new releases immediately;
+# versioned assets (?v=N) are safe to cache.
+
+/
+  Cache-Control: no-cache
+
+/index.html
+  Cache-Control: no-cache
+
+/*.js
+  Cache-Control: public, max-age=3600, must-revalidate
+
+/*.css
+  Cache-Control: public, max-age=3600, must-revalidate
