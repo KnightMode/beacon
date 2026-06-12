@@ -29,7 +29,7 @@
       },
       planner: ["planner ▸ evidence sufficient — no follow-up tools needed"],
       answer:
-        "In verifySlackSignature (workers/slack-bot/src/signature.ts) [1]. It recomputes the HMAC-SHA256 of v0:{timestamp}:{rawBody} with SLACK_SIGNING_SECRET, compares against X-Slack-Signature, and rejects requests outside the allowed timestamp skew — replay protection. Every entry route calls it before any work [2].",
+        "In verifySlackSignature [1]: it recomputes the HMAC-SHA256 of v0:{timestamp}:{rawBody} and rejects stale timestamps (replay protection). Every entry route calls it first [2].",
       cites: ["workers/slack-bot/src/signature.ts:21-44", "workers/slack-bot/src/index.ts:58-71"],
     },
     {
@@ -52,7 +52,7 @@
         "planner ▸ +1 chunk · extractFailureExcerpt",
       ],
       answer:
-        "The webhook worker catches failed workflow_run events on indexed repos and enqueues a triage job [1]. The slack-bot consumer dedupes per run + attempt, pulls the failed jobs' logs [2], grounds a diagnosis in the log excerpt plus the head commit's diff, and posts it — cited — to the repo's mapped channel [3]. Transient signatures (timeouts, OOM, runner death) short-circuit to a re-run note before any LLM call.",
+        "The webhook worker enqueues a triage job on workflow_run failure [1]. The consumer pulls the failed logs [2] and posts a cited diagnosis to the mapped channel [3]. Transient flakes (timeouts, OOM) get a re-run note instead.",
       cites: [
         "workers/github-webhook/src/webhook.ts:104-141",
         "workers/slack-bot/src/ci/logExcerpt.ts:12-58",
@@ -75,7 +75,7 @@
       },
       planner: ["planner ▸ verifying prompt boundary → search('untrusted')", "planner ▸ confirmed · instruction-injection guard"],
       answer:
-        "Retrieved code is wrapped as untrusted data: the system prompt instructs the model to treat fenced chunks strictly as evidence, never as instructions [1]. Context packing keeps chunks delimited and budgeted [2], and every [n] marker in the answer must map back to a packed chunk — anything else is dropped.",
+        "Retrieved code is wrapped as untrusted data — evidence, never instructions [1]. Chunks stay delimited and budgeted [2], and every [n] marker must map to a packed chunk.",
       cites: ["workers/slack-bot/src/answer.ts:33-61", "workers/slack-bot/src/retrieval/pack.ts:18-52"],
     },
   ];
