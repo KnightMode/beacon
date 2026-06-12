@@ -31,14 +31,19 @@ const sha = (process.env.PAYLOAD_SHA || process.env.INPUT_SHA || '').trim();
 
 function fileList(payloadJson, inputText) {
   let files = [];
-  if (payloadJson && payloadJson.trim() !== '') {
+  // repository_dispatch path: a JSON array. For workflow_dispatch this field is
+  // toJSON(undefined|null) === "null" (a non-empty string), so treat "null"/""
+  // /non-arrays as absent and fall back to the workflow_dispatch input text.
+  const pj = (payloadJson || '').trim();
+  if (pj !== '' && pj !== 'null') {
     try {
-      const parsed = JSON.parse(payloadJson);
+      const parsed = JSON.parse(pj);
       if (Array.isArray(parsed)) files = parsed;
     } catch {
       files = [];
     }
-  } else if (inputText && inputText.trim() !== '') {
+  }
+  if (files.length === 0 && inputText && inputText.trim() !== '') {
     files = inputText.split(/\s+/);
   }
   return files
