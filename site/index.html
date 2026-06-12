@@ -4,10 +4,10 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Beacon — the agentic dev loop, in Slack</title>
-  <meta name="description" content="Beacon runs your development loop in Slack: cited answers, PR reviews, fix PRs, CI triage — grounded in your actual code. Zero servers to operate." />
+  <meta name="description" content="Beacon runs your development loop in Slack: ask, retrieve, answer, review, fix, ship — and CI failures loop back as cited diagnoses. Grounded in your actual code." />
 
   <meta property="og:title" content="Beacon — the agentic dev loop, in Slack" />
-  <meta property="og:description" content="Ask, review, fix, ship — without leaving the thread. Every action grounded in your code and cited to the line." />
+  <meta property="og:description" content="Ask, retrieve, answer, review, fix, ship — one agent runs the whole loop in the thread, grounded in your code and cited to the line." />
   <meta property="og:type" content="website" />
   <meta property="og:image" content="assets/beacon-logo.png" />
 
@@ -17,7 +17,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,400&family=Hanken+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
 
-  <link rel="stylesheet" href="styles.css?v=4" />
+  <link rel="stylesheet" href="styles.css?v=5" />
 </head>
 <body>
   <a class="skip-link" href="#main">Skip to content</a>
@@ -29,10 +29,9 @@
       <span>Beacon</span>
     </a>
     <nav class="nav__links" aria-label="Primary">
-      <a href="#problem">Why</a>
-      <a href="#think">Watch it think</a>
-      <a href="#features">Features</a>
-      <a href="#how">How it works</a>
+      <a href="#loop">The loop</a>
+      <a href="#why">Why Beacon</a>
+      <a href="#how">Internals</a>
       <a href="https://github.com/KnightMode/beacon/tree/main/docs">Docs</a>
     </nav>
     <a class="btn btn--ghost nav__cta" href="https://github.com/KnightMode/beacon">
@@ -60,16 +59,16 @@
             Ship from<br /><em>Slack.</em>
           </h1>
           <p class="hero__lede reveal">
-            Cited answers, PR reviews, fix PRs, CI triage — Beacon runs your
-            dev loop in the thread, grounded in
-            <span class="ink">your actual code</span>.
+            One agent runs the whole loop in the thread — ask, retrieve, answer,
+            review, fix, ship — grounded in
+            <span class="ink">your actual code</span>, cited to the line.
           </p>
           <div class="hero__actions reveal">
             <a class="btn btn--solid" href="https://github.com/KnightMode/beacon">
               Get Beacon
               <svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 10h10M11 6l4 4-4 4" stroke-linecap="round" stroke-linejoin="round"/></svg>
             </a>
-            <a class="btn btn--quiet" href="#how">See how it works</a>
+            <a class="btn btn--quiet" href="#loop">Trace the loop</a>
           </div>
         </div>
 
@@ -105,29 +104,147 @@
         </figure>
       </div>
 
-      <div class="hero__ticker reveal" aria-hidden="true">
-        <span>Ask → cited answer</span><i>·</i>
-        <span>Review → PR feedback</span><i>·</i>
-        <span>🚀 → fix PR</span><i>·</i>
-        <span>CI fails → diagnosis</span><i>·</i>
-        <span>Zero servers</span>
+      <a class="hero__loopstrip reveal" href="#loop" aria-label="Trace the loop">
+        <span>ask</span><i>→</i>
+        <span>retrieve</span><i>→</i>
+        <span>answer</span><i>→</i>
+        <span>review</span><i>→</i>
+        <span>fix &amp; ship</span>
+        <em aria-hidden="true">↺</em>
+      </a>
+    </section>
+
+    <!-- ============ THE LOOP (centerpiece) ============ -->
+    <section class="loop" id="loop">
+      <header class="loop__head">
+        <p class="section-eyebrow reveal">It's not a feature list. It's a loop.</p>
+        <h2 class="reveal">A question becomes a PR.<br />A red build becomes the <em>next question</em>.</h2>
+      </header>
+
+      <div class="loop__grid">
+        <!-- Sticky spine -->
+        <aside class="spine" aria-hidden="true">
+          <div class="spine__track">
+            <div class="spine__line"></div>
+            <div class="spine__beam" id="spineBeam"></div>
+            <ol class="spine__nodes" id="spineNodes">
+              <li class="spine__node" data-stage="0"><span class="spine__num">01</span><span class="spine__label">Ask</span></li>
+              <li class="spine__node" data-stage="1"><span class="spine__num">02</span><span class="spine__label">Retrieve</span></li>
+              <li class="spine__node" data-stage="2"><span class="spine__num">03</span><span class="spine__label">Answer</span></li>
+              <li class="spine__node" data-stage="3"><span class="spine__num">04</span><span class="spine__label">Review</span></li>
+              <li class="spine__node" data-stage="4"><span class="spine__num">05</span><span class="spine__label">Fix &amp; ship</span></li>
+              <li class="spine__node" data-stage="5"><span class="spine__num">06</span><span class="spine__label">Triage</span></li>
+            </ol>
+          </div>
+          <p class="spine__return"><span aria-hidden="true">↺</span> loops to 01</p>
+        </aside>
+
+        <!-- Stages -->
+        <div class="loop__stages" id="loopStages">
+
+          <article class="stage" data-stage="0">
+            <p class="stage__kicker"><b>01</b> Ask</p>
+            <h3 class="stage__title">A question lands in the thread.</h3>
+            <p class="stage__lede"><code>/ask-code</code> or <span class="mention">@beacon</span> — any channel, DM, or the assistant pane. No IDE, no context switch.</p>
+            <div class="stage__device device-line">
+              <span class="device-line__avatar">PM</span>
+              <p><span class="mention">@beacon</span> where do we verify Slack request signatures?</p>
+            </div>
+          </article>
+
+          <article class="stage" data-stage="1">
+            <p class="stage__kicker"><b>02</b> Retrieve</p>
+            <h3 class="stage__title">Evidence, not vibes.</h3>
+            <p class="stage__lede">Full-text, vectors, and the call graph fan out in parallel; an agent runs follow-up tools to fill the gaps, then reranks. Pick a question and watch it run.</p>
+
+            <div class="stage__device stage__device--console">
+              <div class="theater__questions" role="tablist" aria-label="Example questions">
+                <button class="q-chip is-active" role="tab" aria-selected="true" data-q="0">Where are Slack signatures verified?</button>
+                <button class="q-chip" role="tab" aria-selected="false" data-q="1">How does a failed CI run reach Slack?</button>
+                <button class="q-chip" role="tab" aria-selected="false" data-q="2">What blocks prompt injection?</button>
+              </div>
+              <div class="theater__viz" id="viz" aria-live="polite">
+                <div class="lane" data-lane="fts">
+                  <p class="lane__label"><span class="lane__dot"></span>FTS5 · lexical</p>
+                  <div class="lane__chips"></div>
+                </div>
+                <div class="lane" data-lane="vec">
+                  <p class="lane__label"><span class="lane__dot"></span>Vectorize · semantic</p>
+                  <div class="lane__chips"></div>
+                </div>
+                <div class="lane" data-lane="graph">
+                  <p class="lane__label"><span class="lane__dot"></span>Code graph · calls/imports</p>
+                  <div class="lane__chips"></div>
+                </div>
+                <div class="planner" id="planner">
+                  <p class="planner__label">agent planner</p>
+                  <div class="planner__lines"></div>
+                </div>
+                <div class="verdict" id="verdict">
+                  <div class="verdict__bar"><span class="verdict__stage">rerank</span><span class="verdict__fill"></span></div>
+                  <div class="verdict__answer">
+                    <p class="verdict__text"></p>
+                    <div class="verdict__cites"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </article>
+
+          <article class="stage" data-stage="2">
+            <p class="stage__kicker"><b>03</b> Answer</p>
+            <h3 class="stage__title">Grounded, or silent.</h3>
+            <p class="stage__lede">The answer is built only from retrieved code, streamed into the thread, cited to <code>file:line</code>. No evidence? It says so — it never invents.</p>
+            <div class="stage__device stage__device--answer">
+              <p class="device-answer__text">Verified in <code>verifySlackSignature</code> — it recomputes the HMAC-SHA256 of <code>v0:{ts}:{body}</code> and rejects stale timestamps <b>[1]</b>.</p>
+              <div class="device-answer__cites">
+                <a class="cite"><span>[1] workers/slack-bot/src/signature.ts</span><b>:21-44</b></a>
+              </div>
+            </div>
+          </article>
+
+          <article class="stage" data-stage="3">
+            <p class="stage__kicker"><b>04</b> Review</p>
+            <h3 class="stage__title">Reviews that have read the codebase.</h3>
+            <p class="stage__lede">Paste a PR URL — or react with an emoji — and get a streamed review informed by the whole index, not just the diff.</p>
+            <div class="stage__device device-line">
+              <span class="device-line__avatar">DR</span>
+              <p><span class="mention">@beacon</span> review github.com/acme/api/pull/318</p>
+            </div>
+          </article>
+
+          <article class="stage" data-stage="4">
+            <p class="stage__kicker"><b>05</b> Fix &amp; ship</p>
+            <h3 class="stage__title">From issue to open PR.</h3>
+            <p class="stage__lede">Describe the problem in a thread, react <span class="emoji">🚀</span>, and Beacon proposes the edits and opens the pull request for you.</p>
+            <div class="stage__device device-pr">
+              <span class="device-pr__icon" aria-hidden="true">⬡</span>
+              <div>
+                <p class="device-pr__title">fix: cap D1 batch lookups at 100 bound params</p>
+                <p class="device-pr__meta">opened by <b>beacon[bot]</b> · 2 files · ready for review</p>
+              </div>
+            </div>
+          </article>
+
+          <article class="stage" data-stage="5">
+            <p class="stage__kicker"><b>06</b> Triage</p>
+            <h3 class="stage__title">A red build becomes a cited diagnosis.</h3>
+            <p class="stage__lede">When a GitHub Actions run fails, Beacon posts a diagnosis to your channel — grounded in the failing logs and the diff. React <span class="emoji">🚀</span> for a fix PR. Transient flakes get a re-run nudge.</p>
+            <div class="stage__device device-line device-line--alert">
+              <span class="device-line__avatar device-line__avatar--bot"><img src="assets/beacon-logo.png" alt="" width="26" height="26" /></span>
+              <p><b>CI failed on <code>main</code></b> — likely the 100-param D1 cap in <code>hydrateContent</code> <b>[1]</b>. React 🚀 to open a fix.</p>
+            </div>
+            <p class="stage__loopback"><span aria-hidden="true">↺</span> …and that diagnosis is the next question. The loop closes.</p>
+          </article>
+
+        </div>
       </div>
     </section>
 
-    <!-- ============ PROBLEM ============ -->
-    <section class="problem" id="problem">
-      <p class="section-eyebrow reveal">The gap</p>
-      <h2 class="problem__statement reveal">
-        Your code lives in <span class="u-code">GitHub</span>.
-        Your team lives in <span class="u-slack">Slack</span>.
-      </h2>
-      <p class="problem__one reveal">Beacon runs the dev loop between them.</p>
-    </section>
-
-    <!-- ============ VERSUS — head-on objections ============ -->
-    <section class="versus" id="versus">
+    <!-- ============ WHY (objections) ============ -->
+    <section class="versus" id="why">
       <header class="versus__head">
-        <p class="section-eyebrow reveal">The obvious question</p>
+        <p class="section-eyebrow reveal">Why not the tools you already have</p>
         <h2 class="reveal">"Don't we already have <em>AI</em> for this?"</h2>
       </header>
 
@@ -172,131 +289,25 @@
         <li>CI failure → diagnosis → fix PR</li>
         <li>Runs on your cloud</li>
         <li>MIT open source</li>
-        <li>Zero servers</li>
       </ul>
     </section>
 
-    <!-- ============ WATCH IT THINK ============ -->
-    <section class="theater" id="think">
-      <header class="theater__head">
-        <p class="section-eyebrow reveal">Live anatomy of an answer</p>
-        <h2 class="reveal">Watch it <em>think</em>.</h2>
-        <p class="theater__sub reveal">Pick a question. Watch retrieval fan out, the planner fill gaps, and a cited answer arrive.</p>
-      </header>
-
-      <div class="theater__stage">
-        <div class="theater__questions" role="tablist" aria-label="Example questions">
-          <button class="q-chip is-active" role="tab" aria-selected="true" data-q="0">Where are Slack request signatures verified?</button>
-          <button class="q-chip" role="tab" aria-selected="false" data-q="1">How does a failed CI run become a Slack alert?</button>
-          <button class="q-chip" role="tab" aria-selected="false" data-q="2">What stops retrieved code from hijacking the prompt?</button>
-        </div>
-
-        <div class="theater__viz" id="viz" aria-live="polite">
-          <div class="lane" data-lane="fts">
-            <p class="lane__label"><span class="lane__dot"></span>FTS5 · lexical</p>
-            <div class="lane__chips"></div>
-          </div>
-          <div class="lane" data-lane="vec">
-            <p class="lane__label"><span class="lane__dot"></span>Vectorize · semantic</p>
-            <div class="lane__chips"></div>
-          </div>
-          <div class="lane" data-lane="graph">
-            <p class="lane__label"><span class="lane__dot"></span>Code graph · calls/imports</p>
-            <div class="lane__chips"></div>
-          </div>
-
-          <div class="planner" id="planner">
-            <p class="planner__label">agent planner</p>
-            <div class="planner__lines"></div>
-          </div>
-
-          <div class="verdict" id="verdict">
-            <div class="verdict__bar"><span class="verdict__stage">rerank</span><span class="verdict__fill"></span></div>
-            <div class="verdict__answer">
-              <p class="verdict__text"></p>
-              <div class="verdict__cites"></div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- ============ FEATURES ============ -->
-    <section class="features" id="features">
-      <header class="features__head">
-        <p class="section-eyebrow reveal">What it does</p>
-        <h2 class="reveal">One agent. The whole loop, <em>question</em> to <em>pull request</em>.</h2>
-      </header>
-
-      <ol class="feature-list">
-        <li class="feature reveal">
-          <div class="feature__key"><span>Grounded Q&amp;A</span><code>/ask-code</code></div>
-          <p>Streamed answers with sources. Abstains when evidence is missing.</p>
-        </li>
-        <li class="feature reveal">
-          <div class="feature__key"><span>Agentic retrieval</span><code>planner</code></div>
-          <p>Follow-up search, file reads, and graph walks when the first pass falls short.</p>
-        </li>
-        <li class="feature reveal">
-          <div class="feature__key"><span>Hybrid search</span><code>BM25 + vectors + graph</code></div>
-          <p>Full-text, semantic, and call-graph results — merged and reranked.</p>
-        </li>
-        <li class="feature reveal">
-          <div class="feature__key"><span>PR review</span><code>review &lt;url&gt;</code></div>
-          <p>Paste a PR URL. Get a review informed by the whole index.</p>
-        </li>
-        <li class="feature reveal">
-          <div class="feature__key"><span>PR creation</span><code>:rocket:</code></div>
-          <p>Describe the issue, react <span class="emoji">🚀</span> — Beacon opens the PR.</p>
-        </li>
-        <li class="feature reveal">
-          <div class="feature__key"><span>CI-failure triage</span><code>auto → Slack</code></div>
-          <p>Failed runs get a cited diagnosis in your channel. React <span class="emoji">🚀</span> for a fix PR.</p>
-        </li>
-        <li class="feature reveal">
-          <div class="feature__key"><span>Automatic indexing</span><code>GitHub App</code></div>
-          <p>Install once. Every push reindexes only what changed.</p>
-        </li>
-      </ol>
-    </section>
-
-    <!-- ============ HOW IT WORKS ============ -->
+    <!-- ============ UNDER THE HOOD ============ -->
     <section class="how" id="how">
       <div class="how__sky" aria-hidden="true"><div class="beam beam--3"></div></div>
       <header class="how__head">
         <p class="section-eyebrow reveal">Under the hood</p>
-        <h2 class="reveal">From a Slack message to a cited answer.</h2>
+        <h2 class="reveal">Two Workers and a CI pipeline. No servers.</h2>
       </header>
 
-      <ol class="flow">
-        <li class="flow__step reveal">
-          <span class="flow__num">1</span>
-          <h3>Verify &amp; route</h3>
-          <p>Signatures checked, intent routed.</p>
-        </li>
-        <li class="flow__step reveal">
-          <span class="flow__num">2</span>
-          <h3>Retrieve</h3>
-          <p>Full-text + vectors + call graph, reranked.</p>
-        </li>
-        <li class="flow__step reveal">
-          <span class="flow__num">3</span>
-          <h3>Plan &amp; trace</h3>
-          <p>Multi-hop questions get traced, not guessed.</p>
-        </li>
-        <li class="flow__step reveal">
-          <span class="flow__num">4</span>
-          <h3>Answer &amp; cite</h3>
-          <p>Streamed to the thread with <code>file:line</code> sources.</p>
-        </li>
-      </ol>
-
       <div class="how__index reveal">
-        <p class="how__index-label">Meanwhile, indexing runs in CI</p>
-        <pre class="diagram"><code>GitHub App ──push──▶ github-webhook (Worker) ──▶ GitHub Actions
-                                                  │
+        <p class="how__index-label">a query, end to end</p>
+        <pre class="diagram"><code>Slack ─▶ slack-bot (Worker)   verify → retrieve(FTS5 + Vectorize + graph)
+                              → agent plan → rerank → cited answer ─▶ thread
+
+GitHub ─push▶ github-webhook (Worker) ─▶ GitHub Actions
    fetch tree → tree-sitter chunking → secret redaction → embed → upsert
-                                                  ▼
+                              ▼
               D1 (FTS5 + code graph)  ·  Vectorize (768d vectors)</code></pre>
       </div>
 
@@ -339,10 +350,9 @@
     <p class="footer__meta">MIT licensed · built on Cloudflare &amp; GitHub Actions</p>
   </footer>
 
-  <div class="scroll-beam" aria-hidden="true"><span id="scrollBeamFill"></span></div>
-
-  <script src="main.js?v=4"></script>
-  <script src="hero-code.js?v=4"></script>
-  <script src="theater.js?v=4"></script>
+  <script src="main.js?v=5"></script>
+  <script src="hero-code.js?v=5"></script>
+  <script src="theater.js?v=5"></script>
+  <script src="loop.js?v=5"></script>
 </body>
 </html>
