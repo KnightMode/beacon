@@ -3,11 +3,11 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Beacon — Ask your codebase anything, from Slack</title>
-  <meta name="description" content="Beacon answers questions about your code in Slack — grounded in your actual repos and cited down to the file and line. Hybrid + agentic retrieval, zero servers to operate." />
+  <title>Beacon — the agentic dev loop, in Slack</title>
+  <meta name="description" content="Beacon runs your development loop in Slack: cited answers, PR reviews, fix PRs, CI triage — grounded in your actual code. Zero servers to operate." />
 
-  <meta property="og:title" content="Beacon — codebase intelligence for Slack" />
-  <meta property="og:description" content="Ask your codebase anything, from Slack. Every answer is grounded in real code and cited down to the file and line." />
+  <meta property="og:title" content="Beacon — the agentic dev loop, in Slack" />
+  <meta property="og:description" content="Ask, review, fix, ship — without leaving the thread. Every action grounded in your code and cited to the line." />
   <meta property="og:type" content="website" />
   <meta property="og:image" content="assets/beacon-logo.png" />
 
@@ -55,13 +55,14 @@
 
       <div class="hero__inner">
         <div class="hero__copy">
-          <p class="eyebrow reveal">Codebase intelligence · in Slack</p>
+          <p class="eyebrow reveal">The agentic dev loop · in Slack</p>
           <h1 class="hero__title reveal">
-            Ask your codebase<br /><em>anything.</em>
+            Ship from<br /><em>Slack.</em>
           </h1>
           <p class="hero__lede reveal">
-            Grounded answers in your Slack threads, cited to the
-            <span class="ink">file and line</span>. No evidence, no answer.
+            Cited answers, PR reviews, fix PRs, CI triage — Beacon runs your
+            dev loop in the thread, grounded in
+            <span class="ink">your actual code</span>.
           </p>
           <div class="hero__actions reveal">
             <a class="btn btn--solid" href="https://github.com/KnightMode/beacon">
@@ -105,10 +106,10 @@
       </div>
 
       <div class="hero__ticker reveal" aria-hidden="true">
-        <span>Cited answers</span><i>·</i>
-        <span>Agentic retrieval</span><i>·</i>
-        <span>PR review &amp; creation</span><i>·</i>
-        <span>CI triage</span><i>·</i>
+        <span>Ask → cited answer</span><i>·</i>
+        <span>Review → PR feedback</span><i>·</i>
+        <span>🚀 → fix PR</span><i>·</i>
+        <span>CI fails → diagnosis</span><i>·</i>
         <span>Zero servers</span>
       </div>
     </section>
@@ -117,10 +118,10 @@
     <section class="problem" id="problem">
       <p class="section-eyebrow reveal">The gap</p>
       <h2 class="problem__statement reveal">
-        Engineering knowledge lives in <span class="u-code">code</span>.
-        The questions get asked in <span class="u-slack">Slack</span>.
+        Your code lives in <span class="u-code">GitHub</span>.
+        Your team lives in <span class="u-slack">Slack</span>.
       </h2>
-      <p class="problem__one reveal">Beacon closes that gap.</p>
+      <p class="problem__one reveal">Beacon runs the dev loop between them.</p>
     </section>
 
     <!-- ============ VERSUS — head-on objections ============ -->
@@ -134,16 +135,16 @@
         <div class="versus__row reveal">
           <h3 class="versus__q">Claude or ChatGPT?</h3>
           <div class="versus__a">
-            <p>They've never seen your codebase — <em>plausible</em> is the dangerous kind of wrong.</p>
-            <p class="versus__edge">Beacon answers only from retrieved code, cited to <code>file:line</code>.</p>
+            <p>A chat window that has never seen your codebase — <em>plausible</em> is the dangerous kind of wrong.</p>
+            <p class="versus__edge">Beacon acts only on retrieved code, cited to <code>file:line</code> — and doesn't stop at answering.</p>
           </div>
         </div>
 
         <div class="versus__row reveal">
           <h3 class="versus__q">Cursor or Copilot?</h3>
           <div class="versus__a">
-            <p>Brilliant — for whoever has the editor open. Questions get asked in Slack.</p>
-            <p class="versus__edge">Beacon answers the <strong>whole team</strong> — and opens the PR when needed.</p>
+            <p>Brilliant — for whoever has the editor open. The rest of the loop lives in Slack.</p>
+            <p class="versus__edge">Beacon works the loop for the <strong>whole team</strong>: answer, review, fix, ship.</p>
           </div>
         </div>
 
@@ -165,6 +166,7 @@
       </div>
 
       <ul class="usp reveal" aria-label="What only Beacon combines">
+        <li>One agent, whole loop</li>
         <li>Cited or silent</li>
         <li>Agentic code-graph retrieval</li>
         <li>CI failure → diagnosis → fix PR</li>
@@ -223,7 +225,7 @@
     <section class="features" id="features">
       <header class="features__head">
         <p class="section-eyebrow reveal">What it does</p>
-        <h2 class="reveal">One bot. The whole loop from <em>question</em> to <em>pull request</em>.</h2>
+        <h2 class="reveal">One agent. The whole loop, <em>question</em> to <em>pull request</em>.</h2>
       </header>
 
       <ol class="feature-list">
@@ -315,7 +317,7 @@
       <div class="cta__beacon" aria-hidden="true">
         <img src="assets/beacon-logo.png" alt="" width="92" height="92" />
       </div>
-      <h2 class="reveal">Point it at your repos.<br />Let the questions answer themselves.</h2>
+      <h2 class="reveal">Point it at your repos.<br />Ship from Slack.</h2>
       <div class="cta__actions reveal">
         <a class="btn btn--solid btn--lg" href="https://github.com/KnightMode/beacon">View on GitHub</a>
         <a class="btn btn--quiet btn--lg" href="https://github.com/KnightMode/beacon/blob/main/docs/setup.md">Read the setup guide</a>
