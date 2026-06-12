@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Beacon — Ask your codebase anything, from Slack</title>
+  <meta name="description" content="Beacon answers questions about your code in Slack — grounded in your actual repos and cited down to the file and line. Hybrid + agentic retrieval, zero servers to operate." />
+
+  <meta property="og:title" content="Beacon — codebase intelligence for Slack" />
+  <meta property="og:description" content="Ask your codebase anything, from Slack. Every answer is grounded in real code and cited down to the file and line." />
+  <meta property="og:type" content="website" />
+  <meta property="og:image" content="assets/beacon-logo.png" />
+
+  <link rel="icon" type="image/png" href="assets/beacon-logo.png" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,400&family=Hanken+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+
+  <!-- ============ NAV ============ -->
+  <header class="nav" id="nav">
+    <a class="nav__brand" href="#top" aria-label="Beacon home">
+      <img src="assets/beacon-logo.png" alt="" width="34" height="34" />
+      <span>Beacon</span>
+    </a>
+    <nav class="nav__links" aria-label="Primary">
+      <a href="#problem">Why</a>
+      <a href="#features">Features</a>
+      <a href="#how">How it works</a>
+      <a href="https://github.com/KnightMode/beacon/tree/main/docs">Docs</a>
+    </nav>
+    <a class="btn btn--ghost nav__cta" href="https://github.com/KnightMode/beacon">
+      <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+      <span>GitHub</span>
+    </a>
+  </header>
+
+  <main id="main">
+    <span id="top"></span>
+
+    <!-- ============ HERO ============ -->
+    <section class="hero" id="hero">
+      <div class="hero__sky" aria-hidden="true">
+        <div class="beam beam--1"></div>
+        <div class="beam beam--2"></div>
+        <div class="stars"></div>
+      </div>
+
+      <div class="hero__inner">
+        <div class="hero__copy">
+          <p class="eyebrow reveal">Codebase intelligence · in Slack</p>
+          <h1 class="hero__title reveal">
+            Ask your codebase<br /><em>anything.</em>
+          </h1>
+          <p class="hero__lede reveal">
+            Beacon answers questions about your code right in the Slack thread
+            where they're asked — grounded in your actual repos and cited down to
+            the <span class="ink">file and line</span>. No hallucinated
+            plausible nonsense. Just signal.
+          </p>
+          <div class="hero__actions reveal">
+            <a class="btn btn--solid" href="https://github.com/KnightMode/beacon">
+              Get Beacon
+              <svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 10h10M11 6l4 4-4 4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </a>
+            <a class="btn btn--quiet" href="#how">See how it works</a>
+          </div>
+        </div>
+
+        <!-- Slack-style cited answer demo -->
+        <figure class="demo reveal" aria-label="Example Beacon conversation in Slack">
+          <div class="demo__bar">
+            <span class="demo__dot"></span><span class="demo__dot"></span><span class="demo__dot"></span>
+            <span class="demo__channel"># eng-help</span>
+          </div>
+          <div class="demo__body">
+            <div class="msg msg--you">
+              <span class="msg__avatar" aria-hidden="true">DR</span>
+              <div>
+                <p class="msg__name">Dana <span>10:24</span></p>
+                <p class="msg__text"><span class="mention">@beacon</span> why does the create-PR flow go through a queue instead of waitUntil?</p>
+              </div>
+            </div>
+            <div class="msg msg--bot">
+              <span class="msg__avatar msg__avatar--bot" aria-hidden="true">
+                <img src="assets/beacon-logo.png" alt="" width="30" height="30" />
+              </span>
+              <div>
+                <p class="msg__name">Beacon <span class="tag">APP</span> <span>10:24</span></p>
+                <p class="msg__text" id="typed"></p>
+                <div class="sources" id="sources" hidden>
+                  <p class="sources__label">Sources</p>
+                  <a class="cite"><span>workers/slack-bot/wrangler.toml</span><b>:31-38</b></a>
+                  <a class="cite"><span>src/actions/createPr.ts</span><b>:24-61</b></a>
+                </div>
+              </div>
+            </div>
+          </div>
+        </figure>
+      </div>
+
+      <div class="hero__ticker reveal" aria-hidden="true">
+        <span>Grounded answers</span><i>·</i>
+        <span>Agentic retrieval</span><i>·</i>
+        <span>Hybrid search</span><i>·</i>
+        <span>PR review &amp; creation</span><i>·</i>
+        <span>Self-serve indexing</span><i>·</i>
+        <span>Zero servers</span>
+      </div>
+    </section>
+
+    <!-- ============ PROBLEM ============ -->
+    <section class="problem" id="problem">
+      <p class="section-eyebrow reveal">The gap</p>
+      <h2 class="problem__statement reveal">
+        Engineering knowledge lives in <span class="u-code">code</span>.
+        The questions get asked in <span class="u-slack">Slack</span>.
+      </h2>
+      <div class="problem__grid">
+        <p class="reveal">
+          The gap gets filled by interrupting whoever wrote the code, spelunking
+          through repos, or trusting an LLM that has never seen your codebase and
+          invents plausible nonsense.
+        </p>
+        <p class="reveal">
+          Generic AI assistants can't cite your code. Code search can't answer a
+          question. Beacon does both — it retrieves real evidence and answers
+          <em>only</em> from it.
+        </p>
+      </div>
+    </section>
+
+    <!-- ============ DIFFERENTIATORS ============ -->
+    <section class="pillars" id="pillars">
+      <div class="pillar reveal">
+        <span class="pillar__no">01</span>
+        <h3>Grounded, or silent.</h3>
+        <p>Every answer is built from retrieved code and cited <code>repo/path:lines</code>. No evidence, no answer — it abstains instead of guessing.</p>
+      </div>
+      <div class="pillar reveal">
+        <span class="pillar__no">02</span>
+        <h3>It traces <em>why</em>, not just what.</h3>
+        <p>An agentic planner inspects the first results and runs follow-up tools — search, read file, walk callers and callees over the code graph — before answering.</p>
+      </div>
+      <div class="pillar reveal">
+        <span class="pillar__no">03</span>
+        <h3>Lives where work happens.</h3>
+        <p>Channels, DMs, and the Slack assistant pane. Answers stream in token-by-token and use thread history to resolve follow-ups.</p>
+      </div>
+      <div class="pillar reveal">
+        <span class="pillar__no">04</span>
+        <h3>Zero servers to babysit.</h3>
+        <p>Two Cloudflare Workers plus a GitHub Actions indexing pipeline. Nothing to keep warm, nothing to operate.</p>
+      </div>
+    </section>
+
+    <!-- ============ FEATURES ============ -->
+    <section class="features" id="features">
+      <header class="features__head">
+        <p class="section-eyebrow reveal">What it does</p>
+        <h2 class="reveal">One bot. The whole loop from <em>question</em> to <em>pull request</em>.</h2>
+      </header>
+
+      <ol class="feature-list">
+        <li class="feature reveal">
+          <div class="feature__key"><span>Grounded Q&amp;A</span><code>/ask-code</code></div>
+          <p>Ask in plain language or <span class="mention">@beacon</span>. Answers stream with a <strong>Sources</strong> list and abstain when the evidence isn't there.</p>
+        </li>
+        <li class="feature reveal">
+          <div class="feature__key"><span>Agentic retrieval</span><code>planner</code></div>
+          <p>A planner LLM runs follow-up search / read / graph tools when the first pass is missing something. Time-budgeted, with graceful fallback.</p>
+        </li>
+        <li class="feature reveal">
+          <div class="feature__key"><span>Hybrid search</span><code>BM25 + vectors + graph</code></div>
+          <p>SQLite FTS5 full-text, vector similarity over <code>embeddinggemma-300m</code>, and one-hop expansion across <code>CALLS</code> / <code>IMPORTS</code> edges — merged and reranked.</p>
+        </li>
+        <li class="feature reveal">
+          <div class="feature__key"><span>PR review</span><code>review &lt;url&gt;</code></div>
+          <p>Paste a PR URL or react with an emoji and get a streamed review informed by the indexed codebase.</p>
+        </li>
+        <li class="feature reveal">
+          <div class="feature__key"><span>PR creation</span><code>:rocket:</code></div>
+          <p>Describe an issue in a thread, react with <span class="emoji">🚀</span>, and Beacon proposes file edits and opens a pull request.</p>
+        </li>
+        <li class="feature reveal">
+          <div class="feature__key"><span>Automatic indexing</span><code>GitHub App</code></div>
+          <p>Install once. Every push to the default branch incrementally reindexes only the changed files. No commands, no servers.</p>
+        </li>
+      </ol>
+    </section>
+
+    <!-- ============ HOW IT WORKS ============ -->
+    <section class="how" id="how">
+      <div class="how__sky" aria-hidden="true"><div class="beam beam--3"></div></div>
+      <header class="how__head">
+        <p class="section-eyebrow reveal">Under the hood</p>
+        <h2 class="reveal">From a Slack message to a cited answer.</h2>
+      </header>
+
+      <ol class="flow">
+        <li class="flow__step reveal">
+          <span class="flow__num">1</span>
+          <h3>Verify &amp; route</h3>
+          <p>Every Slack and GitHub signature is checked. Intent routing splits questions, indexing, PR review, and PR creation.</p>
+        </li>
+        <li class="flow__step reveal">
+          <span class="flow__num">2</span>
+          <h3>Retrieve evidence</h3>
+          <p>Hybrid search across full-text, vectors, and the call graph, reranked with symbol and diversity heuristics.</p>
+        </li>
+        <li class="flow__step reveal">
+          <span class="flow__num">3</span>
+          <h3>Plan &amp; trace</h3>
+          <p>The agent fills gaps with follow-up tools over the code graph — multi-hop "why/how" questions get traced, not guessed.</p>
+        </li>
+        <li class="flow__step reveal">
+          <span class="flow__num">4</span>
+          <h3>Answer &amp; cite</h3>
+          <p>An LLM answers strictly from evidence, streamed into the thread with clickable <code>repo/path:lines</code> citations.</p>
+        </li>
+      </ol>
+
+      <div class="how__index reveal">
+        <p class="how__index-label">Meanwhile, indexing runs in CI</p>
+        <pre class="diagram"><code>GitHub App ──push──▶ github-webhook (Worker) ──▶ GitHub Actions
+                                                  │
+   fetch tree → tree-sitter chunking → secret redaction → embed → upsert
+                                                  ▼
+              D1 (FTS5 + code graph)  ·  Vectorize (768d vectors)</code></pre>
+      </div>
+
+      <ul class="stack reveal" aria-label="Technology stack">
+        <li>Cloudflare Workers</li>
+        <li>D1 · SQLite + FTS5</li>
+        <li>Vectorize</li>
+        <li>Queues</li>
+        <li>Workers AI</li>
+        <li>tree-sitter</li>
+        <li>GitHub Actions</li>
+        <li>TypeScript</li>
+      </ul>
+    </section>
+
+    <!-- ============ CTA ============ -->
+    <section class="cta" id="cta">
+      <div class="cta__beacon" aria-hidden="true">
+        <img src="assets/beacon-logo.png" alt="" width="92" height="92" />
+      </div>
+      <h2 class="reveal">Point it at your repos.<br />Let the questions answer themselves.</h2>
+      <div class="cta__actions reveal">
+        <a class="btn btn--solid btn--lg" href="https://github.com/KnightMode/beacon">View on GitHub</a>
+        <a class="btn btn--quiet btn--lg" href="https://github.com/KnightMode/beacon/blob/main/docs/setup.md">Read the setup guide</a>
+      </div>
+    </section>
+  </main>
+
+  <!-- ============ FOOTER ============ -->
+  <footer class="footer">
+    <div class="footer__brand">
+      <img src="assets/beacon-logo.png" alt="" width="28" height="28" />
+      <span>Beacon</span>
+    </div>
+    <nav class="footer__links" aria-label="Footer">
+      <a href="https://github.com/KnightMode/beacon">Repository</a>
+      <a href="https://github.com/KnightMode/beacon/tree/main/docs">Documentation</a>
+      <a href="https://github.com/KnightMode/beacon/blob/main/docs/architecture.md">Architecture</a>
+    </nav>
+    <p class="footer__meta">MIT licensed · built on Cloudflare &amp; GitHub Actions</p>
+  </footer>
+
+  <script src="main.js"></script>
+</body>
+</html>
