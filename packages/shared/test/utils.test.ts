@@ -51,6 +51,16 @@ describe('shouldIndexFile', () => {
     expect(shouldIndexFile('src/server/main.go').include).toBe(true);
     expect(shouldIndexFile('lib/handler.ts', 1234).include).toBe(true);
   });
+
+  it('skips eval answer keys to avoid test contamination', () => {
+    expect(shouldIndexFile('packages/eval/golden/beacon.json').include).toBe(false);
+    expect(shouldIndexFile('eval/golden/cases.json').include).toBe(false);
+  });
+
+  it('does not mistake similarly-named paths for eval answer keys', () => {
+    expect(shouldIndexFile('src/retrieval/golden/fixture.ts').include).toBe(true);
+    expect(shouldIndexFile('packages/eval/src/run.ts').include).toBe(true);
+  });
 });
 
 describe('secret scanning', () => {

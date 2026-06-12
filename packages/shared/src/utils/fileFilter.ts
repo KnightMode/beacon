@@ -13,6 +13,15 @@ import { extensionOf } from './language.js';
 /** Hard cap: skip files larger than this many bytes (default 1 MiB). */
 export const DEFAULT_MAX_FILE_BYTES = 1024 * 1024;
 
+/**
+ * Eval answer keys (the golden datasets under packages/eval/golden) must never
+ * be indexed: this repo indexes itself, so indexing the expected questions and
+ * citations would leak them into retrieval and let the bot "answer" eval
+ * questions by reading the test — classic eval contamination. Matched on
+ * segment boundaries so unrelated paths like `retrieval/golden/` don't trip it.
+ */
+const EVAL_ANSWER_KEY = /(^|\/)eval\/golden\//;
+
 export interface FileFilterResult {
   include: boolean;
   reason?: string;
@@ -28,6 +37,11 @@ export function shouldIndexFile(
   maxBytes: number = DEFAULT_MAX_FILE_BYTES,
 ): FileFilterResult {
   const normalized = path.replace(/^\.?\//, '');
+
+  if (EVAL_ANSWER_KEY.test(normalized)) {
+    return { include: false, reason: 'eval answer key (test contamination)' };
+  }
+
   const segments = normalized.split('/');
   const filename = (segments.pop() ?? '').toLowerCase();
 
