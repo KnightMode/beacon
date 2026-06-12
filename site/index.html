@@ -60,10 +60,8 @@
             Ask your codebase<br /><em>anything.</em>
           </h1>
           <p class="hero__lede reveal">
-            Beacon answers questions about your code right in the Slack thread
-            where they're asked — grounded in your actual repos and cited down to
-            the <span class="ink">file and line</span>. No hallucinated
-            plausible nonsense. Just signal.
+            Grounded answers in your Slack threads, cited to the
+            <span class="ink">file and line</span>. No evidence, no answer.
           </p>
           <div class="hero__actions reveal">
             <a class="btn btn--solid" href="https://github.com/KnightMode/beacon">
@@ -107,12 +105,10 @@
       </div>
 
       <div class="hero__ticker reveal" aria-hidden="true">
-        <span>Grounded answers</span><i>·</i>
+        <span>Cited answers</span><i>·</i>
         <span>Agentic retrieval</span><i>·</i>
-        <span>Hybrid search</span><i>·</i>
         <span>PR review &amp; creation</span><i>·</i>
-        <span>CI-failure triage</span><i>·</i>
-        <span>Self-serve indexing</span><i>·</i>
+        <span>CI triage</span><i>·</i>
         <span>Zero servers</span>
       </div>
     </section>
@@ -124,18 +120,7 @@
         Engineering knowledge lives in <span class="u-code">code</span>.
         The questions get asked in <span class="u-slack">Slack</span>.
       </h2>
-      <div class="problem__grid">
-        <p class="reveal">
-          The gap gets filled by interrupting whoever wrote the code, spelunking
-          through repos, or trusting an LLM that has never seen your codebase and
-          invents plausible nonsense.
-        </p>
-        <p class="reveal">
-          Generic AI assistants can't cite your code. Code search can't answer a
-          question. Beacon does both — it retrieves real evidence and answers
-          <em>only</em> from it.
-        </p>
-      </div>
+      <p class="problem__one reveal">Beacon closes that gap.</p>
     </section>
 
     <!-- ============ VERSUS — head-on objections ============ -->
@@ -147,34 +132,34 @@
 
       <div class="versus__rows">
         <div class="versus__row reveal">
-          <h3 class="versus__q">Why not just ask Claude or ChatGPT in Slack?</h3>
+          <h3 class="versus__q">Claude or ChatGPT?</h3>
           <div class="versus__a">
-            <p>They've never seen your codebase. They generate <em>plausible</em> answers with zero evidence — and plausible is the dangerous kind of wrong.</p>
-            <p class="versus__edge">Beacon retrieves your actual code first and answers <strong>only</strong> from it. Every claim cited to <code>file:line</code>. No evidence → it says so.</p>
+            <p>They've never seen your codebase — <em>plausible</em> is the dangerous kind of wrong.</p>
+            <p class="versus__edge">Beacon answers only from retrieved code, cited to <code>file:line</code>.</p>
           </div>
         </div>
 
         <div class="versus__row reveal">
-          <h3 class="versus__q">Why not just use Cursor or Copilot?</h3>
+          <h3 class="versus__q">Cursor or Copilot?</h3>
           <div class="versus__a">
-            <p>IDE agents are brilliant — for the one person with the editor open. But questions get asked in Slack: by the on-call at 2am, the PM scoping a feature, the engineer three days into onboarding.</p>
-            <p class="versus__edge">Beacon serves the <strong>whole team</strong> in the thread, no IDE required — and when an answer needs to become work, it opens the PR itself.</p>
+            <p>Brilliant — for whoever has the editor open. Questions get asked in Slack.</p>
+            <p class="versus__edge">Beacon answers the <strong>whole team</strong> — and opens the PR when needed.</p>
           </div>
         </div>
 
         <div class="versus__row reveal">
-          <h3 class="versus__q">Why not code search?</h3>
+          <h3 class="versus__q">Code search?</h3>
           <div class="versus__a">
-            <p>Search returns files. It can't answer <em>"why does the create-PR flow use a queue?"</em> — someone still has to read, trace, and synthesize.</p>
-            <p class="versus__edge">Beacon traces it for you: hybrid search plus a <strong>call graph</strong> and an agentic planner that follows callers and callees before answering in plain language.</p>
+            <p>Search returns files, not answers.</p>
+            <p class="versus__edge">Beacon traces the <strong>call graph</strong> and explains <em>why</em>.</p>
           </div>
         </div>
 
         <div class="versus__row reveal">
-          <h3 class="versus__q">Why not a SaaS code-Q&amp;A bot?</h3>
+          <h3 class="versus__q">A SaaS code bot?</h3>
           <div class="versus__a">
-            <p>Most want your repos on their servers and a per-seat invoice for the privilege.</p>
-            <p class="versus__edge">Beacon runs on <strong>your</strong> Cloudflare account and <strong>your</strong> GitHub Actions. Your code never leaves your infrastructure. MIT-licensed — read every line it runs.</p>
+            <p>Your repos on their servers, plus a per-seat invoice.</p>
+            <p class="versus__edge">Beacon runs on <strong>your</strong> Cloudflare. MIT-licensed. Zero servers.</p>
           </div>
         </div>
       </div>
@@ -189,36 +174,12 @@
       </ul>
     </section>
 
-    <!-- ============ DIFFERENTIATORS ============ -->
-    <section class="pillars" id="pillars">
-      <div class="pillar reveal">
-        <span class="pillar__no">01</span>
-        <h3>Grounded, or silent.</h3>
-        <p>Every answer is built from retrieved code and cited <code>repo/path:lines</code>. No evidence, no answer — it abstains instead of guessing.</p>
-      </div>
-      <div class="pillar reveal">
-        <span class="pillar__no">02</span>
-        <h3>It traces <em>why</em>, not just what.</h3>
-        <p>An agentic planner inspects the first results and runs follow-up tools — search, read file, walk callers and callees over the code graph — before answering.</p>
-      </div>
-      <div class="pillar reveal">
-        <span class="pillar__no">03</span>
-        <h3>Lives where work happens.</h3>
-        <p>Channels, DMs, and the Slack assistant pane. Answers stream in token-by-token and use thread history to resolve follow-ups.</p>
-      </div>
-      <div class="pillar reveal">
-        <span class="pillar__no">04</span>
-        <h3>Zero servers to babysit.</h3>
-        <p>Two Cloudflare Workers plus a GitHub Actions indexing pipeline. Nothing to keep warm, nothing to operate.</p>
-      </div>
-    </section>
-
     <!-- ============ WATCH IT THINK ============ -->
     <section class="theater" id="think">
       <header class="theater__head">
         <p class="section-eyebrow reveal">Live anatomy of an answer</p>
         <h2 class="reveal">Watch it <em>think</em>.</h2>
-        <p class="theater__sub reveal">Pick a question and watch the actual pipeline run: three retrieval engines fan out, the planner fills gaps, evidence gets reranked, and the answer arrives — cited.</p>
+        <p class="theater__sub reveal">Pick a question. Watch retrieval fan out, the planner fill gaps, and a cited answer arrive.</p>
       </header>
 
       <div class="theater__stage">
@@ -268,31 +229,31 @@
       <ol class="feature-list">
         <li class="feature reveal">
           <div class="feature__key"><span>Grounded Q&amp;A</span><code>/ask-code</code></div>
-          <p>Ask in plain language or <span class="mention">@beacon</span>. Answers stream with a <strong>Sources</strong> list and abstain when the evidence isn't there.</p>
+          <p>Streamed answers with sources. Abstains when evidence is missing.</p>
         </li>
         <li class="feature reveal">
           <div class="feature__key"><span>Agentic retrieval</span><code>planner</code></div>
-          <p>A planner LLM runs follow-up search / read / graph tools when the first pass is missing something. Time-budgeted, with graceful fallback.</p>
+          <p>Follow-up search, file reads, and graph walks when the first pass falls short.</p>
         </li>
         <li class="feature reveal">
           <div class="feature__key"><span>Hybrid search</span><code>BM25 + vectors + graph</code></div>
-          <p>SQLite FTS5 full-text, vector similarity over <code>embeddinggemma-300m</code>, and one-hop expansion across <code>CALLS</code> / <code>IMPORTS</code> edges — merged and reranked.</p>
+          <p>Full-text, semantic, and call-graph results — merged and reranked.</p>
         </li>
         <li class="feature reveal">
           <div class="feature__key"><span>PR review</span><code>review &lt;url&gt;</code></div>
-          <p>Paste a PR URL or react with an emoji and get a streamed review informed by the indexed codebase.</p>
+          <p>Paste a PR URL. Get a review informed by the whole index.</p>
         </li>
         <li class="feature reveal">
           <div class="feature__key"><span>PR creation</span><code>:rocket:</code></div>
-          <p>Describe an issue in a thread, react with <span class="emoji">🚀</span>, and Beacon proposes file edits and opens a pull request.</p>
+          <p>Describe the issue, react <span class="emoji">🚀</span> — Beacon opens the PR.</p>
         </li>
         <li class="feature reveal">
           <div class="feature__key"><span>CI-failure triage</span><code>auto → Slack</code></div>
-          <p>When a GitHub Actions run fails, Beacon posts a <strong>cited diagnosis</strong> to your channel — grounded in the failing logs <em>and</em> the head commit's diff. React <span class="emoji">🚀</span> to open a fix PR. Transient flakes get a re-run nudge, not a false alarm.</p>
+          <p>Failed runs get a cited diagnosis in your channel. React <span class="emoji">🚀</span> for a fix PR.</p>
         </li>
         <li class="feature reveal">
           <div class="feature__key"><span>Automatic indexing</span><code>GitHub App</code></div>
-          <p>Install once. Every push to the default branch incrementally reindexes only the changed files. No commands, no servers.</p>
+          <p>Install once. Every push reindexes only what changed.</p>
         </li>
       </ol>
     </section>
@@ -309,22 +270,22 @@
         <li class="flow__step reveal">
           <span class="flow__num">1</span>
           <h3>Verify &amp; route</h3>
-          <p>Every Slack and GitHub signature is checked. Intent routing splits questions, indexing, PR review, and PR creation.</p>
+          <p>Signatures checked, intent routed.</p>
         </li>
         <li class="flow__step reveal">
           <span class="flow__num">2</span>
-          <h3>Retrieve evidence</h3>
-          <p>Hybrid search across full-text, vectors, and the call graph, reranked with symbol and diversity heuristics.</p>
+          <h3>Retrieve</h3>
+          <p>Full-text + vectors + call graph, reranked.</p>
         </li>
         <li class="flow__step reveal">
           <span class="flow__num">3</span>
           <h3>Plan &amp; trace</h3>
-          <p>The agent fills gaps with follow-up tools over the code graph — multi-hop "why/how" questions get traced, not guessed.</p>
+          <p>Multi-hop questions get traced, not guessed.</p>
         </li>
         <li class="flow__step reveal">
           <span class="flow__num">4</span>
           <h3>Answer &amp; cite</h3>
-          <p>An LLM answers strictly from evidence, streamed into the thread with clickable <code>repo/path:lines</code> citations.</p>
+          <p>Streamed to the thread with <code>file:line</code> sources.</p>
         </li>
       </ol>
 
