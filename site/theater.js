@@ -225,18 +225,31 @@
   );
 
   // Auto-play the first scenario when the section scrolls into view.
+  // Observe the section header (small, reliably visible) rather than the tall
+  // viz grid — 35% of the grid never enters a phone viewport at once.
   let played = false;
-  const io = new IntersectionObserver(
-    (entries) => {
-      entries.forEach((e) => {
-        if (e.isIntersecting && !played) {
-          played = true;
-          play(0);
-          io.disconnect();
-        }
-      });
-    },
-    { threshold: 0.35 }
-  );
-  io.observe(viz);
+  const trigger = () => {
+    if (played) return;
+    played = true;
+    play(0);
+  };
+  if ("IntersectionObserver" in window) {
+    const target = document.querySelector(".theater__head") || viz;
+    const io = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((e) => {
+          if (e.isIntersecting) {
+            trigger();
+            io.disconnect();
+          }
+        });
+      },
+      { threshold: 0.2, rootMargin: "0px 0px -10% 0px" }
+    );
+    io.observe(target);
+  } else {
+    trigger();
+  }
+  // Clicking a chip always plays, regardless of auto-play state.
+  chips.forEach((chip) => chip.addEventListener("click", () => { played = true; }));
 })();
