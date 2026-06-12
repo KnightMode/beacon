@@ -3,8 +3,6 @@
   <img src="docs/assets/beacon-logo.png" alt="Beacon — codebase intelligence" width="320">
 </p>
 
-<h1 align="center">Beacon</h1>
-
 <p align="center">
   <strong>The agentic dev loop, in Slack — cited answers, PR reviews, fix PRs,
   and CI triage, grounded in your actual code down to the file and line.</strong>
