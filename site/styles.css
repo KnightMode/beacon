@@ -150,16 +150,12 @@ code {
 }
 
 .brand__mark {
-  display: grid;
+  display: block;
   width: 2.2rem;
   height: 2.2rem;
-  place-items: center;
   border: 1px solid currentColor;
-  background: var(--signal);
-  color: var(--paper);
-  font-family: var(--font-mono);
-  font-size: 0.92rem;
-  font-weight: 600;
+  background: var(--paper);
+  object-fit: cover;
   transform: rotate(-3deg);
   box-shadow: 5px 5px 0 color-mix(in oklch, currentColor 18%, transparent);
 }
