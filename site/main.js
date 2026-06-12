@@ -8,6 +8,36 @@
   onScroll();
   window.addEventListener("scroll", onScroll, { passive: true });
 
+  /* ---- Scroll beam (JS fallback when scroll-driven CSS is unsupported) ---- */
+  const beamFill = document.getElementById("scrollBeamFill");
+  const cssScrollTimeline = CSS.supports?.("animation-timeline: scroll()");
+  if (beamFill && !cssScrollTimeline && !reduceMotion) {
+    let ticking = false;
+    const updateBeam = () => {
+      const max = document.documentElement.scrollHeight - window.innerHeight;
+      beamFill.style.transform = `scaleY(${max > 0 ? window.scrollY / max : 0})`;
+      ticking = false;
+    };
+    window.addEventListener("scroll", () => {
+      if (!ticking) { ticking = true; requestAnimationFrame(updateBeam); }
+    }, { passive: true });
+    updateBeam();
+  }
+
+  /* ---- Hero sky parallax (cheap: transform only) ---- */
+  const sky = document.querySelector(".hero__sky");
+  if (sky && !reduceMotion) {
+    let ticking = false;
+    const updateSky = () => {
+      const y = Math.min(window.scrollY, window.innerHeight);
+      sky.style.transform = `translateY(${y * 0.25}px)`;
+      ticking = false;
+    };
+    window.addEventListener("scroll", () => {
+      if (!ticking) { ticking = true; requestAnimationFrame(updateSky); }
+    }, { passive: true });
+  }
+
   /* ---- Scroll reveals ---- */
   const reveals = document.querySelectorAll(".reveal");
   if (reduceMotion || !("IntersectionObserver" in window)) {
