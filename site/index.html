@@ -30,6 +30,7 @@
     </a>
     <nav class="nav__links" aria-label="Primary">
       <a href="#problem">Why</a>
+      <a href="#think">Watch it think</a>
       <a href="#features">Features</a>
       <a href="#how">How it works</a>
       <a href="https://github.com/KnightMode/beacon/tree/main/docs">Docs</a>
@@ -46,6 +47,7 @@
     <!-- ============ HERO ============ -->
     <section class="hero" id="hero">
       <div class="hero__sky" aria-hidden="true">
+        <canvas id="codesea" class="codesea"></canvas>
         <div class="beam beam--1"></div>
         <div class="beam beam--2"></div>
         <div class="stars"></div>
@@ -136,6 +138,57 @@
       </div>
     </section>
 
+    <!-- ============ VERSUS — head-on objections ============ -->
+    <section class="versus" id="versus">
+      <header class="versus__head">
+        <p class="section-eyebrow reveal">The obvious question</p>
+        <h2 class="reveal">"Don't we already have <em>AI</em> for this?"</h2>
+      </header>
+
+      <div class="versus__rows">
+        <div class="versus__row reveal">
+          <h3 class="versus__q">Why not just ask Claude or ChatGPT in Slack?</h3>
+          <div class="versus__a">
+            <p>They've never seen your codebase. They generate <em>plausible</em> answers with zero evidence — and plausible is the dangerous kind of wrong.</p>
+            <p class="versus__edge">Beacon retrieves your actual code first and answers <strong>only</strong> from it. Every claim cited to <code>file:line</code>. No evidence → it says so.</p>
+          </div>
+        </div>
+
+        <div class="versus__row reveal">
+          <h3 class="versus__q">Why not just use Cursor or Copilot?</h3>
+          <div class="versus__a">
+            <p>IDE agents are brilliant — for the one person with the editor open. But questions get asked in Slack: by the on-call at 2am, the PM scoping a feature, the engineer three days into onboarding.</p>
+            <p class="versus__edge">Beacon serves the <strong>whole team</strong> in the thread, no IDE required — and when an answer needs to become work, it opens the PR itself.</p>
+          </div>
+        </div>
+
+        <div class="versus__row reveal">
+          <h3 class="versus__q">Why not code search?</h3>
+          <div class="versus__a">
+            <p>Search returns files. It can't answer <em>"why does the create-PR flow use a queue?"</em> — someone still has to read, trace, and synthesize.</p>
+            <p class="versus__edge">Beacon traces it for you: hybrid search plus a <strong>call graph</strong> and an agentic planner that follows callers and callees before answering in plain language.</p>
+          </div>
+        </div>
+
+        <div class="versus__row reveal">
+          <h3 class="versus__q">Why not a SaaS code-Q&amp;A bot?</h3>
+          <div class="versus__a">
+            <p>Most want your repos on their servers and a per-seat invoice for the privilege.</p>
+            <p class="versus__edge">Beacon runs on <strong>your</strong> Cloudflare account and <strong>your</strong> GitHub Actions. Your code never leaves your infrastructure. MIT-licensed — read every line it runs.</p>
+          </div>
+        </div>
+      </div>
+
+      <ul class="usp reveal" aria-label="What only Beacon combines">
+        <li>Cited or silent</li>
+        <li>Agentic code-graph retrieval</li>
+        <li>CI failure → diagnosis → fix PR</li>
+        <li>Runs on your cloud</li>
+        <li>MIT open source</li>
+        <li>Zero servers</li>
+      </ul>
+    </section>
+
     <!-- ============ DIFFERENTIATORS ============ -->
     <section class="pillars" id="pillars">
       <div class="pillar reveal">
@@ -157,6 +210,51 @@
         <span class="pillar__no">04</span>
         <h3>Zero servers to babysit.</h3>
         <p>Two Cloudflare Workers plus a GitHub Actions indexing pipeline. Nothing to keep warm, nothing to operate.</p>
+      </div>
+    </section>
+
+    <!-- ============ WATCH IT THINK ============ -->
+    <section class="theater" id="think">
+      <header class="theater__head">
+        <p class="section-eyebrow reveal">Live anatomy of an answer</p>
+        <h2 class="reveal">Watch it <em>think</em>.</h2>
+        <p class="theater__sub reveal">Pick a question and watch the actual pipeline run: three retrieval engines fan out, the planner fills gaps, evidence gets reranked, and the answer arrives — cited.</p>
+      </header>
+
+      <div class="theater__stage">
+        <div class="theater__questions" role="tablist" aria-label="Example questions">
+          <button class="q-chip is-active" role="tab" aria-selected="true" data-q="0">Where are Slack request signatures verified?</button>
+          <button class="q-chip" role="tab" aria-selected="false" data-q="1">How does a failed CI run become a Slack alert?</button>
+          <button class="q-chip" role="tab" aria-selected="false" data-q="2">What stops retrieved code from hijacking the prompt?</button>
+        </div>
+
+        <div class="theater__viz" id="viz" aria-live="polite">
+          <div class="lane" data-lane="fts">
+            <p class="lane__label"><span class="lane__dot"></span>FTS5 · lexical</p>
+            <div class="lane__chips"></div>
+          </div>
+          <div class="lane" data-lane="vec">
+            <p class="lane__label"><span class="lane__dot"></span>Vectorize · semantic</p>
+            <div class="lane__chips"></div>
+          </div>
+          <div class="lane" data-lane="graph">
+            <p class="lane__label"><span class="lane__dot"></span>Code graph · calls/imports</p>
+            <div class="lane__chips"></div>
+          </div>
+
+          <div class="planner" id="planner">
+            <p class="planner__label">agent planner</p>
+            <div class="planner__lines"></div>
+          </div>
+
+          <div class="verdict" id="verdict">
+            <div class="verdict__bar"><span class="verdict__stage">rerank</span><span class="verdict__fill"></span></div>
+            <div class="verdict__answer">
+              <p class="verdict__text"></p>
+              <div class="verdict__cites"></div>
+            </div>
+          </div>
+        </div>
       </div>
     </section>
 
@@ -278,6 +376,10 @@
     <p class="footer__meta">MIT licensed · built on Cloudflare &amp; GitHub Actions</p>
   </footer>
 
+  <div class="scroll-beam" aria-hidden="true"><span id="scrollBeamFill"></span></div>
+
   <script src="main.js"></script>
+  <script src="hero-code.js"></script>
+  <script src="theater.js"></script>
 </body>
 </html>
