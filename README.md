@@ -6,8 +6,8 @@
 <h1 align="center">Beacon</h1>
 
 <p align="center">
-  <strong>Ask your codebase anything — from Slack, with answers grounded in your
-  actual code and cited down to the file and line.</strong>
+  <strong>The agentic dev loop, in Slack — cited answers, PR reviews, fix PRs,
+  and CI triage, grounded in your actual code down to the file and line.</strong>
 </p>
 
 <p align="center">
@@ -39,10 +39,10 @@ trusting an LLM that has never seen your codebase and invents plausible
 nonsense. Generic AI assistants can't cite your code; code search can't answer
 questions.
 
-**Beacon closes the gap.** It indexes your GitHub repos into a semantic +
-lexical + call-graph index, retrieves real evidence for every question, and
-answers **only from that evidence** — with clickable citations, right in the
-Slack thread where the question was asked.
+**Beacon runs the dev loop between GitHub and Slack.** It indexes your repos
+into a semantic + lexical + call-graph index, then works the whole cycle from
+the thread: cited answers, PR reviews, fix PRs, and CI-failure triage — every
+action grounded **only in retrieved evidence**.
 
 ## Why it's different
 
