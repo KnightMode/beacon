@@ -234,7 +234,7 @@
     play(0);
   };
   if ("IntersectionObserver" in window) {
-    const target = document.querySelector(".theater__head") || viz;
+    const target = document.querySelector(".theater__questions") || viz;
     const io = new IntersectionObserver(
       (entries) => {
         entries.forEach((e) => {
