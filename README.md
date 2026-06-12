@@ -70,6 +70,11 @@ Slack thread where the question was asked.
   review informed by the indexed codebase.
 - **PR creation** — describe an issue in a thread, react with :rocket:, and the
   bot proposes file edits and opens a pull request.
+- **CI-failure triage** — when a GitHub Actions run fails on an indexed repo,
+  Beacon posts a *cited diagnosis* to the repo's Slack channel — grounded in the
+  failing logs and the head commit's diff — and a :rocket: reaction opens a fix
+  PR. Transient/infra flakes (timeouts, rate limits, OOM) get a re-run nudge
+  instead of a false alarm.
 - **Self-serve indexing** — `@bot index owner/repo` onboards a repo from Slack;
   `index status` shows live progress per repo.
 - **Fully automatic indexing** — install the companion GitHub App and every push
