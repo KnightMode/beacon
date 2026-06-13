@@ -74,3 +74,19 @@ is missing `Access: Apps and Policies Write`. The first setup may still have
 created the Zero Trust organization and OTP identity provider; after updating
 the `CLOUDFLARE_API_TOKEN` secret, rerun the workflow and it will reuse those
 resources.
+
+## Temporarily make the site public
+
+Run the `Make site public` workflow. It deletes the Access application for
+`beacon-90k.pages.dev`, which makes Cloudflare Pages public again. It does not
+delete the Zero Trust organization or OTP identity provider, so you can re-enable
+login later by running `Configure site Access`.
+
+Local equivalent:
+
+```bash
+CLOUDFLARE_ACCOUNT_ID=<account-id> \
+CLOUDFLARE_API_TOKEN=<api-token> \
+ACCESS_SITE_HOSTNAME=beacon-90k.pages.dev \
+npm run remove:site-access
+```
