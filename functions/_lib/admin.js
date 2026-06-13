@@ -312,9 +312,8 @@ export async function handleError(err) {
 }
 
 export function validateOAuthState(request, expectedState) {
-  if (!expectedState) return;
   const cookie = cookieValue(request.headers.get('cookie') || '', 'beacon_oauth_state');
-  if (!cookie || cookie !== expectedState) {
+  if (!expectedState || !cookie || cookie !== expectedState) {
     throw new HttpError(400, 'Invalid OAuth state. Start sign-in again.');
   }
 }

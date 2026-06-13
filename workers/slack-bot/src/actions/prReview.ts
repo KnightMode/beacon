@@ -435,7 +435,10 @@ async function assertTenantCanAccessRepo(
   teamId?: string,
 ): Promise<void> {
   const access = await getTenantRepoAccess(env, teamId);
-  if (!access) return;
+  if (!access) {
+    if (teamId) throw new Error('This Slack workspace is not onboarded yet.');
+    return;
+  }
   if (!access.repoIds.includes(fullName.toLowerCase())) {
     throw new Error(`Repo ${fullName} is not selected for this Slack workspace.`);
   }

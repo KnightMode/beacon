@@ -256,6 +256,16 @@ CREATE TABLE IF NOT EXISTS ci_triage_runs (
   PRIMARY KEY (run_id, run_attempt)
 );
 
+CREATE TABLE IF NOT EXISTS tenant_ci_triage_runs (
+  run_id        INTEGER NOT NULL,
+  run_attempt   INTEGER NOT NULL,
+  slack_team_id TEXT NOT NULL,
+  repo_id       TEXT NOT NULL,
+  message_ts    TEXT,
+  created_at    TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (run_id, run_attempt, slack_team_id)
+);
+
 -- ---- Future production auth (NOT used by prototype) --------------------------
 CREATE TABLE IF NOT EXISTS users (
   id                TEXT PRIMARY KEY,               -- internal user id
@@ -291,6 +301,7 @@ CREATE INDEX IF NOT EXISTS idx_edges_repo_type        ON code_edges (repo_id, ed
 CREATE INDEX IF NOT EXISTS idx_edges_repo_type_to_symbol ON code_edges (repo_id, edge_type, to_symbol);
 CREATE INDEX IF NOT EXISTS idx_allowlist_enabled      ON prototype_repo_allowlist (enabled);
 CREATE INDEX IF NOT EXISTS idx_ci_triage_repo         ON ci_triage_runs (repo_id);
+CREATE INDEX IF NOT EXISTS idx_tenant_ci_triage_repo  ON tenant_ci_triage_runs (repo_id, slack_team_id);
 CREATE INDEX IF NOT EXISTS idx_perms_user             ON github_user_repo_permissions (user_id);
 CREATE INDEX IF NOT EXISTS idx_tenant_members_user    ON tenant_members (slack_user_id);
 CREATE INDEX IF NOT EXISTS idx_tenant_repos_repo      ON tenant_repos (repo_id);
