@@ -66,10 +66,13 @@ export async function onRequestGet(context) {
     });
     return redirect('/admin/onboarding/', { 'set-cookie': cookie });
   } catch (err) {
+    console.error('Slack OAuth callback failed', err);
     if (new URL(context.request.url).pathname.endsWith('/callback.json')) {
       return err instanceof HttpError ? json({ ok: false, error: err.message }, err.status) : handleError(err);
     }
-    const message = err instanceof HttpError ? err.message : 'Slack sign-in failed.';
+    const message = err instanceof HttpError
+      ? err.message
+      : `Slack sign-in failed: ${err?.message || 'Unexpected error'}`;
     return redirect(`/admin/onboarding/?error=${encodeURIComponent(message)}`);
   }
 }
