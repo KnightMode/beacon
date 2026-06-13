@@ -153,20 +153,24 @@ export async function linkPendingInstallationRepos(
   return results.length;
 }
 
-export async function getSlackTeamIdForRepo(
+export async function getSlackTeamIdsForRepo(
   env: Env,
   repoId: string,
-): Promise<string | null> {
-  const row = await env.DB.prepare(
-    `SELECT t.slack_team_id
+): Promise<string[]> {
+  const { results } = await env.DB.prepare(
+    `SELECT DISTINCT t.slack_team_id
      FROM tenants t
      JOIN tenant_repos tr ON tr.tenant_id = t.id
-     WHERE tr.repo_id = ?1 AND tr.enabled = 1 AND t.status = 'ACTIVE'
-     LIMIT 1`,
+     JOIN tenant_ci_notify_channels nc
+       ON nc.tenant_id = t.id AND nc.repo_id = tr.repo_id
+     WHERE tr.repo_id = ?1
+       AND tr.enabled = 1
+       AND t.status = 'ACTIVE'
+     ORDER BY t.slack_team_id`,
   )
     .bind(repoId)
-    .first<{ slack_team_id: string }>();
-  return row?.slack_team_id ?? null;
+    .all<{ slack_team_id: string }>();
+  return results.map((row) => row.slack_team_id);
 }
 
 export async function isAllowlisted(env: Env, repoId: string): Promise<boolean> {
