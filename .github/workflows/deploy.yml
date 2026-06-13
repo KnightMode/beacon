@@ -71,6 +71,30 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - name: Sync deploy-managed secrets
+        working-directory: workers/slack-bot
+        run: |
+          set -euo pipefail
+
+          put_secret() {
+            local name="$1"
+            local value="$2"
+            if [ -z "$value" ]; then
+              echo "::error::$name is not configured in GitHub Actions secrets"
+              exit 1
+            fi
+            printf '%s' "$value" | npx wrangler secret put "$name"
+          }
+
+          put_secret SLACK_TOKEN_ENCRYPTION_SECRET "$SLACK_TOKEN_ENCRYPTION_SECRET"
+          put_secret GITHUB_PAT "$GITHUB_PAT"
+          put_secret EVAL_TOKEN "$EVAL_TOKEN"
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          SLACK_TOKEN_ENCRYPTION_SECRET: ${{ secrets.SLACK_TOKEN_ENCRYPTION_SECRET }}
+          GITHUB_PAT: ${{ secrets.INDEXER_GITHUB_PAT }}
+          EVAL_TOKEN: ${{ secrets.EVAL_TOKEN }}
       - name: Deploy
         working-directory: workers/slack-bot
         run: npx wrangler deploy
