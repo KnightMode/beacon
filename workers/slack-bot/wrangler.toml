@@ -10,7 +10,7 @@ mode = "smart"
 # ---- Vars (non-secret config) ----------------------------------------------
 [vars]
 EMBEDDING_MODEL = "@cf/google/embeddinggemma-300m"
-LLM_MODEL = "@cf/moonshotai/kimi-k2.6"
+LLM_MODEL = "@cf/moonshotai/kimi-k2.7-code"
 # Agentic retrieval planner loop for Q&A; set to "false" to force single-shot.
 AGENTIC_RETRIEVAL = "true"
 # Bot user id is used to strip the leading mention from app_mention text.

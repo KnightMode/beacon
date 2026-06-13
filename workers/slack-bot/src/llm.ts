@@ -43,7 +43,7 @@ export interface LlmAnswer {
 /**
  * Workers AI text-generation responses come in two shapes depending on model:
  * - legacy (llama-style): { response: "..." }
- * - OpenAI-style (kimi-k2.6 etc.): { choices: [{ message: { content } }] },
+ * - OpenAI-style (kimi-k2.7-code etc.): { choices: [{ message: { content } }] },
  *   with streaming deltas at choices[0].delta.content (reasoning models may
  *   emit reasoning_content-only deltas, which must be ignored).
  */
@@ -110,7 +110,7 @@ export async function generateAnswer(
     messages: buildMessages(question, packed, history),
     max_tokens: 1024,
     temperature: 0.2,
-    // Disable reasoning/thinking on models that support it (e.g. Kimi K2.6)
+    // Disable reasoning/thinking on models that support it (e.g. Kimi K2.7)
     // so the token budget goes entirely to the visible answer.
     chat_template_kwargs: { thinking: false },
   } as never)) as unknown as LlmResponse;

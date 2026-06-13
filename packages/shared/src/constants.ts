@@ -40,7 +40,7 @@ export type JobType = (typeof JOB_TYPES)[keyof typeof JOB_TYPES];
 /** Default model ids; overridable via env vars in every component. */
 export const DEFAULT_EMBEDDING_MODEL = '@cf/google/embeddinggemma-300m';
 export const DEFAULT_EMBEDDING_DIMENSIONS = 768;
-export const DEFAULT_LLM_MODEL = '@cf/moonshotai/kimi-k2.6';
+export const DEFAULT_LLM_MODEL = '@cf/moonshotai/kimi-k2.7-code';
 
 /** Retrieval / chunking tuning knobs. */
 export const MAX_CHUNK_CHARS = 8_000;
