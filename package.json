@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "description": "Slack Code Intelligence Bot — answer questions across GitHub repos using a pre-built tree-sitter + vector index on Cloudflare.",
-  "license": "MIT",
+  "license": "UNLICENSED",
   "workspaces": [
     "packages/*",
     "workers/*",
