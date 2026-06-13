@@ -35,6 +35,7 @@ Example values:
 allowed_emails: differentialcircuit@gmail.com
 allowed_domains: example.com
 site_hostname: beacon-90k.pages.dev
+auth_domain: beacon-90k.cloudflareaccess.com
 session_duration: 24h
 ```
 
@@ -48,12 +49,14 @@ CLOUDFLARE_ACCOUNT_ID=<account-id> \
 CLOUDFLARE_API_TOKEN=<api-token> \
 ACCESS_ALLOWED_EMAILS=differentialcircuit@gmail.com \
 ACCESS_SITE_HOSTNAME=beacon-90k.pages.dev \
+ACCESS_AUTH_DOMAIN=beacon-90k.cloudflareaccess.com \
 npm run configure:site-access
 ```
 
-The workflow creates or reuses a Cloudflare One-time PIN identity provider,
-creates or reuses an Access self-hosted application for the hostname, and
-creates or updates an allow policy named `Allow approved email OTP`.
+The workflow creates or reuses the Zero Trust organization, creates or reuses a
+Cloudflare One-time PIN identity provider, creates or reuses an Access
+self-hosted application for the hostname, and creates or updates an allow policy
+named `Allow approved email OTP`.
 
 If the Access application already has an explicit identity-provider allow-list,
 the script adds the One-time PIN provider to that list. If the allow-list is
