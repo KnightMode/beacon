@@ -60,6 +60,8 @@ For the Cloudflare Pages admin portal, the `Configure site Access` workflow
 updates the Pages project and redeploys it with:
 
 - **D1 binding:** `DB` pointing at the same `scintel` database.
+- **D1 tenant migrations:** `0004_tenants.sql` and
+  `0005_tenant_ci_triage_runs.sql` applied to the remote database.
 - **Secrets from GitHub Actions:** `ADMIN_SESSION_SECRET`, `SLACK_CLIENT_SECRET`,
   `SLACK_TOKEN_ENCRYPTION_SECRET`, and optionally `PIPELINE_DISPATCH_TOKEN` and
   `GITHUB_APP_PRIVATE_KEY`.
@@ -78,6 +80,10 @@ If Slack OAuth redirects back with `Cannot read properties of undefined
 (reading 'batch')`, the Pages deployment does not have the `DB` binding yet.
 Rerun `Configure site Access` and keep the default D1 values unless you created
 a different database.
+
+If Slack OAuth redirects back with `D1_ERROR: no such table: tenants`, the
+remote database is missing the admin tenant migrations. `Configure site Access`
+now applies those migrations automatically before deploying Pages.
 
 Admin portal Pages Functions live at `functions/` (repo root). Wrangler reads
 that directory from the project root when you run `wrangler pages dev site` or
