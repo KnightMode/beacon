@@ -6,6 +6,8 @@ const accountId = requiredEnv('CLOUDFLARE_ACCOUNT_ID');
 const apiToken = requiredEnv('CLOUDFLARE_API_TOKEN');
 const hostname = cleanHostname(process.env.ACCESS_SITE_HOSTNAME || 'beacon-90k.pages.dev');
 const appName = process.env.ACCESS_APP_NAME?.trim() || 'Beacon marketing site';
+const organizationName = process.env.ACCESS_ORGANIZATION_NAME?.trim() || 'Beacon';
+const authDomain = cleanAuthDomain(process.env.ACCESS_AUTH_DOMAIN || 'beacon-90k.cloudflareaccess.com');
 const policyName = process.env.ACCESS_POLICY_NAME?.trim() || 'Allow approved email OTP';
 const sessionDuration = process.env.ACCESS_SESSION_DURATION?.trim() || '24h';
 const allowedEmails = splitCsv(process.env.ACCESS_ALLOWED_EMAILS || 'differentialcircuit@gmail.com');
@@ -22,15 +24,41 @@ const includeRules = [
   ...allowedDomains.map((domain) => ({ email_domain: { domain } })),
 ];
 
+await ensureAccessOrganization();
 const otpProvider = await ensureOtpIdentityProvider();
 const app = await ensureAccessApplication(otpProvider.id);
 const policy = await ensureAccessPolicy(app.id);
 
 console.log(`Cloudflare Access is configured for ${hostname}.`);
+console.log(`Organization auth domain: ${authDomain}`);
 console.log(`Application: ${app.name} (${app.id})`);
 console.log(`Policy: ${policy.name} (${policy.id})`);
 console.log(`Allowed emails: ${allowedEmails.length || 0}`);
 console.log(`Allowed email domains: ${allowedDomains.length || 0}`);
+
+async function ensureAccessOrganization() {
+  try {
+    const response = await cfFetch('/access/organizations');
+    console.log(`Using existing Zero Trust organization: ${response.result.auth_domain}`);
+    return response.result;
+  } catch (error) {
+    if (!isAccessNotEnabledError(error)) {
+      throw error;
+    }
+  }
+
+  const response = await cfFetch('/access/organizations', {
+    method: 'POST',
+    body: {
+      name: organizationName,
+      auth_domain: authDomain,
+      session_duration: sessionDuration,
+    },
+  });
+
+  console.log(`Created Zero Trust organization: ${response.result.auth_domain}`);
+  return response.result;
+}
 
 async function ensureOtpIdentityProvider() {
   const providers = await listAll('/access/identity_providers');
@@ -241,4 +269,17 @@ function requiredEnv(name) {
   }
 
   return value;
+}
+
+function cleanAuthDomain(value) {
+  const domain = cleanHostname(value);
+  if (domain.endsWith('.cloudflareaccess.com')) {
+    return domain;
+  }
+
+  return `${domain}.cloudflareaccess.com`;
+}
+
+function isAccessNotEnabledError(error) {
+  return error instanceof Error && error.message.includes('access.api.error.not_enabled');
 }
