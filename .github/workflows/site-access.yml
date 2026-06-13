@@ -1,9 +1,10 @@
 name: Configure site Access
 
-# Manually configures Cloudflare Access for the Cloudflare Pages marketing site.
+# Manually configures Cloudflare Access for the Cloudflare Pages admin portal.
 # The CLOUDFLARE_API_TOKEN secret needs:
 # - Access: Apps and Policies Write
 # - Access: Organizations, Identity Providers, and Groups Write
+# - Cloudflare Pages: Edit
 
 on:
   workflow_dispatch:
@@ -22,10 +23,28 @@ on:
         required: true
         default: 'beacon-90k.pages.dev'
         type: string
+      protected_paths:
+        description: 'Comma-separated hostname paths to protect'
+        required: true
+        default: '/admin*,/api/admin*,/oauth/slack/callback*,/oauth/github/callback*'
+        type: string
+      pages_project_name:
+        description: 'Cloudflare Pages project that receives ADMIN_CF_ACCESS_* vars'
+        required: true
+        default: 'beacon'
+        type: string
+      pages_environment:
+        description: 'Pages environment to update with ADMIN_CF_ACCESS_* vars'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+          - production
+          - preview
       app_name:
         description: 'Cloudflare Access application name'
         required: true
-        default: 'Beacon marketing site'
+        default: 'Beacon admin portal'
         type: string
       auth_domain:
         description: 'Zero Trust team domain for Access login'
@@ -58,6 +77,9 @@ jobs:
           ACCESS_ALLOWED_EMAILS: ${{ inputs.allowed_emails }}
           ACCESS_ALLOWED_DOMAINS: ${{ inputs.allowed_domains }}
           ACCESS_SITE_HOSTNAME: ${{ inputs.site_hostname }}
+          ACCESS_PROTECTED_PATHS: ${{ inputs.protected_paths }}
+          ACCESS_PAGES_PROJECT_NAME: ${{ inputs.pages_project_name }}
+          ACCESS_PAGES_ENVIRONMENT: ${{ inputs.pages_environment }}
           ACCESS_APP_NAME: ${{ inputs.app_name }}
           ACCESS_AUTH_DOMAIN: ${{ inputs.auth_domain }}
           ACCESS_SESSION_DURATION: ${{ inputs.session_duration }}

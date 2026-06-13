@@ -9,6 +9,7 @@
  */
 
 import type { Env } from './env.js';
+import { getSlackBotToken } from './tenant.js';
 
 export interface Turn {
   role: 'user' | 'assistant';
@@ -57,6 +58,7 @@ export async function fetchThreadHistory(
   channel: string,
   threadTs: string,
   excludeTs?: string,
+  teamId?: string,
 ): Promise<Turn[]> {
   try {
     const url =
@@ -65,7 +67,7 @@ export async function fetchThreadHistory(
       `&ts=${encodeURIComponent(threadTs)}` +
       `&limit=20`;
     const res = await fetch(url, {
-      headers: { authorization: `Bearer ${env.SLACK_BOT_TOKEN}` },
+      headers: { authorization: `Bearer ${await getSlackBotToken(env, teamId)}` },
     });
     const data = (await res.json()) as RepliesResponse;
 

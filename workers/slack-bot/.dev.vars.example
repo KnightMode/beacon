@@ -1,0 +1,8 @@
+# Copy to workers/slack-bot/.dev.vars. Used by: npm run dev:bot
+# SLACK_TOKEN_ENCRYPTION_SECRET must match repo root .dev.vars.
+
+SLACK_SIGNING_SECRET=
+SLACK_BOT_TOKEN=
+SLACK_TOKEN_ENCRYPTION_SECRET=
+GITHUB_PAT=
+EVAL_TOKEN=

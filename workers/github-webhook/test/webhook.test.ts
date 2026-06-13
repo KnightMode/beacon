@@ -28,7 +28,7 @@ function workflowRunPayload(
 }
 
 /** Minimal Env stub: allowlist lookup + triage queue capture. */
-function stubEnv(opts: { allowlisted: boolean }): {
+function stubEnv(opts: { allowlisted: boolean; slackTeamIds?: string[] }): {
   env: Env;
   sent: TriageJob[];
 } {
@@ -36,10 +36,15 @@ function stubEnv(opts: { allowlisted: boolean }): {
   const env = {
     PIPELINE_DISPATCH_REPO: 'KnightMode/beacon',
     DB: {
-      prepare: () => ({
+      prepare: (_sql: string) => ({
         bind: () => ({
           first: async () =>
             opts.allowlisted ? { repo_id: 'knightmode/viper' } : null,
+          all: async () => ({
+            results: (opts.slackTeamIds ?? []).map((slack_team_id) => ({
+              slack_team_id,
+            })),
+          }),
         }),
       }),
     },
@@ -100,6 +105,18 @@ describe('handleWebhookEvent(workflow_run)', () => {
     });
   });
 
+  it('enqueues one triage job per mapped tenant for shared repos', async () => {
+    const { env, sent } = stubEnv({
+      allowlisted: true,
+      slackTeamIds: ['T_ALPHA', 'T_BRAVO'],
+    });
+    const res = await handleWebhookEvent(env, 'workflow_run', workflowRunPayload());
+    const body = (await res.json()) as { enqueued?: boolean };
+    expect(body.enqueued).toBe(true);
+    expect(sent.map((job) => job.slackTeamId)).toEqual(['T_ALPHA', 'T_BRAVO']);
+    expect(sent.every((job) => job.runId === 1234 && job.runAttempt === 2)).toBe(true);
+  });
+
   it('defaults runAttempt to 1 when absent', async () => {
     const { env, sent } = stubEnv({ allowlisted: true });
     const payload = workflowRunPayload({ run_attempt: undefined });
@@ -122,5 +139,41 @@ describe('handleWebhookEvent(workflow_run)', () => {
     const body = (await res.json()) as { ignored?: string };
     expect(body.ignored).toBe('not-failure');
     expect(sent).toHaveLength(0);
+  });
+});
+
+describe('handleWebhookEvent(installation_repositories)', () => {
+  it('revokes tenant and pending repo grants when repos are removed from an installation', async () => {
+    const batches: Array<{ sql: string; args: unknown[] }> = [];
+    const env = {
+      DB: {
+        prepare: (sql: string) => ({
+          bind: (...args: unknown[]) => ({
+            sql,
+            args,
+            run: async () => undefined,
+          }),
+        }),
+        batch: async (statements: Array<{ sql: string; args: unknown[] }>) => {
+          batches.push(...statements);
+          return [];
+        },
+      },
+    } as unknown as Env;
+
+    const res = await handleWebhookEvent(env, 'installation_repositories', {
+      action: 'removed',
+      installation: { id: 98765 },
+      repositories_removed: [{ full_name: 'KnightMode/viper' }],
+    });
+    const body = (await res.json()) as { revoked?: string[]; enqueued?: string[] };
+
+    expect(body.revoked).toEqual(['KnightMode/viper']);
+    expect(body.enqueued).toEqual([]);
+    expect(batches).toHaveLength(2);
+    expect(batches[0].sql).toContain('UPDATE tenant_repos');
+    expect(batches[0].args).toEqual(['knightmode/viper', 98765]);
+    expect(batches[1].sql).toContain('DELETE FROM pending_installation_repos');
+    expect(batches[1].args).toEqual([98765, 'knightmode/viper']);
   });
 });

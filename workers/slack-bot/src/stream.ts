@@ -21,6 +21,7 @@ import {
   buildRetrievalText,
   type Turn,
 } from './history.js';
+import { getSlackBotToken, markFirstCitedAnswer } from './tenant.js';
 
 const SLACK_API = 'https://slack.com/api';
 // Steady flush cadence for appendStream. Token reading and Slack writes are
@@ -88,12 +89,13 @@ export async function call(
   env: Env,
   method: string,
   body: Record<string, unknown>,
+  teamId?: string,
 ): Promise<SlackResult> {
   const res = await fetch(`${SLACK_API}/${method}`, {
     method: 'POST',
     headers: {
       'content-type': 'application/json; charset=utf-8',
-      authorization: `Bearer ${env.SLACK_BOT_TOKEN}`,
+      authorization: `Bearer ${await getSlackBotToken(env, teamId)}`,
     },
     body: JSON.stringify(body),
   });
@@ -124,7 +126,7 @@ export async function streamAnswer(env: Env, t: StreamTarget): Promise<void> {
       channel_id: t.channel,
       thread_ts: t.threadTs,
       status,
-    }).catch(() => undefined);
+    }, t.teamId).catch(() => undefined);
   });
   setStatus('is reading your question…');
 
@@ -135,6 +137,7 @@ export async function streamAnswer(env: Env, t: StreamTarget): Promise<void> {
     t.channel,
     t.threadTs,
     t.messageTs,
+    t.teamId,
   ).catch(() => []);
 
   const write = async (chunks: MarkdownChunk[]): Promise<void> => {
@@ -145,24 +148,24 @@ export async function streamAnswer(env: Env, t: StreamTarget): Promise<void> {
         recipient_user_id: t.userId,
         recipient_team_id: t.teamId,
         chunks,
-      });
+      }, t.teamId);
       if (!started.ok || !started.ts) {
         throw new Error(`startStream: ${started.error ?? 'unknown'}`);
       }
       ts = started.ts;
     } else {
-      await call(env, 'chat.appendStream', { channel: t.channel, ts, chunks });
+      await call(env, 'chat.appendStream', { channel: t.channel, ts, chunks }, t.teamId);
     }
   };
 
   try {
     const searchText = buildRetrievalText(history, t.question);
-    const outcome = await retrieveSmart(env, t.question, searchText, setStatus);
+    const outcome = await retrieveSmart(env, t.question, searchText, setStatus, t.teamId);
     setStatus('is drafting a grounded answer…');
 
     if (outcome.packed.used.length === 0) {
       await write([markdown(NO_RESULTS_TEXT)]);
-      await call(env, 'chat.stopStream', { channel: t.channel, ts });
+      await call(env, 'chat.stopStream', { channel: t.channel, ts }, t.teamId);
       return;
     }
 
@@ -215,7 +218,10 @@ export async function streamAnswer(env: Env, t: StreamTarget): Promise<void> {
       channel: t.channel,
       ts,
       ...(blocks.length ? { blocks } : {}),
-    });
+    }, t.teamId);
+    if (outcome.packed.citations.length > 0) {
+      await markFirstCitedAnswer(env, t.teamId).catch(() => undefined);
+    }
   } catch (err) {
     const message = (err as Error).message;
     if (ts) {
@@ -223,7 +229,7 @@ export async function streamAnswer(env: Env, t: StreamTarget): Promise<void> {
         channel: t.channel,
         ts,
         chunks: [markdown(`:warning: Something went wrong: ${message}`)],
-      }).catch(() => undefined);
+      }, t.teamId).catch(() => undefined);
     } else {
       // Stream never opened — fall back to a normal post so the user still gets
       // an answer even when the streaming API is unavailable.
@@ -235,11 +241,20 @@ export async function streamAnswer(env: Env, t: StreamTarget): Promise<void> {
 
 /** Non-streaming fallback: post the full formatted answer once. */
 async function fallback(env: Env, t: StreamTarget, history: Turn[]): Promise<void> {
-  const message = await buildAnswer(env, t.question, history);
+  const { message, hadCitations } = await buildAnswer(
+    env,
+    t.question,
+    history,
+    undefined,
+    t.teamId,
+  );
   await call(env, 'chat.postMessage', {
     channel: t.channel,
     thread_ts: t.threadTs,
     text: message.text,
     blocks: message.blocks,
-  });
+  }, t.teamId);
+  if (hadCitations) {
+    await markFirstCitedAnswer(env, t.teamId).catch(() => undefined);
+  }
 }

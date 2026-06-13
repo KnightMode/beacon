@@ -32,17 +32,18 @@ export async function retrieveSmart(
   question: string,
   searchText?: string,
   onProgress?: ProgressFn,
+  teamId?: string,
 ): Promise<RetrievalOutcome> {
   if (env.AGENTIC_RETRIEVAL !== 'false') {
     try {
-      return await agenticRetrieve(env, question, searchText, onProgress);
+      return await agenticRetrieve(env, question, searchText, onProgress, teamId);
     } catch (err) {
       console.error('agentic retrieval failed; falling back to single-shot', {
         error: (err as Error).message,
       });
     }
   }
-  return retrieve(env, question, searchText);
+  return retrieve(env, question, searchText, teamId);
 }
 
 /**
@@ -68,12 +69,13 @@ export async function retrieve(
   env: Env,
   question: string,
   searchText?: string,
+  teamId?: string,
 ): Promise<RetrievalOutcome> {
   // searchText may be an enriched follow-up query (prev question + current);
   // the LLM still receives the real `question` separately.
   const query = searchText ?? question;
   const parsed = parseQuery(query);
-  const allowlist = scopeAllowlist(query, await getAllowlistedRepoIds(env));
+  const allowlist = scopeAllowlist(query, await getAllowlistedRepoIds(env, teamId));
 
   if (allowlist.length === 0) {
     return {
