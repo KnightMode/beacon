@@ -22,7 +22,7 @@ export async function requireAdminAccess(context) {
   const issuer = normalizeIssuer(env.ADMIN_CF_ACCESS_ISSUER);
   const audiences = splitCsv(env.ADMIN_CF_ACCESS_AUD);
   if (!issuer || audiences.length === 0) {
-    throw new HttpError(403, 'Cloudflare Access is not configured for the admin portal.');
+    throw new HttpError(403, 'Admin access is unavailable.');
   }
 
   const token = request.headers.get(ACCESS_HEADER);

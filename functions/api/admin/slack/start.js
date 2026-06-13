@@ -6,13 +6,13 @@ export async function onRequestGet(context) {
     return redirect('/oauth/slack/callback?mock=1');
   }
   if (!context.env.SLACK_CLIENT_ID?.trim()) {
-    return redirect('/admin/onboarding/?error=SLACK_CLIENT_ID%20is%20not%20configured.');
+    return redirect('/admin/onboarding/?error=Slack%20sign-in%20is%20not%20configured.%20Contact%20an%20administrator.');
   }
   if (!context.env.ADMIN_SESSION_SECRET?.trim()) {
-    return redirect('/admin/onboarding/?error=ADMIN_SESSION_SECRET%20is%20not%20configured.');
+    return redirect('/admin/onboarding/?error=Slack%20sign-in%20is%20not%20configured.%20Contact%20an%20administrator.');
   }
   if (!context.env.SLACK_TOKEN_ENCRYPTION_SECRET?.trim()) {
-    return redirect('/admin/onboarding/?error=SLACK_TOKEN_ENCRYPTION_SECRET%20is%20not%20configured.');
+    return redirect('/admin/onboarding/?error=Slack%20sign-in%20is%20not%20configured.%20Contact%20an%20administrator.');
   }
 
   const redirectUri = `${url.origin}/oauth/slack/callback`;

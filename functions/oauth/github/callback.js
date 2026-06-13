@@ -1,5 +1,6 @@
 import {
   clearGithubLinkCookie,
+  clientErrorMessage,
   HttpError,
   readSession,
   recordGithubInstallation,
@@ -53,7 +54,8 @@ export async function onRequestGet(context) {
       'set-cookie': clearGithubLinkCookie(context.request),
     });
   } catch (err) {
-    const message = err instanceof HttpError ? err.message : 'GitHub connection failed.';
+    console.error('GitHub OAuth callback failed', err);
+    const message = clientErrorMessage(err, 'GitHub connection failed. Try again or contact support.');
     return redirect(`/admin/onboarding/?error=${encodeURIComponent(message)}`);
   }
 }
