@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 const API_BASE = 'https://api.cloudflare.com/client/v4';
+const PAGES_ENVIRONMENTS = ['production', 'preview'];
 
 const accountId = requiredEnv('CLOUDFLARE_ACCOUNT_ID');
 const apiToken = requiredEnv('CLOUDFLARE_API_TOKEN');
@@ -180,31 +181,47 @@ async function updatePagesAccessVars(accessAudiences) {
   }
 
   const project = await getPagesProject();
-  const environmentConfig = project.deployment_configs?.[pagesEnvironment] || {};
-  const envVars = {
-    ...(environmentConfig.env_vars || {}),
+  const deploymentConfigs = pagesDeploymentConfigs(project, pagesEnvironment, (envVars) => ({
+    ...envVars,
     ADMIN_CF_ACCESS_ISSUER: plainTextVar(`https://${authDomain}`),
     ADMIN_CF_ACCESS_AUD: plainTextVar(accessAudiences),
     ADMIN_CF_ACCESS_ALLOWED_EMAILS: plainTextVar(allowedEmails.join(',')),
     ADMIN_CF_ACCESS_ALLOWED_DOMAINS: plainTextVar(allowedDomains.join(',')),
-  };
+  }));
 
   await cfFetch(`/pages/projects/${encodeURIComponent(pagesProjectName)}`, {
     method: 'PATCH',
-    body: {
-      deployment_configs: {
-        [pagesEnvironment]: {
-          ...environmentConfig,
-          env_vars: envVars,
-        },
-      },
-    },
+    body: { deployment_configs: deploymentConfigs },
   });
 }
 
 async function getPagesProject() {
   const response = await cfFetch(`/pages/projects/${encodeURIComponent(pagesProjectName)}`);
   return response.result;
+}
+
+function pagesDeploymentConfigs(project, targetEnvironment, updateEnvVars) {
+  const configs = project.deployment_configs || {};
+  const failOpen = sharedFailOpen(configs);
+  const deploymentConfigs = {};
+
+  for (const environment of PAGES_ENVIRONMENTS) {
+    const config = configs[environment] || {};
+    const envVars = { ...(config.env_vars || {}) };
+    deploymentConfigs[environment] = {
+      ...config,
+      fail_open: failOpen,
+      env_vars: environment === targetEnvironment ? updateEnvVars(envVars) : envVars,
+    };
+  }
+
+  return deploymentConfigs;
+}
+
+function sharedFailOpen(configs) {
+  if (typeof configs.production?.fail_open === 'boolean') return configs.production.fail_open;
+  if (typeof configs.preview?.fail_open === 'boolean') return configs.preview.fail_open;
+  return false;
 }
 
 function plainTextVar(value) {
