@@ -5,12 +5,6 @@ name: Make site public
 # so Access can be re-enabled later by running Configure site Access.
 
 on:
-  push:
-    branches:
-      - KnightMode/access-email-otp
-    paths:
-      - '.github/workflows/site-public.yml'
-      - 'scripts/remove-cloudflare-access.mjs'
   workflow_dispatch:
     inputs:
       site_hostname:
