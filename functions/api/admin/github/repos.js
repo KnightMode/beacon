@@ -50,7 +50,8 @@ export async function onRequestGet(context) {
         source = 'github-api';
       }
     } catch (err) {
-      message = err?.message || 'Could not load repos from GitHub.';
+      console.error('GitHub repo list failed', err);
+      message = 'Could not load repositories from GitHub. Try again or contact support.';
     }
 
     if (repos.length === 0 && !q) {
@@ -115,7 +116,7 @@ async function listReposFromDatabase(env, installationId) {
 function missingGitHubAppConfigMessage(request) {
   const host = new URL(request.url).hostname;
   if (host === 'localhost' || host === '127.0.0.1') {
-    return 'Repo list needs GITHUB_APP_ID and GITHUB_APP_PRIVATE_KEY in .dev.vars.';
+    return 'Repo list is not configured locally. Contact an administrator.';
   }
-  return 'Repo list needs BEACON_GITHUB_APP_ID and BEACON_GITHUB_APP_PRIVATE_KEY configured in GitHub Actions, then Configure site Access rerun.';
+  return 'Repo list is not configured. Contact an administrator.';
 }

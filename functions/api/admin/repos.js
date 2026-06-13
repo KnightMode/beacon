@@ -139,7 +139,8 @@ function repoFromGrant(row) {
 
 async function dispatchIndex(env, repoFullName) {
   if (!env.PIPELINE_DISPATCH_REPO || !env.PIPELINE_DISPATCH_TOKEN) {
-    return 'PIPELINE_DISPATCH_REPO or PIPELINE_DISPATCH_TOKEN is not configured.';
+    console.error('Pipeline dispatch is not configured.');
+    return 'Indexing is not configured. Contact an administrator.';
   }
   const res = await fetch(`https://api.github.com/repos/${env.PIPELINE_DISPATCH_REPO}/dispatches`, {
     method: 'POST',
@@ -157,7 +158,12 @@ async function dispatchIndex(env, repoFullName) {
   });
   if (!res.ok) {
     const text = await res.text().catch(() => '');
-    return `GitHub dispatch failed (${res.status}): ${text.slice(0, 200)}`;
+    console.error('GitHub dispatch failed', {
+      repo: repoFullName,
+      status: res.status,
+      body: text.slice(0, 200),
+    });
+    return 'Could not start indexing for this repository. Try again or contact support.';
   }
   return null;
 }

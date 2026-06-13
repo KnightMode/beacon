@@ -3,6 +3,7 @@ const GITHUB_LINK_COOKIE = 'beacon_github_link';
 const SESSION_TTL = 60 * 60 * 24 * 14;
 const GITHUB_LINK_TTL = 60 * 30;
 const STEP_KEYS = ['slack', 'github', 'repos', 'indexing', 'channel', 'first_answer'];
+export const GENERIC_ERROR_MESSAGE = 'Something went wrong. Try again or contact support.';
 
 export function json(body, status = 200, headers = {}) {
   return new Response(JSON.stringify(body), {
@@ -307,8 +308,21 @@ export async function audit(env, tenantId, actorUserId, eventType, targetType, t
 }
 
 export async function handleError(err) {
-  if (err instanceof HttpError) return json({ ok: false, error: err.message }, err.status);
-  return json({ ok: false, error: err?.message || 'Unexpected error' }, 500);
+  if (err instanceof HttpError && err.status < 500) {
+    return json({ ok: false, error: err.message }, err.status);
+  }
+  logInternalError('Admin request failed', err);
+  const status = err instanceof HttpError && err.status >= 500 ? err.status : 500;
+  return json({ ok: false, error: GENERIC_ERROR_MESSAGE }, status);
+}
+
+export function clientErrorMessage(err, fallback = GENERIC_ERROR_MESSAGE) {
+  if (err instanceof HttpError && err.status < 500) return err.message;
+  return fallback;
+}
+
+export function logInternalError(label, err) {
+  console.error(label, err);
 }
 
 export function validateOAuthState(request, expectedState) {
