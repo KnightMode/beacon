@@ -64,7 +64,7 @@ on:
       github_app_slug:
         description: 'GitHub App slug used by Connect GitHub'
         required: false
-        default: 'beacon'
+        default: 'scintel-indexer'
         type: string
       pipeline_dispatch_repo:
         description: 'Repo that receives repository_dispatch indexing events'
