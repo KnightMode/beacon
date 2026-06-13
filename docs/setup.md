@@ -56,11 +56,13 @@ npm run deploy --workspace workers/slack-bot
 npm run deploy --workspace workers/github-webhook
 ```
 
-For the Cloudflare Pages admin portal, configure the Pages project with:
+For the Cloudflare Pages admin portal, the `Configure site Access` workflow
+updates the Pages project with:
 
 - **D1 binding:** `DB` pointing at the same `scintel` database.
-- **Secrets:** `ADMIN_SESSION_SECRET`, `SLACK_CLIENT_SECRET`,
-  `SLACK_TOKEN_ENCRYPTION_SECRET`, and optionally `PIPELINE_DISPATCH_TOKEN`.
+- **Secrets from GitHub Actions:** `ADMIN_SESSION_SECRET`, `SLACK_CLIENT_SECRET`,
+  `SLACK_TOKEN_ENCRYPTION_SECRET`, and optionally `PIPELINE_DISPATCH_TOKEN` and
+  `GITHUB_APP_PRIVATE_KEY`.
 - **Vars:** `SLACK_CLIENT_ID`, `GITHUB_APP_SLUG`, `PIPELINE_DISPATCH_REPO`, and
   `PIPELINE_DISPATCH_EVENT`.
 - **Cloudflare Access vars:** `ADMIN_CF_ACCESS_ISSUER` and
