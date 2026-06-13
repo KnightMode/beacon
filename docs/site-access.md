@@ -66,3 +66,11 @@ Cloudflare only sends OTP email to users allowed by an Access policy. If the
 login page says a code was sent but no email arrives, verify the entered email
 matches the policy and allowlist `noreply@notify.cloudflare.com` in any mail
 security scanner.
+
+## Troubleshooting
+
+If the workflow fails at `/access/apps` with `Authentication error`, the token
+is missing `Access: Apps and Policies Write`. The first setup may still have
+created the Zero Trust organization and OTP identity provider; after updating
+the `CLOUDFLARE_API_TOKEN` secret, rerun the workflow and it will reuse those
+resources.
