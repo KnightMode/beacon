@@ -266,6 +266,10 @@
     });
   }
 
+  function renderGithubCallbackUrl() {
+    setText("[data-github-callback-url]", `${window.location.origin}/oauth/github/callback`);
+  }
+
   function escapeHtml(value) {
     return value.replace(/[&<>"']/g, (char) => ({
       "&": "&amp;",
@@ -277,6 +281,7 @@
   }
 
   bindForms();
+  renderGithubCallbackUrl();
   const params = new URLSearchParams(window.location.search);
   const urlError = params.get("error");
   if (urlError) {
