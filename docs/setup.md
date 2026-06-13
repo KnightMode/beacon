@@ -48,13 +48,23 @@ Create one at [api.slack.com/apps](https://api.slack.com/apps):
 ## 4. Secrets & deploy
 
 ```bash
-# workers/slack-bot:      SLACK_SIGNING_SECRET, SLACK_BOT_TOKEN, GITHUB_PAT, SLACK_TOKEN_ENCRYPTION_SECRET
-# workers/github-webhook: GITHUB_WEBHOOK_SECRET, ADMIN_TOKEN, PIPELINE_DISPATCH_TOKEN
-npx wrangler secret put <NAME>        # run in each worker directory
+# workers/slack-bot bootstrap secrets:
+npx wrangler secret put SLACK_SIGNING_SECRET
+npx wrangler secret put SLACK_BOT_TOKEN
+
+# workers/github-webhook bootstrap secrets:
+npx wrangler secret put GITHUB_WEBHOOK_SECRET
+npx wrangler secret put ADMIN_TOKEN
+npx wrangler secret put PIPELINE_DISPATCH_TOKEN
 
 npm run deploy --workspace workers/slack-bot
 npm run deploy --workspace workers/github-webhook
 ```
+
+The `Deploy Workers` GitHub Actions workflow automatically syncs the
+deploy-managed slack-bot secrets from repo secrets before each slack-bot deploy:
+`SLACK_TOKEN_ENCRYPTION_SECRET`, `INDEXER_GITHUB_PAT` as Worker `GITHUB_PAT`,
+and `EVAL_TOKEN`.
 
 For the Cloudflare Pages admin portal, the `Configure site Access` workflow
 updates the Pages project and redeploys it with:
