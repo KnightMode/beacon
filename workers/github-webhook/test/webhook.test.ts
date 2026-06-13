@@ -141,3 +141,39 @@ describe('handleWebhookEvent(workflow_run)', () => {
     expect(sent).toHaveLength(0);
   });
 });
+
+describe('handleWebhookEvent(installation_repositories)', () => {
+  it('revokes tenant and pending repo grants when repos are removed from an installation', async () => {
+    const batches: Array<{ sql: string; args: unknown[] }> = [];
+    const env = {
+      DB: {
+        prepare: (sql: string) => ({
+          bind: (...args: unknown[]) => ({
+            sql,
+            args,
+            run: async () => undefined,
+          }),
+        }),
+        batch: async (statements: Array<{ sql: string; args: unknown[] }>) => {
+          batches.push(...statements);
+          return [];
+        },
+      },
+    } as unknown as Env;
+
+    const res = await handleWebhookEvent(env, 'installation_repositories', {
+      action: 'removed',
+      installation: { id: 98765 },
+      repositories_removed: [{ full_name: 'KnightMode/viper' }],
+    });
+    const body = (await res.json()) as { revoked?: string[]; enqueued?: string[] };
+
+    expect(body.revoked).toEqual(['KnightMode/viper']);
+    expect(body.enqueued).toEqual([]);
+    expect(batches).toHaveLength(2);
+    expect(batches[0].sql).toContain('UPDATE tenant_repos');
+    expect(batches[0].args).toEqual(['knightmode/viper', 98765]);
+    expect(batches[1].sql).toContain('DELETE FROM pending_installation_repos');
+    expect(batches[1].args).toEqual([98765, 'knightmode/viper']);
+  });
+});

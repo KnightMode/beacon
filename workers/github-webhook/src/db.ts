@@ -119,6 +119,29 @@ export async function addRepoToInstallationTenants(
   }
 }
 
+export async function revokeRepoFromInstallationTenants(
+  env: Env,
+  installationId: number | undefined,
+  repoId: string,
+): Promise<void> {
+  if (!installationId) return;
+  await env.DB.batch([
+    env.DB.prepare(
+      `UPDATE tenant_repos
+       SET enabled = 0, updated_at = datetime('now')
+       WHERE repo_id = ?1
+         AND tenant_id IN (
+           SELECT tenant_id FROM tenant_github_installations
+           WHERE installation_id = ?2
+         )`,
+    ).bind(repoId, installationId),
+    env.DB.prepare(
+      `DELETE FROM pending_installation_repos
+       WHERE installation_id = ?1 AND repo_id = ?2`,
+    ).bind(installationId, repoId),
+  ]);
+}
+
 /** Backfill tenant repos after the GitHub App install OAuth callback. */
 export async function linkPendingInstallationRepos(
   env: Env,
