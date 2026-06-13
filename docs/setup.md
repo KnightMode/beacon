@@ -24,6 +24,7 @@ Multi-tenant admin portal support needs the tenant migration:
 
 ```bash
 npx wrangler d1 execute scintel --remote --file=packages/shared/migrations/0004_tenants.sql
+npx wrangler d1 execute scintel --remote --file=packages/shared/migrations/0005_tenant_ci_triage_runs.sql
 ```
 
 ## 2. GitHub PAT

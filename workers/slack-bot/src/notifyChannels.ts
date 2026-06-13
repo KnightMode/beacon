@@ -17,6 +17,9 @@ export async function setNotifyChannel(
 ): Promise<string> {
   const repoId = repoRef.toLowerCase();
   const tenantId = await getTenantIdForSlackTeam(env, teamId);
+  if (teamId && !tenantId) {
+    return ':information_source: This workspace is not onboarded yet. Open the admin portal to connect Slack and GitHub first.';
+  }
   const row = tenantId
     ? await env.DB.prepare(
         `SELECT r.full_name
@@ -89,15 +92,14 @@ export async function getNotifyChannel(
 ): Promise<string | null> {
   if (slackTeamId) {
     const tenantId = await getTenantIdForSlackTeam(env, slackTeamId);
-    if (tenantId) {
-      const row = await env.DB.prepare(
-        `SELECT channel_id FROM tenant_ci_notify_channels
-         WHERE tenant_id = ?1 AND repo_id = ?2`,
-      )
-        .bind(tenantId, repoId)
-        .first<{ channel_id: string }>();
-      if (row?.channel_id) return row.channel_id;
-    }
+    if (!tenantId) return null;
+    const row = await env.DB.prepare(
+      `SELECT channel_id FROM tenant_ci_notify_channels
+       WHERE tenant_id = ?1 AND repo_id = ?2`,
+    )
+      .bind(tenantId, repoId)
+      .first<{ channel_id: string }>();
+    return row?.channel_id ?? null;
   }
 
   const row = await env.DB.prepare(

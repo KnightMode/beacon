@@ -28,7 +28,7 @@ function workflowRunPayload(
 }
 
 /** Minimal Env stub: allowlist lookup + triage queue capture. */
-function stubEnv(opts: { allowlisted: boolean }): {
+function stubEnv(opts: { allowlisted: boolean; slackTeamIds?: string[] }): {
   env: Env;
   sent: TriageJob[];
 } {
@@ -36,10 +36,15 @@ function stubEnv(opts: { allowlisted: boolean }): {
   const env = {
     PIPELINE_DISPATCH_REPO: 'KnightMode/beacon',
     DB: {
-      prepare: () => ({
+      prepare: (_sql: string) => ({
         bind: () => ({
           first: async () =>
             opts.allowlisted ? { repo_id: 'knightmode/viper' } : null,
+          all: async () => ({
+            results: (opts.slackTeamIds ?? []).map((slack_team_id) => ({
+              slack_team_id,
+            })),
+          }),
         }),
       }),
     },
@@ -98,6 +103,18 @@ describe('handleWebhookEvent(workflow_run)', () => {
       headSha: 'abc1234def5678',
       runHtmlUrl: 'https://github.com/KnightMode/viper/actions/runs/1234',
     });
+  });
+
+  it('enqueues one triage job per mapped tenant for shared repos', async () => {
+    const { env, sent } = stubEnv({
+      allowlisted: true,
+      slackTeamIds: ['T_ALPHA', 'T_BRAVO'],
+    });
+    const res = await handleWebhookEvent(env, 'workflow_run', workflowRunPayload());
+    const body = (await res.json()) as { enqueued?: boolean };
+    expect(body.enqueued).toBe(true);
+    expect(sent.map((job) => job.slackTeamId)).toEqual(['T_ALPHA', 'T_BRAVO']);
+    expect(sent.every((job) => job.runId === 1234 && job.runAttempt === 2)).toBe(true);
   });
 
   it('defaults runAttempt to 1 when absent', async () => {
