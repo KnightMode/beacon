@@ -33,7 +33,8 @@ Cloudflare credentials locally:
 6. Enter either `allowed_emails`, `allowed_domains`, or both.
 
 The workflow writes the generated `ADMIN_CF_ACCESS_*` runtime vars directly to
-the Pages project. No manual copy/paste step is needed.
+the Pages project, then deploys the Pages site so the Functions runtime receives
+those bindings. No manual copy/paste or separate redeploy step is needed.
 
 Example values:
 
@@ -71,7 +72,8 @@ self-hosted applications for the admin paths, and creates or updates an allow
 policy named `Allow approved email OTP` on each application. It then updates the
 Pages project's `production` runtime variables with the Access issuer, audience,
 and optional in-app email/domain allow-list while preserving unrelated Pages
-environment variables.
+environment variables. Finally, it deploys the Pages site so the new runtime
+variables are available to the middleware.
 
 The Pages app also verifies Cloudflare Access at runtime. For any non-local
 request to `/admin`, `/api/admin`, `/oauth/slack/callback`, or
