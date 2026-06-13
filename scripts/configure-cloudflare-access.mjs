@@ -5,11 +5,14 @@ const API_BASE = 'https://api.cloudflare.com/client/v4';
 const accountId = requiredEnv('CLOUDFLARE_ACCOUNT_ID');
 const apiToken = requiredEnv('CLOUDFLARE_API_TOKEN');
 const hostname = cleanHostname(process.env.ACCESS_SITE_HOSTNAME || 'beacon-90k.pages.dev');
-const appName = process.env.ACCESS_APP_NAME?.trim() || 'Beacon marketing site';
+const appName = process.env.ACCESS_APP_NAME?.trim() || 'Beacon admin portal';
 const organizationName = process.env.ACCESS_ORGANIZATION_NAME?.trim() || 'Beacon';
 const authDomain = cleanAuthDomain(process.env.ACCESS_AUTH_DOMAIN || 'beacon-90k.cloudflareaccess.com');
 const policyName = process.env.ACCESS_POLICY_NAME?.trim() || 'Allow approved email OTP';
 const sessionDuration = process.env.ACCESS_SESSION_DURATION?.trim() || '24h';
+const protectedPaths = splitCsv(
+  process.env.ACCESS_PROTECTED_PATHS || '/admin*,/api/admin*,/oauth/slack/callback*,/oauth/github/callback*',
+).map(normalizeAccessPath);
 const allowedEmails = splitCsv(process.env.ACCESS_ALLOWED_EMAILS || 'differentialcircuit@gmail.com');
 const allowedDomains = splitCsv(process.env.ACCESS_ALLOWED_DOMAINS).map((domain) =>
   domain.replace(/^@/, '').toLowerCase(),
@@ -26,15 +29,24 @@ const includeRules = [
 
 await ensureAccessOrganization();
 const otpProvider = await ensureOtpIdentityProvider();
-const app = await ensureAccessApplication(otpProvider.id);
-const policy = await ensureAccessPolicy(app.id);
+const results = [];
+for (const domain of protectedPaths.map((path) => `${hostname}${path}`)) {
+  const app = await ensureAccessApplication(otpProvider.id, domain);
+  const policy = await ensureAccessPolicy(app.id);
+  results.push({ app, policy, domain });
+}
 
-console.log(`Cloudflare Access is configured for ${hostname}.`);
+console.log(`Cloudflare Access is configured for admin paths on ${hostname}.`);
 console.log(`Organization auth domain: ${authDomain}`);
-console.log(`Application: ${app.name} (${app.id})`);
-console.log(`Policy: ${policy.name} (${policy.id})`);
+for (const { app, policy, domain } of results) {
+  console.log(`Application: ${app.name} (${app.id}) -> ${domain}`);
+  console.log(`Policy: ${policy.name} (${policy.id})`);
+  if (app.aud) console.log(`Audience: ${app.aud}`);
+}
 console.log(`Allowed emails: ${allowedEmails.length || 0}`);
 console.log(`Allowed email domains: ${allowedDomains.length || 0}`);
+console.log(`Set Pages var ADMIN_CF_ACCESS_ISSUER=https://${authDomain}`);
+console.log(`Set Pages var ADMIN_CF_ACCESS_AUD=${results.map(({ app }) => app.aud).filter(Boolean).join(',')}`);
 
 async function ensureAccessOrganization() {
   try {
@@ -82,23 +94,23 @@ async function ensureOtpIdentityProvider() {
   return response.result;
 }
 
-async function ensureAccessApplication(identityProviderId) {
-  const apps = await listAll('/access/apps');
-  const existing = apps.find((candidate) => {
-    return candidate.domain === hostname || candidate.name === appName;
+async function ensureAccessApplication(identityProviderId, domain) {
+  const applications = await listAll('/access/apps');
+  const existing = applications.find((candidate) => {
+    return candidate.domain === domain;
   });
 
   if (existing) {
     console.log(`Using existing Access application: ${existing.id}`);
-    return ensureApplicationAllowsIdentityProvider(existing, identityProviderId);
+    return ensureApplicationAllowsIdentityProvider(existing, identityProviderId, domain);
   }
 
   const response = await cfFetch('/access/apps', {
     method: 'POST',
     body: {
-      name: appName,
+      name: appDisplayName(domain),
       type: 'self_hosted',
-      domain: hostname,
+      domain,
       session_duration: sessionDuration,
       allowed_idps: [identityProviderId],
       policies: [policyPayload()],
@@ -109,7 +121,7 @@ async function ensureAccessApplication(identityProviderId) {
   return response.result;
 }
 
-async function ensureApplicationAllowsIdentityProvider(app, identityProviderId) {
+async function ensureApplicationAllowsIdentityProvider(app, identityProviderId, domain) {
   const allowedIdps = normalizeAllowedIdps(app.allowed_idps);
 
   if (allowedIdps.length === 0 || allowedIdps.includes(identityProviderId)) {
@@ -119,9 +131,9 @@ async function ensureApplicationAllowsIdentityProvider(app, identityProviderId) 
   const response = await cfFetch(`/access/apps/${app.id}`, {
     method: 'PUT',
     body: {
-      name: app.name || appName,
+      name: app.name || appDisplayName(domain),
       type: app.type || 'self_hosted',
-      domain: app.domain || hostname,
+      domain: app.domain || domain,
       allowed_idps: [...allowedIdps, identityProviderId],
       policies: policyReferences(app),
       session_duration: app.session_duration || sessionDuration,
@@ -207,6 +219,11 @@ function policyPayload() {
   };
 }
 
+function appDisplayName(domain) {
+  const path = domain.slice(hostname.length) || '/*';
+  return `${appName} ${path}`;
+}
+
 async function listAll(pathname) {
   const results = [];
   let page = 1;
@@ -261,6 +278,14 @@ function cleanHostname(value) {
     .replace(/^https?:\/\//, '')
     .replace(/\/.*$/, '')
     .toLowerCase();
+}
+
+function normalizeAccessPath(value) {
+  const path = value.trim();
+  if (!path || path === '/') {
+    throw new Error('ACCESS_PROTECTED_PATHS must not include the whole site.');
+  }
+  return path.startsWith('/') ? path : `/${path}`;
 }
 
 function requiredEnv(name) {

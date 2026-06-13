@@ -16,9 +16,14 @@ Wrangler loads secrets from `.dev.vars` at the repo root for `dev:portal`.
 The same encryption secret must appear in `workers/slack-bot/.dev.vars` when
 testing the bot against the shared local D1.
 
-`db:local:init` applies `schema.sql` and `0004_tenants.sql` to the local D1
-database under `.wrangler/state/`. Re-run safely on a fresh machine; if you
-already have local data, use `npm run db:local:migrate` instead.
+`db:local:init` applies `schema.sql`, `0004_tenants.sql`, and
+`0005_tenant_ci_triage_runs.sql` to the local D1 database under
+`.wrangler/state/`. Re-run safely on a fresh machine; if you already have local
+data, use `npm run db:local:migrate` instead.
+
+Cloudflare Access verification is skipped for localhost by default. To exercise
+the deployed fail-closed behavior locally, set `ADMIN_CF_ACCESS_ENFORCE_LOCAL=true`
+and provide the Access issuer/audience vars in `.dev.vars`.
 
 ## Terminal 1 — admin portal
 
