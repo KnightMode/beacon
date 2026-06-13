@@ -103,6 +103,14 @@ export async function indexRepo(
     prior?.status === 'READY' &&
     prior.lastIndexedSha === commitSha
   ) {
+    await updateIndexStatus(d1, repoId, {
+      status: 'READY',
+      jobType: job.jobType,
+      commitSha,
+      finishing: true,
+      error: null,
+    });
+    await setRepoStatus(d1, repoId, 'READY', commitSha);
     log.info('repo already indexed at this commit; skipping', {
       repo: job.repoFullName,
       commitSha,

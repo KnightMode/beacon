@@ -46,17 +46,7 @@ export async function onRequestPost(context) {
         .bind(session.tenantId, repo.repoId, repo.fullName, session.userId || null)
         .run();
 
-      await context.env.DB.prepare(
-        `INSERT INTO repo_index_status (repo_id, status, job_type, updated_at)
-         VALUES (?1, 'PENDING', 'FULL_INDEX', datetime('now'))
-         ON CONFLICT(repo_id) DO UPDATE SET
-           status = 'PENDING',
-           job_type = 'FULL_INDEX',
-           error = NULL,
-           updated_at = datetime('now')`,
-      )
-        .bind(repo.repoId)
-        .run();
+      await markRepoIndexRequested(context.env, repo.repoId);
 
       const dispatchError = await dispatchIndex(context.env, repo.fullName);
       if (dispatchError) dispatchErrors.push({ repo: repo.fullName, error: dispatchError });
@@ -73,6 +63,35 @@ export async function onRequestPost(context) {
   } catch (err) {
     return handleError(err);
   }
+}
+
+export async function markRepoIndexRequested(env, repoId) {
+  await env.DB.prepare(
+    `INSERT INTO repo_index_status (repo_id, status, job_type, updated_at)
+     VALUES (
+       ?1,
+       CASE
+         WHEN (SELECT indexing_status FROM repos WHERE id = ?1) = 'READY' THEN 'READY'
+         ELSE 'PENDING'
+       END,
+       'FULL_INDEX',
+       datetime('now')
+     )
+     ON CONFLICT(repo_id) DO UPDATE SET
+       status = CASE
+         WHEN repo_index_status.status = 'READY' THEN 'READY'
+         WHEN (SELECT indexing_status FROM repos WHERE id = ?1) = 'READY' THEN 'READY'
+         ELSE 'PENDING'
+       END,
+       job_type = 'FULL_INDEX',
+       error = CASE
+         WHEN repo_index_status.status = 'READY' THEN repo_index_status.error
+         ELSE NULL
+       END,
+       updated_at = datetime('now')`,
+  )
+    .bind(repoId)
+    .run();
 }
 
 function normalizeRepos(input) {
