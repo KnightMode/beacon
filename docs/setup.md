@@ -64,7 +64,7 @@ updates the Pages project and redeploys it with:
   `0005_tenant_ci_triage_runs.sql` applied to the remote database.
 - **Secrets from GitHub Actions:** `ADMIN_SESSION_SECRET`, `SLACK_CLIENT_SECRET`,
   `SLACK_TOKEN_ENCRYPTION_SECRET`, and optionally `PIPELINE_DISPATCH_TOKEN` and
-  `GITHUB_APP_PRIVATE_KEY`.
+  `BEACON_GITHUB_APP_PRIVATE_KEY` (written to Pages as `GITHUB_APP_PRIVATE_KEY`).
 - **Vars:** `SLACK_CLIENT_ID`, `GITHUB_APP_SLUG`, `PIPELINE_DISPATCH_REPO`, and
   `PIPELINE_DISPATCH_EVENT`.
 - **Cloudflare Access vars:** `ADMIN_CF_ACCESS_ISSUER` and
@@ -132,6 +132,11 @@ GITHUB_APP_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY--
 `GITHUB_APP_ID` and `GITHUB_APP_PRIVATE_KEY` power the onboarding repo picker
 (listing repos from the customer's GitHub install). Generate a new private key
 in the app settings if you do not have one yet.
+
+For the GitHub Actions `Configure site Access` workflow, use repository variable
+`BEACON_GITHUB_APP_ID` and repository secret `BEACON_GITHUB_APP_PRIVATE_KEY`;
+the workflow writes them into Pages as `GITHUB_APP_ID` and
+`GITHUB_APP_PRIVATE_KEY`.
 
 For local `.dev.vars`, keep the private key on **one line** with literal `\n`
 between PEM lines (multiline values are unreliable in dotenv files):
