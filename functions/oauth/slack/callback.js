@@ -1,9 +1,9 @@
 import {
   audit,
+  clientErrorMessage,
   encryptSecret,
   handleError,
   HttpError,
-  json,
   markStep,
   redirect,
   sessionCookie,
@@ -68,11 +68,9 @@ export async function onRequestGet(context) {
   } catch (err) {
     console.error('Slack OAuth callback failed', err);
     if (new URL(context.request.url).pathname.endsWith('/callback.json')) {
-      return err instanceof HttpError ? json({ ok: false, error: err.message }, err.status) : handleError(err);
+      return handleError(err);
     }
-    const message = err instanceof HttpError
-      ? err.message
-      : `Slack sign-in failed: ${err?.message || 'Unexpected error'}`;
+    const message = clientErrorMessage(err, 'Slack sign-in failed. Try again or contact support.');
     return redirect(`/admin/onboarding/?error=${encodeURIComponent(message)}`);
   }
 }
