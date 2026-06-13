@@ -63,7 +63,7 @@
           <p class="setup-card__status" data-github-status>Disconnected</p>
           <details class="setup-card__details">
             <summary>Stuck on GitHub after saving repos?</summary>
-            <p>In your GitHub App settings, set <strong>Setup URL</strong> to <code>http://localhost:8788/oauth/github/callback</code> and enable <strong>Redirect on update</strong>. Use the same host you opened here (<code>localhost</code> vs <code>127.0.0.1</code> must match).</p>
+            <p>In your GitHub App settings, set <strong>Setup URL</strong> to <code data-github-callback-url>/oauth/github/callback</code> and enable <strong>Redirect on update</strong>. Use the same host you opened here.</p>
             <form class="github-complete-form" data-github-complete>
               <label for="github-installation-id">Installation ID</label>
               <input id="github-installation-id" name="installationId" placeholder="From github.com/settings/installations/12345" />
@@ -121,6 +121,6 @@
   </main>
 
   <script src="../../main.js?v=7"></script>
-  <script src="../admin.js?v=4"></script>
+  <script src="../admin.js?v=5"></script>
 </body>
 </html>
