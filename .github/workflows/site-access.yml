@@ -69,6 +69,8 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: 22
+          cache: npm
+      - run: npm ci
       - name: Configure Access
         run: node scripts/configure-cloudflare-access.mjs
         env:
@@ -83,3 +85,9 @@ jobs:
           ACCESS_APP_NAME: ${{ inputs.app_name }}
           ACCESS_AUTH_DOMAIN: ${{ inputs.auth_domain }}
           ACCESS_SESSION_DURATION: ${{ inputs.session_duration }}
+      - name: Deploy Pages with Access vars
+        run: npx wrangler pages deploy site --project-name="${ACCESS_PAGES_PROJECT_NAME}" --branch=main
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          ACCESS_PAGES_PROJECT_NAME: ${{ inputs.pages_project_name }}
