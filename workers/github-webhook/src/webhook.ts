@@ -17,6 +17,7 @@ import {
   addRepoToInstallationTenants,
   hasLinkedTenants,
   queuePendingInstallationRepo,
+  revokeRepoFromInstallationTenants,
   isAllowlisted,
   repoIdFor,
 } from './db.js';
@@ -96,8 +97,18 @@ async function handleInstallation(
   env: Env,
   payload: InstallationPayload,
 ): Promise<Response> {
+  const installationId = payload.installation?.id;
+  const removedRepos = payload.action === 'deleted'
+    ? (payload.repositories ?? [])
+    : (payload.repositories_removed ?? []);
+  const revoked: string[] = [];
+  for (const r of removedRepos) {
+    await revokeRepoFromInstallationTenants(env, installationId, repoIdFor(r.full_name));
+    revoked.push(r.full_name);
+  }
+
   const repos = [
-    ...(payload.repositories ?? []),
+    ...(payload.action === 'deleted' ? [] : (payload.repositories ?? [])),
     ...(payload.repositories_added ?? []),
   ];
   const enqueued: string[] = [];
@@ -108,7 +119,6 @@ async function handleInstallation(
       defaultBranch: r.default_branch,
       private: r.private,
     });
-    const installationId = payload.installation?.id;
     const linked = await hasLinkedTenants(env, installationId);
     if (linked) {
       await addRepoToInstallationTenants(env, installationId, repoId, r.full_name);
@@ -119,7 +129,7 @@ async function handleInstallation(
     await enqueueFullIndex(env, repoId, r.full_name);
     enqueued.push(r.full_name);
   }
-  return json({ ok: true, action: payload.action, enqueued });
+  return json({ ok: true, action: payload.action, enqueued, revoked });
 }
 
 async function handlePush(env: Env, payload: PushPayload): Promise<Response> {

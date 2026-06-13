@@ -9,6 +9,19 @@ export async function listInstallationRepositories(env, installationId) {
   return result?.repos ?? null;
 }
 
+export async function findInstallationRepository(env, installationId, fullName) {
+  const result = await queryInstallationRepositories(env, installationId, {
+    q: fullName,
+    page: 1,
+    limit: 100,
+    maxPages: 50,
+  });
+  if (!result) return null;
+
+  const target = fullName.toLowerCase();
+  return result.repos.find((repo) => repo.fullName.toLowerCase() === target) || null;
+}
+
 export async function queryInstallationRepositories(env, installationId, options = {}) {
   const auth = await getInstallationAuth(env, installationId);
   if (!auth) return null;

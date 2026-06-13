@@ -8,6 +8,7 @@ import {
   requireSession,
   upsertRepo,
 } from '../../_lib/admin.js';
+import { findInstallationRepository } from '../../_lib/github.js';
 
 export async function onRequestGet(context) {
   try {
@@ -27,7 +28,12 @@ export async function onRequestPost(context) {
 
     const dispatchErrors = [];
     for (const repoInput of repos) {
-      const repo = await upsertRepo(context.env, repoInput);
+      const repoGrant = await resolveTenantInstallationRepo(
+        context.env,
+        session.tenantId,
+        repoInput.fullName,
+      );
+      const repo = await upsertRepo(context.env, repoGrant);
       await context.env.DB.prepare(
         `INSERT INTO tenant_repos (tenant_id, repo_id, full_name, enabled, selected_by, updated_at)
          VALUES (?1, ?2, ?3, 1, ?4, datetime('now'))
@@ -80,6 +86,55 @@ function normalizeRepos(input) {
       private: value.private,
     };
   }).filter((repo) => /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repo.fullName));
+}
+
+export async function resolveTenantInstallationRepo(env, tenantId, fullName) {
+  const installation = await env.DB.prepare(
+    `SELECT installation_id
+     FROM tenant_github_installations
+     WHERE tenant_id = ?1
+     ORDER BY updated_at DESC
+     LIMIT 1`,
+  )
+    .bind(tenantId)
+    .first();
+  if (!installation?.installation_id) {
+    throw new HttpError(400, 'Connect GitHub before choosing repos.');
+  }
+
+  const repoId = fullName.toLowerCase();
+  const localGrant = await env.DB.prepare(
+    `SELECT p.full_name, r.github_id, r.default_branch, r.private
+     FROM pending_installation_repos p
+     LEFT JOIN repos r ON r.id = p.repo_id
+     WHERE p.installation_id = ?1 AND p.repo_id = ?2
+     UNION ALL
+     SELECT tr.full_name, r.github_id, r.default_branch, r.private
+     FROM tenant_repos tr
+     LEFT JOIN repos r ON r.id = tr.repo_id
+     WHERE tr.tenant_id = ?3 AND tr.repo_id = ?2 AND tr.enabled = 1
+     LIMIT 1`,
+  )
+    .bind(installation.installation_id, repoId, tenantId)
+    .first();
+  if (localGrant?.full_name) return repoFromGrant(localGrant);
+
+  const githubRepo = await findInstallationRepository(env, installation.installation_id, fullName);
+  if (githubRepo) return githubRepo;
+
+  throw new HttpError(
+    403,
+    `${fullName} is not available on this tenant's GitHub App installation.`,
+  );
+}
+
+function repoFromGrant(row) {
+  return {
+    fullName: row.full_name,
+    githubId: row.github_id,
+    defaultBranch: row.default_branch || 'main',
+    private: row.private === 0 ? false : true,
+  };
 }
 
 async function dispatchIndex(env, repoFullName) {
