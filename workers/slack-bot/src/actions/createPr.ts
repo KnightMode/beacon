@@ -41,6 +41,7 @@ export interface CreatePrTarget {
   channel: string;
   threadTs: string;
   userId?: string;
+  teamId?: string;
   messageTs?: string;
   /** Primary issue text when not using full thread (e.g. @mention body). */
   issueHint?: string;
@@ -78,6 +79,7 @@ export async function handleAssistantCreatePr(
     channel: m.channelId,
     threadTs: m.threadTs,
     userId: m.userId,
+    teamId: m.teamId,
     messageTs: m.messageTs,
     issueHint: m.text,
   });
@@ -91,7 +93,7 @@ async function runCreatePr(env: Env, target: CreatePrTarget): Promise<void> {
   try {
     const gh = GitHubClient.fromEnv(env);
     if (!gh) {
-      await postPlain(env, target.channel, target.threadTs, createPrMissingPatMessage());
+      await postPlain(env, target.channel, target.threadTs, createPrMissingPatMessage(), target.teamId);
       return;
     }
 
@@ -100,7 +102,7 @@ async function runCreatePr(env: Env, target: CreatePrTarget): Promise<void> {
       thread_ts: target.threadTs,
       status: 'is opening a pull request…',
       loading_messages: CREATE_LOADING,
-    }).catch(() => undefined);
+    }, target.teamId).catch(() => undefined);
 
     log('start');
 
@@ -109,8 +111,9 @@ async function runCreatePr(env: Env, target: CreatePrTarget): Promise<void> {
       target.channel,
       target.threadTs,
       target.messageTs,
+      target.teamId,
     ).catch(() => []);
-    const threadIssuePromise = buildIssueFromThread(env, target.channel, target.threadTs);
+    const threadIssuePromise = buildIssueFromThread(env, target.channel, target.threadTs, target.teamId);
     const [history, threadIssue] = await Promise.all([historyPromise, threadIssuePromise]);
     const issue = target.issueHint?.trim() || threadIssue;
     if (!issue) {
@@ -119,24 +122,26 @@ async function runCreatePr(env: Env, target: CreatePrTarget): Promise<void> {
         target.channel,
         target.threadTs,
         'Describe the issue in this thread first, then react with :pr: or :rocket: to open a pull request.',
+        target.teamId,
       );
       return;
     }
 
-    const repo = await resolveTargetRepo(env, issue);
+    const repo = await resolveTargetRepo(env, issue, target.teamId);
     if (!repo) {
       await postPlain(
         env,
         target.channel,
         target.threadTs,
         'No target repository found. Set `DEFAULT_PR_REPO` on the worker or mention `owner/repo` in the issue.',
+        target.teamId,
       );
       return;
     }
 
     log('repo-resolved', { repo: repo.fullName });
 
-    const indexedContextPromise = fetchIndexedContext(env, issue, repo.fullName);
+    const indexedContextPromise = fetchIndexedContext(env, issue, repo.fullName, target.teamId);
     const branchPromise = gh.getDefaultBranchSha(repo.owner, repo.repo);
     const [{ defaultBranch }, indexedContext] = await Promise.all([
       branchPromise,
@@ -192,6 +197,7 @@ async function runCreatePr(env: Env, target: CreatePrTarget): Promise<void> {
         target.channel,
         target.threadTs,
         proposal.body || 'Could not propose file changes for this issue. Please add more detail.',
+        target.teamId,
       );
       return;
     }
@@ -217,6 +223,7 @@ async function runCreatePr(env: Env, target: CreatePrTarget): Promise<void> {
       target.channel,
       target.threadTs,
       `:white_check_mark: Opened pull request <${pr.htmlUrl}|#${pr.number}: ${proposal.title}>`,
+      target.teamId,
     );
   } catch (err) {
     const message = (err as Error).message;
@@ -226,9 +233,10 @@ async function runCreatePr(env: Env, target: CreatePrTarget): Promise<void> {
       target.channel,
       target.threadTs,
       `:warning: Could not create pull request: ${message}`,
+      target.teamId,
     );
   } finally {
-    await clearThreadStatus(env, target.channel, target.threadTs);
+    await clearThreadStatus(env, target.channel, target.threadTs, target.teamId);
   }
 }
 
@@ -236,12 +244,13 @@ async function clearThreadStatus(
   env: Env,
   channel: string,
   threadTs: string,
+  teamId?: string,
 ): Promise<void> {
   await call(env, 'assistant.threads.setStatus', {
     channel_id: channel,
     thread_ts: threadTs,
     status: '',
-  }).catch(() => undefined);
+  }, teamId).catch(() => undefined);
 }
 
 async function resolveProposalFiles(
@@ -276,10 +285,11 @@ async function fetchIndexedContext(
   env: Env,
   issue: string,
   repoFullName: string,
+  teamId?: string,
 ): Promise<string> {
   const query = `${repoFullName} implement fix: ${issue}`;
   try {
-    const outcome = await retrieve(env, query, query);
+    const outcome = await retrieve(env, query, query, teamId);
     if (outcome.packed.used.length === 0) return '';
     return outcome.packed.contextText.slice(0, 10_000);
   } catch {
@@ -292,8 +302,9 @@ async function postPlain(
   channel: string,
   threadTs: string,
   text: string,
+  teamId?: string,
 ): Promise<void> {
-  await call(env, 'chat.postMessage', { channel, thread_ts: threadTs, text });
+  await call(env, 'chat.postMessage', { channel, thread_ts: threadTs, text }, teamId);
 }
 
 /** Slash command helper text when create_pr intent is detected. */

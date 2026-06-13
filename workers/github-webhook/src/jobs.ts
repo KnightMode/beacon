@@ -9,7 +9,7 @@ import {
   type TriageJob,
 } from '@scintel/shared';
 import type { Env } from './env.js';
-import { setIndexStatus, repoIdFor } from './db.js';
+import { setIndexStatus, repoIdFor, getSlackTeamIdForRepo } from './db.js';
 import type { WorkflowRunPayload } from './webhook.js';
 
 export async function enqueueFullIndex(
@@ -55,9 +55,11 @@ export async function enqueueTriage(
   payload: WorkflowRunPayload,
 ): Promise<void> {
   const run = payload.workflow_run;
+  const repoId = repoIdFor(payload.repository.full_name);
+  const slackTeamId = await getSlackTeamIdForRepo(env, repoId);
   const job: TriageJob = {
     jobType: 'CI_TRIAGE',
-    repoId: repoIdFor(payload.repository.full_name),
+    repoId,
     repoFullName: payload.repository.full_name,
     runId: run.id,
     runAttempt: run.run_attempt ?? 1,
@@ -65,6 +67,7 @@ export async function enqueueTriage(
     headBranch: run.head_branch,
     headSha: run.head_sha,
     runHtmlUrl: run.html_url,
+    slackTeamId: slackTeamId ?? undefined,
     enqueuedAt: new Date().toISOString(),
   };
   await env.TRIAGE_QUEUE.send(job);
