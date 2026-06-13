@@ -262,6 +262,11 @@ function assertAdminRuntimeConfigured(envVars) {
     'ADMIN_SESSION_SECRET',
     'SLACK_CLIENT_SECRET',
     'SLACK_TOKEN_ENCRYPTION_SECRET',
+    'GITHUB_APP_SLUG',
+    'GITHUB_APP_ID',
+    'GITHUB_APP_PRIVATE_KEY',
+    'PIPELINE_DISPATCH_REPO',
+    'PIPELINE_DISPATCH_TOKEN',
   ].filter((name) => !envVars[name]);
   if (missing.length === 0) return;
 
