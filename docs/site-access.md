@@ -71,7 +71,7 @@ d1_binding: DB
 d1_database_name: scintel
 d1_database_id: 27722a79-10d9-4bfc-aa53-1d65a80c8f79
 slack_client_id: 1234567890.1234567890
-github_app_slug: beacon
+github_app_slug: scintel-indexer
 pipeline_dispatch_repo: KnightMode/beacon
 pipeline_dispatch_event: index-repo
 auth_domain: beacon-90k.cloudflareaccess.com
@@ -98,7 +98,7 @@ PAGES_SLACK_CLIENT_ID=1234567890.1234567890 \
 PAGES_ADMIN_SESSION_SECRET=<session-secret> \
 PAGES_SLACK_CLIENT_SECRET=<slack-client-secret> \
 PAGES_SLACK_TOKEN_ENCRYPTION_SECRET=<token-encryption-secret> \
-PAGES_GITHUB_APP_SLUG=beacon \
+PAGES_GITHUB_APP_SLUG=scintel-indexer \
 PAGES_PIPELINE_DISPATCH_REPO=KnightMode/beacon \
 PAGES_PIPELINE_DISPATCH_EVENT=index-repo \
 ACCESS_AUTH_DOMAIN=beacon-90k.cloudflareaccess.com \
