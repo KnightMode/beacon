@@ -53,6 +53,27 @@ export async function getTenantRepoAccess(
   return { tenantId, repoIds: ids };
 }
 
+export async function tenantHasGithubInstallationRepo(
+  env: Env,
+  tenantId: string,
+  repoId: string,
+): Promise<boolean> {
+  const row = await env.DB.prepare(
+    `SELECT 1 AS ok
+     FROM tenant_github_installations gi
+     JOIN pending_installation_repos p ON p.installation_id = gi.installation_id
+     WHERE gi.tenant_id = ?1 AND p.repo_id = ?2
+     UNION ALL
+     SELECT 1 AS ok
+     FROM tenant_repos tr
+     WHERE tr.tenant_id = ?1 AND tr.repo_id = ?2 AND tr.enabled = 1
+     LIMIT 1`,
+  )
+    .bind(tenantId, repoId)
+    .first<{ ok: number }>();
+  return row !== null;
+}
+
 export async function getSlackBotToken(
   env: Env,
   teamId?: string,

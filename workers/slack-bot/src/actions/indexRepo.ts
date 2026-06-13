@@ -6,10 +6,16 @@
  */
 
 import type { Env } from '../env.js';
-import { getTenantIdForSlackTeam } from '../tenant.js';
+import {
+  getTenantIdForSlackTeam,
+  tenantHasGithubInstallationRepo,
+} from '../tenant.js';
 
 const GITHUB_API = 'https://api.github.com';
 const DISPATCH_EVENT = 'index-repo';
+const ONBOARDING_REQUIRED =
+  ':information_source: This workspace is not onboarded yet. Open the admin portal, ' +
+  'connect Slack, then add repos there before indexing from chat.';
 
 interface GithubRepo {
   id: number;
@@ -51,6 +57,17 @@ export async function indexRepoAction(
   const repoId = repo.full_name.toLowerCase();
   const [owner, name] = repo.full_name.split('/');
 
+  const tenantId = await getTenantIdForSlackTeam(env, teamId);
+  if (teamId && !tenantId) {
+    return ONBOARDING_REQUIRED;
+  }
+  if (tenantId && !(await tenantHasGithubInstallationRepo(env, tenantId, repoId))) {
+    return (
+      `:no_entry: \`${repo.full_name}\` is not available on this workspace's ` +
+      'GitHub App installation. Add it in the admin portal first, then try indexing again.'
+    );
+  }
+
   // 2. Upsert the repo row, allowlist it, and mark indexing PENDING.
   await env.DB.prepare(
     `INSERT INTO repos (id, github_id, full_name, owner, name, default_branch, private, indexing_status, updated_at)
@@ -64,13 +81,6 @@ export async function indexRepoAction(
     .bind(repoId, repo.id, repo.full_name, owner ?? '', name ?? '', repo.default_branch, repo.private ? 1 : 0)
     .run();
 
-  const tenantId = await getTenantIdForSlackTeam(env, teamId);
-  if (teamId && !tenantId) {
-    return (
-      ':information_source: This workspace is not onboarded yet. Open the admin portal, ' +
-      'connect Slack, then add repos there before indexing from chat.'
-    );
-  }
   if (tenantId) {
     await env.DB.prepare(
       `INSERT INTO tenant_repos (tenant_id, repo_id, full_name, enabled, selected_by, updated_at)
@@ -145,6 +155,10 @@ export async function indexStatusAction(
   teamId?: string,
 ): Promise<string> {
   const tenantId = await getTenantIdForSlackTeam(env, teamId);
+  if (teamId && !tenantId) {
+    return ONBOARDING_REQUIRED;
+  }
+
   const query = tenantId
     ? env.DB.prepare(
         `SELECT r.full_name, s.status, s.indexed_files, s.total_files,
