@@ -5,25 +5,32 @@ const API_BASE = 'https://api.cloudflare.com/client/v4';
 const accountId = requiredEnv('CLOUDFLARE_ACCOUNT_ID');
 const apiToken = requiredEnv('CLOUDFLARE_API_TOKEN');
 const hostname = cleanHostname(process.env.ACCESS_SITE_HOSTNAME || 'beacon-90k.pages.dev');
-const appName = process.env.ACCESS_APP_NAME?.trim() || 'Beacon marketing site';
+const pagesProjectName = process.env.ACCESS_PAGES_PROJECT_NAME?.trim() || 'beacon';
+const pagesEnvironment = normalizePagesEnvironment(process.env.ACCESS_PAGES_ENVIRONMENT || 'production');
+const appName = process.env.ACCESS_APP_NAME?.trim() || 'Beacon admin portal';
+const protectedPaths = splitCsv(
+  process.env.ACCESS_PROTECTED_PATHS || '/admin*,/api/admin*,/oauth/slack/callback*,/oauth/github/callback*',
+).map(normalizeAccessPath);
 
-const app = await findAccessApplication();
+const apps = await findAccessApplications();
 
-if (!app) {
-  console.log(`No Cloudflare Access application found for ${hostname}. Site should already be public.`);
-  process.exit(0);
+if (apps.length === 0) {
+  console.log(`No Cloudflare Access applications found for admin paths on ${hostname}.`);
+} else {
+  for (const app of apps) {
+    await cfFetch(`/access/apps/${app.id}`, { method: 'DELETE' });
+    console.log(`Deleted Cloudflare Access application ${app.id} for ${app.domain}.`);
+  }
 }
 
-await cfFetch(`/access/apps/${app.id}`, { method: 'DELETE' });
+await removePagesAccessVars();
+console.log(`Removed Pages project ${pagesProjectName} ${pagesEnvironment} Access runtime vars.`);
+console.log('The admin portal paths should now be publicly accessible once Cloudflare propagation completes.');
 
-console.log(`Deleted Cloudflare Access application ${app.id} for ${hostname}.`);
-console.log('The Pages site should now be publicly accessible once Cloudflare propagation completes.');
-
-async function findAccessApplication() {
+async function findAccessApplications() {
   const apps = await listAll('/access/apps');
-  return apps.find((candidate) => {
-    return candidate.domain === hostname || candidate.name === appName;
-  });
+  const protectedDomains = new Set(protectedPaths.map((path) => `${hostname}${path}`));
+  return apps.filter((candidate) => protectedDomains.has(candidate.domain) || candidate.name === appName);
 }
 
 async function listAll(pathname) {
@@ -51,16 +58,47 @@ async function cfFetch(pathname, options = {}) {
       Authorization: `Bearer ${apiToken}`,
       'Content-Type': 'application/json',
     },
+    body: options.body ? JSON.stringify(options.body) : undefined,
   });
 
   const payload = await response.json().catch(() => null);
 
   if (!response.ok || !payload?.success) {
     const messages = payload?.errors?.map((error) => error.message).join('; ');
-    throw new Error(`Cloudflare API ${response.status} ${options.method || 'GET'} ${pathname}: ${messages || response.statusText}`);
+    const hint = permissionHint(pathname, response.status);
+    throw new Error(
+      `Cloudflare API ${response.status} ${options.method || 'GET'} ${pathname}: ${messages || response.statusText}${hint}`,
+    );
   }
 
   return payload;
+}
+
+async function removePagesAccessVars() {
+  const project = await getPagesProject();
+  const environmentConfig = project.deployment_configs?.[pagesEnvironment] || {};
+  const envVars = { ...(environmentConfig.env_vars || {}) };
+  delete envVars.ADMIN_CF_ACCESS_ISSUER;
+  delete envVars.ADMIN_CF_ACCESS_AUD;
+  delete envVars.ADMIN_CF_ACCESS_ALLOWED_EMAILS;
+  delete envVars.ADMIN_CF_ACCESS_ALLOWED_DOMAINS;
+
+  await cfFetch(`/pages/projects/${encodeURIComponent(pagesProjectName)}`, {
+    method: 'PATCH',
+    body: {
+      deployment_configs: {
+        [pagesEnvironment]: {
+          ...environmentConfig,
+          env_vars: envVars,
+        },
+      },
+    },
+  });
+}
+
+async function getPagesProject() {
+  const response = await cfFetch(`/pages/projects/${encodeURIComponent(pagesProjectName)}`);
+  return response.result;
 }
 
 function cleanHostname(value) {
@@ -71,6 +109,29 @@ function cleanHostname(value) {
     .toLowerCase();
 }
 
+function splitCsv(value) {
+  return (value || '')
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+}
+
+function normalizeAccessPath(value) {
+  const path = value.trim();
+  if (!path || path === '/') {
+    throw new Error('ACCESS_PROTECTED_PATHS must not include the whole site.');
+  }
+  return path.startsWith('/') ? path : `/${path}`;
+}
+
+function normalizePagesEnvironment(value) {
+  const normalized = value.trim().toLowerCase();
+  if (normalized === 'production' || normalized === 'preview') {
+    return normalized;
+  }
+  throw new Error('ACCESS_PAGES_ENVIRONMENT must be "production" or "preview".');
+}
+
 function requiredEnv(name) {
   const value = process.env[name]?.trim();
   if (!value) {
@@ -78,4 +139,20 @@ function requiredEnv(name) {
   }
 
   return value;
+}
+
+function permissionHint(pathname, status) {
+  if (status !== 403) {
+    return '';
+  }
+
+  if (pathname.startsWith('/pages/projects')) {
+    return ' Hint: add Cloudflare Pages: Edit to CLOUDFLARE_API_TOKEN.';
+  }
+
+  if (pathname.startsWith('/access/apps')) {
+    return ' Hint: add Account > Access: Apps and Policies > Edit to CLOUDFLARE_API_TOKEN.';
+  }
+
+  return '';
 }

@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Beacon Admin — setup status</title>
+  <meta name="description" content="Beacon admin setup portal for Slack workspace onboarding, GitHub repo indexing, and first cited answers." />
+  <link rel="icon" type="image/png" href="../assets/beacon-logo.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&family=Newsreader:opsz,wght@6..72,500;6..72,650;6..72,750&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../styles.css?v=10" />
+</head>
+<body class="admin-shell" data-admin-page="status">
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="admin-topbar">
+    <a class="brand" href="/" aria-label="Beacon home">
+      <img class="brand__mark" src="../assets/beacon-logo.png" alt="" width="40" height="40" />
+      <span>Beacon</span>
+    </a>
+    <nav class="admin-topbar__links" aria-label="Admin navigation">
+      <a aria-current="page" href="/admin/">Status</a>
+      <a href="/admin/onboarding/">Onboarding</a>
+      <a href="/">Marketing</a>
+    </nav>
+  </header>
+
+  <main id="main" class="admin-main">
+    <section class="admin-hero" aria-labelledby="admin-title">
+      <div>
+        <p class="kicker">Admin control plane</p>
+        <h1 id="admin-title">Setup status with receipts.</h1>
+        <p>Connect Slack, connect GitHub, choose repos, and watch the first indexed answers become available to the workspace.</p>
+      </div>
+      <div class="admin-hero__actions">
+        <a class="button button--primary" href="/admin/onboarding/">Continue setup</a>
+        <button class="button button--quiet" type="button" data-refresh>Refresh</button>
+      </div>
+    </section>
+
+    <section class="admin-grid" aria-label="Workspace status">
+      <article class="admin-panel admin-panel--dark">
+        <div class="admin-panel__topline">
+          <span>Workspace</span>
+          <strong data-tenant-name>Not connected</strong>
+        </div>
+        <dl class="admin-metrics">
+          <div>
+            <dt>Slack</dt>
+            <dd data-slack-status>Disconnected</dd>
+          </div>
+          <div>
+            <dt>GitHub</dt>
+            <dd data-github-status>Disconnected</dd>
+          </div>
+          <div>
+            <dt>Repos</dt>
+            <dd data-repo-count>0</dd>
+          </div>
+        </dl>
+      </article>
+
+      <article class="admin-panel">
+        <div class="admin-panel__topline">
+          <span>Onboarding</span>
+          <strong data-onboarding-state>Pending</strong>
+        </div>
+        <ol class="setup-rail" data-step-list></ol>
+      </article>
+    </section>
+
+    <section class="admin-panel admin-panel--wide" aria-labelledby="repos-title">
+      <div class="admin-panel__topline">
+        <span>Indexed repos</span>
+        <strong id="repos-title">Tenant-scoped evidence</strong>
+      </div>
+      <div class="repo-table" data-repo-table>
+        <p class="admin-empty">No repos selected yet. Continue setup to add the first pilot repo.</p>
+      </div>
+    </section>
+  </main>
+
+  <script src="../main.js?v=7"></script>
+  <script src="./admin.js?v=4"></script>
+</body>
+</html>

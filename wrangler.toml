@@ -1,0 +1,10 @@
+# Shared Wrangler config for local tooling (npm run db:local:*, dev:portal).
+# Workers use their own wrangler.toml files for deploy.
+
+name = "beacon-local"
+compatibility_date = "2024-11-01"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "scintel"
+database_id = "27722a79-10d9-4bfc-aa53-1d65a80c8f79"

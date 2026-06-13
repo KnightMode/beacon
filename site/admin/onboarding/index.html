@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Beacon Admin — onboarding</title>
+  <meta name="description" content="Beacon guided onboarding for Slack and GitHub workspace setup." />
+  <link rel="icon" type="image/png" href="../../assets/beacon-logo.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&family=Newsreader:opsz,wght@6..72,500;6..72,650;6..72,750&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../../styles.css?v=11" />
+</head>
+<body class="admin-shell" data-admin-page="onboarding">
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="admin-topbar">
+    <a class="brand" href="/" aria-label="Beacon home">
+      <img class="brand__mark" src="../../assets/beacon-logo.png" alt="" width="40" height="40" />
+      <span>Beacon</span>
+    </a>
+    <nav class="admin-topbar__links" aria-label="Admin navigation">
+      <a href="/admin/">Status</a>
+      <a aria-current="page" href="/admin/onboarding/">Onboarding</a>
+      <a href="/">Marketing</a>
+    </nav>
+  </header>
+
+  <main id="main" class="admin-main">
+    <section class="admin-hero" aria-labelledby="onboarding-title">
+      <div>
+        <p class="kicker">First cited answer</p>
+        <h1 id="onboarding-title">Bring one workspace online.</h1>
+        <p>Connect Slack, connect GitHub, choose pilot repos, map one channel, and ship the first cited answer.</p>
+      </div>
+      <div class="admin-hero__actions">
+        <button class="button button--quiet" type="button" data-refresh>Refresh</button>
+      </div>
+    </section>
+
+    <section class="onboarding-layout">
+      <aside class="admin-panel">
+        <div class="admin-panel__topline">
+          <span>Progress</span>
+          <strong data-onboarding-state>Pending</strong>
+        </div>
+        <ol class="setup-rail setup-rail--sticky" data-step-list></ol>
+      </aside>
+
+      <div class="onboarding-stack">
+        <section class="setup-card" data-step-card="slack">
+          <p class="setup-card__index">01 / Slack</p>
+          <h2>Connect the workspace.</h2>
+          <p>Slack is the tenant boundary for v1. Installing the bot creates the admin workspace and records the bot token for this team.</p>
+          <a class="button button--primary" href="/api/admin/slack/start">Add to Slack</a>
+          <p class="setup-card__status" data-slack-status>Disconnected</p>
+        </section>
+
+        <section class="setup-card" data-step-card="github">
+          <p class="setup-card__index">02 / GitHub</p>
+          <h2>Connect the GitHub App.</h2>
+          <p>Install Beacon on the repos this workspace should be allowed to index and query. After you click <strong>Install</strong> on GitHub, you should land back here automatically.</p>
+          <a class="button button--primary" href="/api/admin/github/start">Connect GitHub</a>
+          <p class="setup-card__status" data-github-status>Disconnected</p>
+          <details class="setup-card__details">
+            <summary>Stuck on GitHub after saving repos?</summary>
+            <p>In your GitHub App settings, set <strong>Setup URL</strong> to <code>http://localhost:8788/oauth/github/callback</code> and enable <strong>Redirect on update</strong>. Use the same host you opened here (<code>localhost</code> vs <code>127.0.0.1</code> must match).</p>
+            <form class="github-complete-form" data-github-complete>
+              <label for="github-installation-id">Installation ID</label>
+              <input id="github-installation-id" name="installationId" placeholder="From github.com/settings/installations/12345" />
+              <button class="button button--quiet" type="submit">Finish setup</button>
+            </form>
+            <p class="setup-card__status" data-github-complete-status></p>
+          </details>
+        </section>
+
+        <section class="setup-card" data-step-card="repos">
+          <p class="setup-card__index">03 / Repos</p>
+          <h2>Choose pilot repos.</h2>
+          <p>Select from the repositories granted to your GitHub App install. Hold <kbd>Cmd</kbd> or <kbd>Ctrl</kbd> to pick multiple repos in the list below.</p>
+          <form class="repo-form" data-repo-form>
+            <div class="repo-picker" data-repo-picker>
+              <p class="admin-empty" data-repo-picker-status>Connect GitHub to load repositories.</p>
+            </div>
+            <div class="repo-picker__actions">
+              <button class="button button--quiet" type="button" data-repo-select-all>Select all</button>
+              <button class="button button--quiet" type="button" data-repo-clear-all>Clear</button>
+              <button class="button button--primary" type="submit" data-repo-submit disabled>Start indexing</button>
+            </div>
+          </form>
+          <p class="setup-card__status" data-repo-form-status></p>
+        </section>
+
+        <section class="setup-card" data-step-card="indexing">
+          <p class="setup-card__index">04 / Indexing</p>
+          <h2>Watch indexing complete.</h2>
+          <div class="repo-table" data-repo-table>
+            <p class="admin-empty">No indexing jobs yet.</p>
+          </div>
+        </section>
+
+        <section class="setup-card" data-step-card="channel">
+          <p class="setup-card__index">05 / Channel</p>
+          <h2>Map the first Slack channel.</h2>
+          <p>Link one indexed repo to the channel where your team will ask questions. Use the channel ID from Slack (right-click channel → View channel details).</p>
+          <form class="channel-form" data-channel-form>
+            <input name="repo" placeholder="owner/repo" />
+            <input name="channelId" placeholder="Channel ID (C0123ABC)" />
+            <button class="button button--quiet" type="submit">Save channel</button>
+          </form>
+          <p class="setup-card__status" data-channel-form-status></p>
+        </section>
+
+        <section class="setup-card setup-card--dark" data-step-card="first_answer">
+          <p class="setup-card__index">06 / First answer</p>
+          <h2>Ask a real question in Slack.</h2>
+          <p>The setup is complete when Beacon responds with file and line citations from an onboarded repo.</p>
+          <code class="prompt-strip">@beacon where is request signature verification implemented?</code>
+        </section>
+      </div>
+    </section>
+  </main>
+
+  <script src="../../main.js?v=7"></script>
+  <script src="../admin.js?v=4"></script>
+</body>
+</html>

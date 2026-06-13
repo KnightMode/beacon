@@ -12,6 +12,7 @@ import { buildPrReviewMessage, buildPrReviewStreamFooter } from '../format.js';
 import { call, type StreamTarget } from '../stream.js';
 import { fetchThreadHistory, type Turn } from '../history.js';
 import type { AssistantMessage } from '../assistant.js';
+import { getTenantRepoAccess } from '../tenant.js';
 
 const MAX_FILES = 20;
 const MAX_PATCH_CHARS = 2_400;
@@ -37,7 +38,7 @@ export function prReviewMissingPatMessage(): string {
 export async function streamPrReview(env: Env, t: StreamTarget): Promise<void> {
   const gh = GitHubClient.fromEnv(env);
   if (!gh) {
-    await postPlain(env, t.channel, t.threadTs, prReviewMissingPatMessage());
+    await postPlain(env, t.channel, t.threadTs, prReviewMissingPatMessage(), t.teamId);
     return;
   }
 
@@ -49,6 +50,7 @@ export async function streamPrReview(env: Env, t: StreamTarget): Promise<void> {
       t.threadTs,
       'Could not parse a PR reference. Try:\n' +
         '`review https://github.com/owner/repo/pull/123` or `review owner/repo#123`',
+      t.teamId,
     );
     return;
   }
@@ -58,11 +60,12 @@ export async function streamPrReview(env: Env, t: StreamTarget): Promise<void> {
     thread_ts: t.threadTs,
     status: 'is reviewing…',
     loading_messages: REVIEW_LOADING,
-  }).catch(() => undefined);
+  }, t.teamId).catch(() => undefined);
 
   try {
     const { ctx, history } = await buildPrContext(env, gh, ref, {
-      history: fetchThreadHistory(env, t.channel, t.threadTs, t.messageTs),
+      history: fetchThreadHistory(env, t.channel, t.threadTs, t.messageTs, t.teamId),
+      teamId: t.teamId,
     });
 
     if (!t.teamId) {
@@ -79,7 +82,7 @@ export async function streamPrReview(env: Env, t: StreamTarget): Promise<void> {
         thread_ts: t.threadTs,
         text: message.text,
         blocks: message.blocks,
-      });
+      }, t.teamId);
       return;
     }
 
@@ -98,6 +101,7 @@ export async function streamPrReview(env: Env, t: StreamTarget): Promise<void> {
       t.channel,
       t.threadTs,
       `:warning: PR review failed: ${(err as Error).message}`,
+      t.teamId,
     );
   }
 }
@@ -113,7 +117,7 @@ export async function handleAssistantPrReview(
       channel: m.channelId,
       thread_ts: m.threadTs,
       text: prReviewMissingPatMessage(),
-    });
+    }, m.teamId);
     return;
   }
 
@@ -123,7 +127,7 @@ export async function handleAssistantPrReview(
       channel: m.channelId,
       thread_ts: m.threadTs,
       text: 'Could not parse a PR reference from your message.',
-    });
+    }, m.teamId);
     return;
   }
 
@@ -132,11 +136,12 @@ export async function handleAssistantPrReview(
     thread_ts: m.threadTs,
     status: 'is reviewing…',
     loading_messages: REVIEW_LOADING,
-  });
+  }, m.teamId);
 
   try {
     const { ctx, history } = await buildPrContext(env, gh, ref, {
-      history: fetchThreadHistory(env, m.channelId, m.threadTs, m.messageTs),
+      history: fetchThreadHistory(env, m.channelId, m.threadTs, m.messageTs, m.teamId),
+      teamId: m.teamId,
     });
 
     if (m.teamId && m.userId) {
@@ -165,13 +170,13 @@ export async function handleAssistantPrReview(
       thread_ts: m.threadTs,
       text: message.text,
       blocks: message.blocks,
-    });
+    }, m.teamId);
   } catch (err) {
     await call(env, 'chat.postMessage', {
       channel: m.channelId,
       thread_ts: m.threadTs,
       text: `:warning: PR review failed: ${(err as Error).message}`,
-    });
+    }, m.teamId);
   }
 }
 
@@ -180,6 +185,7 @@ export async function reviewToResponseUrl(
   env: Env,
   text: string,
   responseUrl: string,
+  teamId?: string,
 ): Promise<void> {
   const gh = GitHubClient.fromEnv(env);
   if (!gh) {
@@ -208,7 +214,7 @@ export async function reviewToResponseUrl(
   }
 
   try {
-    const { ctx } = await buildPrContext(env, gh, ref);
+    const { ctx } = await buildPrContext(env, gh, ref, { teamId });
     const review = await generatePrReview(
       env,
       ctx.prSummary,
@@ -248,15 +254,16 @@ async function buildPrContext(
   env: Env,
   gh: GitHubClient,
   ref: { owner: string; repo: string; number: number; url: string },
-  options?: { history?: Promise<Turn[]> },
+  options?: { history?: Promise<Turn[]>; teamId?: string },
 ): Promise<BuildPrContextResult> {
+  await assertTenantCanAccessRepo(env, `${ref.owner}/${ref.repo}`, options?.teamId);
   const historyP = options?.history?.catch(() => []) ?? Promise.resolve([]);
   const ghDataP = Promise.all([
     gh.getPullRequest(ref.owner, ref.repo, ref.number),
     gh.listPullRequestFiles(ref.owner, ref.repo, ref.number),
   ]);
   const indexedP = ghDataP.then(([pr, files]) =>
-    fetchIndexedContext(env, ref, pr, files),
+    fetchIndexedContext(env, ref, pr, files, options?.teamId),
   );
 
   const [[pr, files], history, indexedContext] = await Promise.all([
@@ -308,7 +315,7 @@ async function streamPrReviewReply(
         recipient_user_id: t.userId,
         recipient_team_id: t.teamId,
         chunks: [{ type: 'markdown_text', text }],
-      });
+      }, t.teamId);
       if (!started.ok || !started.ts) {
         throw new Error(`startStream: ${started.error ?? 'unknown'}`);
       }
@@ -318,7 +325,7 @@ async function streamPrReviewReply(
         channel: t.channel,
         ts,
         chunks: [{ type: 'markdown_text', text }],
-      });
+      }, t.teamId);
     }
   };
 
@@ -352,7 +359,7 @@ async function streamPrReviewReply(
       channel: t.channel,
       ts,
       blocks: buildPrReviewStreamFooter(t.prUrl),
-    });
+    }, t.teamId);
   } catch (err) {
     // Stream never opened (e.g. startStream unavailable in this surface) —
     // fall back to a single non-streaming post so the user still gets a review.
@@ -373,7 +380,7 @@ async function streamPrReviewReply(
       thread_ts: t.threadTs,
       text: message.text,
       blocks: message.blocks,
-    });
+    }, t.teamId);
   }
 }
 
@@ -396,6 +403,7 @@ async function fetchIndexedContext(
   ref: { owner: string; repo: string },
   pr: { title: string },
   files: import('../github.js').PullRequestFile[],
+  teamId?: string,
 ): Promise<string> {
   const paths = files
     .slice(0, 8)
@@ -403,7 +411,7 @@ async function fetchIndexedContext(
     .join(' ');
   const query = `${ref.owner}/${ref.repo} PR "${pr.title}" changes in: ${paths}`;
   try {
-    const outcome = await retrieve(env, query, query);
+    const outcome = await retrieve(env, query, query, teamId);
     if (outcome.packed.used.length === 0) return '';
     return outcome.packed.contextText.slice(0, 8_000);
   } catch {
@@ -416,6 +424,22 @@ async function postPlain(
   channel: string,
   threadTs: string,
   text: string,
+  teamId?: string,
 ): Promise<void> {
-  await call(env, 'chat.postMessage', { channel, thread_ts: threadTs, text });
+  await call(env, 'chat.postMessage', { channel, thread_ts: threadTs, text }, teamId);
+}
+
+async function assertTenantCanAccessRepo(
+  env: Env,
+  fullName: string,
+  teamId?: string,
+): Promise<void> {
+  const access = await getTenantRepoAccess(env, teamId);
+  if (!access) {
+    if (teamId) throw new Error('This Slack workspace is not onboarded yet.');
+    return;
+  }
+  if (!access.repoIds.includes(fullName.toLowerCase())) {
+    throw new Error(`Repo ${fullName} is not selected for this Slack workspace.`);
+  }
 }

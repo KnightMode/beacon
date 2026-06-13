@@ -1,15 +1,27 @@
 /**
- * Prototype auth: retrieval is restricted to repo_ids present (and enabled) in
- * the `prototype_repo_allowlist` table.
+ * Tenant auth: retrieval is restricted to repos selected for the Slack
+ * workspace tenant. Prototype allowlist remains as a fallback for older local
+ * installs and tests that do not send a Slack team id.
  */
 
 import type { Env } from './env.js';
+import { getTenantRepoAccess } from './tenant.js';
 
 const CACHE_TTL_MS = 45_000;
 
 let cached: { ids: string[]; expiresAt: number } | null = null;
 
-export async function getAllowlistedRepoIds(env: Env): Promise<string[]> {
+export async function getAllowlistedRepoIds(
+  env: Env,
+  teamId?: string,
+): Promise<string[]> {
+  const tenantAccess = await getTenantRepoAccess(env, teamId);
+  if (tenantAccess) return tenantAccess.repoIds;
+
+  // A Slack workspace id means this is a tenant-scoped request. If the
+  // workspace has not onboarded, do not fall back to the prototype allowlist.
+  if (teamId) return [];
+
   const now = Date.now();
   if (cached && cached.expiresAt > now) {
     return cached.ids;

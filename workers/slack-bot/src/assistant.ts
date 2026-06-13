@@ -9,6 +9,7 @@
  */
 
 import type { Env } from './env.js';
+import { markFirstCitedAnswer } from './tenant.js';
 import { call, monotonicStatus } from './stream.js';
 import { buildAnswer } from './answer.js';
 import { fetchThreadHistory } from './history.js';
@@ -27,6 +28,7 @@ export async function handleAssistantThreadStarted(
   env: Env,
   channelId: string,
   threadTs: string,
+  teamId?: string,
 ): Promise<void> {
   await call(env, 'assistant.threads.setSuggestedPrompts', {
     channel_id: channelId,
@@ -54,7 +56,7 @@ export async function handleAssistantThreadStarted(
         message: 'create pr: add a short comment explaining thread memory in history.ts',
       },
     ],
-  });
+  }, teamId);
 }
 
 export interface AssistantMessage {
@@ -76,7 +78,7 @@ export async function handleAssistantMessage(
       channel_id: m.channelId,
       thread_ts: m.threadTs,
       status: 'is reviewing…',
-    });
+    }, m.teamId);
     await handleAssistantPrReview(env, m);
     return;
   }
@@ -91,10 +93,10 @@ export async function handleAssistantMessage(
     let text: string;
     try {
       if (intent === 'index_status') {
-        text = await indexStatusAction(env);
+        text = await indexStatusAction(env, m.teamId);
       } else {
         const repo = parseIndexRepoTarget(m.text);
-        text = repo ? await indexRepoAction(env, repo) : 'Usage: `index owner/repo`';
+        text = repo ? await indexRepoAction(env, repo, m.teamId) : 'Usage: `index owner/repo`';
       }
     } catch (err) {
       text = `:warning: Index action failed: ${(err as Error).message}`;
@@ -103,7 +105,7 @@ export async function handleAssistantMessage(
       channel: m.channelId,
       thread_ts: m.threadTs,
       text,
-    });
+    }, m.teamId);
     return;
   }
 
@@ -115,7 +117,7 @@ export async function handleAssistantMessage(
       channel_id: m.channelId,
       thread_ts: m.threadTs,
       status: 'is reading your question…',
-    }).catch(() => undefined);
+    }, m.teamId).catch(() => undefined);
     await env.ANSWER_QUEUE.send({
       kind: 'assistant',
       channelId: m.channelId,
@@ -142,7 +144,7 @@ export async function answerAssistantQuestion(
       channel_id: m.channelId,
       thread_ts: m.threadTs,
       status,
-    }).catch(() => undefined);
+    }, m.teamId).catch(() => undefined);
   });
   setStatus('is reading your question…');
 
@@ -151,14 +153,24 @@ export async function answerAssistantQuestion(
     m.channelId,
     m.threadTs,
     m.messageTs,
+    m.teamId,
   ).catch(() => []);
 
-  const message = await buildAnswer(env, m.text, history, setStatus);
+  const { message, hadCitations } = await buildAnswer(
+    env,
+    m.text,
+    history,
+    setStatus,
+    m.teamId,
+  );
 
   await call(env, 'chat.postMessage', {
     channel: m.channelId,
     thread_ts: m.threadTs,
     text: message.text,
     blocks: message.blocks,
-  });
+  }, m.teamId);
+  if (hadCitations) {
+    await markFirstCitedAnswer(env, m.teamId).catch(() => undefined);
+  }
 }
