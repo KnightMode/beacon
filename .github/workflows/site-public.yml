@@ -1,0 +1,45 @@
+name: Make site public
+
+# Removes the Cloudflare Access application for the Cloudflare Pages marketing
+# site. This leaves the Zero Trust organization and identity provider in place
+# so Access can be re-enabled later by running Configure site Access.
+
+on:
+  push:
+    branches:
+      - KnightMode/access-email-otp
+    paths:
+      - '.github/workflows/site-public.yml'
+      - 'scripts/remove-cloudflare-access.mjs'
+  workflow_dispatch:
+    inputs:
+      site_hostname:
+        description: 'Hostname to make public'
+        required: true
+        default: 'beacon-90k.pages.dev'
+        type: string
+      app_name:
+        description: 'Cloudflare Access application name'
+        required: true
+        default: 'Beacon marketing site'
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  remove-access:
+    name: Remove Cloudflare Access
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+      - name: Remove Access
+        run: node scripts/remove-cloudflare-access.mjs
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          ACCESS_SITE_HOSTNAME: ${{ inputs.site_hostname }}
+          ACCESS_APP_NAME: ${{ inputs.app_name }}
