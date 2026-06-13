@@ -1,0 +1,63 @@
+name: Configure site Access
+
+# Manually configures Cloudflare Access for the Cloudflare Pages marketing site.
+# The CLOUDFLARE_API_TOKEN secret needs:
+# - Access: Apps and Policies Write
+# - Access: Organizations, Identity Providers, and Groups Write
+
+on:
+  workflow_dispatch:
+    inputs:
+      allowed_emails:
+        description: 'Comma-separated email addresses allowed to log in with OTP'
+        required: false
+        default: 'differentialcircuit@gmail.com'
+        type: string
+      allowed_domains:
+        description: 'Comma-separated email domains allowed to log in with OTP'
+        required: false
+        type: string
+      site_hostname:
+        description: 'Hostname to protect with Cloudflare Access'
+        required: true
+        default: 'beacon-90k.pages.dev'
+        type: string
+      app_name:
+        description: 'Cloudflare Access application name'
+        required: true
+        default: 'Beacon marketing site'
+        type: string
+      auth_domain:
+        description: 'Zero Trust team domain for Access login'
+        required: true
+        default: 'beacon-90k.cloudflareaccess.com'
+        type: string
+      session_duration:
+        description: 'Cloudflare Access session duration'
+        required: true
+        default: '24h'
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  configure:
+    name: Configure Cloudflare Access
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+      - name: Configure Access
+        run: node scripts/configure-cloudflare-access.mjs
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          ACCESS_ALLOWED_EMAILS: ${{ inputs.allowed_emails }}
+          ACCESS_ALLOWED_DOMAINS: ${{ inputs.allowed_domains }}
+          ACCESS_SITE_HOSTNAME: ${{ inputs.site_hostname }}
+          ACCESS_APP_NAME: ${{ inputs.app_name }}
+          ACCESS_AUTH_DOMAIN: ${{ inputs.auth_domain }}
+          ACCESS_SESSION_DURATION: ${{ inputs.session_duration }}
