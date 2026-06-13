@@ -239,8 +239,9 @@ async function cfFetch(pathname, options = {}) {
 
   if (!response.ok || !payload?.success) {
     const messages = payload?.errors?.map((error) => error.message).join('; ');
+    const hint = permissionHint(pathname, response.status);
     throw new Error(
-      `Cloudflare API ${response.status} ${options.method || 'GET'} ${pathname}: ${messages || response.statusText}`,
+      `Cloudflare API ${response.status} ${options.method || 'GET'} ${pathname}: ${messages || response.statusText}${hint}`,
     );
   }
 
@@ -282,4 +283,20 @@ function cleanAuthDomain(value) {
 
 function isAccessNotEnabledError(error) {
   return error instanceof Error && error.message.includes('access.api.error.not_enabled');
+}
+
+function permissionHint(pathname, status) {
+  if (status !== 403) {
+    return '';
+  }
+
+  if (pathname.startsWith('/access/apps')) {
+    return ' Hint: add Account > Access: Apps and Policies > Edit to CLOUDFLARE_API_TOKEN.';
+  }
+
+  if (pathname.startsWith('/access/organizations') || pathname.startsWith('/access/identity_providers')) {
+    return ' Hint: add Account > Access: Organizations, Identity Providers, and Groups > Edit to CLOUDFLARE_API_TOKEN.';
+  }
+
+  return '';
 }
