@@ -27,13 +27,29 @@
   }
 
   async function load() {
-    const data = await fetchJson("/api/admin/onboarding");
+    const data = await fetchJson("/api/admin/session");
+    if (!data.authenticated) {
+      renderSignedOut();
+      return;
+    }
     renderTenant(data);
     renderSteps(data.steps || {});
     renderRepos(data.repos || []);
     if (isOnboarding) {
       await loadRepoPicker(data);
     }
+  }
+
+  function renderSignedOut() {
+    renderTenant({ integrations: {}, repos: [], completed: false });
+    renderSteps({});
+    renderRepos([]);
+    setText("[data-onboarding-state]", "Needs Slack");
+    setText("[data-repo-picker-status]", "Connect Slack to load repositories.");
+    setText("[data-repo-form-status]", "Connect Slack first.");
+    const submit = $("[data-repo-submit]");
+    if (submit) submit.disabled = true;
+    $("[data-repo-picker]")?.querySelectorAll("[data-repo-select]").forEach((node) => node.remove());
   }
 
   async function loadRepoPicker(onboarding) {
