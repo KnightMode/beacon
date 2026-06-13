@@ -4,6 +4,7 @@
 
 import type { Env } from './env.js';
 import { fetchThreadHistory, type Turn } from './history.js';
+import { getSlackBotToken } from './tenant.js';
 
 const SLACK_API = 'https://slack.com/api';
 
@@ -36,6 +37,7 @@ export async function fetchMessageText(
   env: Env,
   channel: string,
   messageTs: string,
+  teamId?: string,
 ): Promise<string> {
   try {
     const repliesUrl =
@@ -44,7 +46,7 @@ export async function fetchMessageText(
       `&ts=${encodeURIComponent(messageTs)}` +
       `&inclusive=true&limit=1`;
     const repliesRes = await fetch(repliesUrl, {
-      headers: { authorization: `Bearer ${env.SLACK_BOT_TOKEN}` },
+      headers: { authorization: `Bearer ${await getSlackBotToken(env, teamId)}` },
     });
     const replies = (await repliesRes.json()) as RepliesResponse;
     if (replies.ok && replies.messages?.[0]?.text) {
@@ -57,7 +59,7 @@ export async function fetchMessageText(
       `&latest=${encodeURIComponent(messageTs)}` +
       `&inclusive=true&limit=1`;
     const historyRes = await fetch(historyUrl, {
-      headers: { authorization: `Bearer ${env.SLACK_BOT_TOKEN}` },
+      headers: { authorization: `Bearer ${await getSlackBotToken(env, teamId)}` },
     });
     const history = (await historyRes.json()) as HistoryResponse;
     return history.messages?.[0]?.text?.trim() ?? '';
@@ -76,6 +78,7 @@ export async function resolveThreadRoot(
   env: Env,
   channel: string,
   messageTs: string,
+  teamId?: string,
 ): Promise<string> {
   try {
     const repliesUrl =
@@ -84,7 +87,7 @@ export async function resolveThreadRoot(
       `&ts=${encodeURIComponent(messageTs)}` +
       `&inclusive=true&limit=1`;
     const repliesRes = await fetch(repliesUrl, {
-      headers: { authorization: `Bearer ${env.SLACK_BOT_TOKEN}` },
+      headers: { authorization: `Bearer ${await getSlackBotToken(env, teamId)}` },
     });
     const replies = (await repliesRes.json()) as RepliesResponse;
     if (replies.ok && replies.messages?.[0]) {
@@ -99,7 +102,7 @@ export async function resolveThreadRoot(
       `&latest=${encodeURIComponent(messageTs)}` +
       `&inclusive=true&limit=1`;
     const historyRes = await fetch(historyUrl, {
-      headers: { authorization: `Bearer ${env.SLACK_BOT_TOKEN}` },
+      headers: { authorization: `Bearer ${await getSlackBotToken(env, teamId)}` },
     });
     const history = (await historyRes.json()) as HistoryResponse;
     if (history.ok && history.messages?.[0]) {
@@ -112,7 +115,7 @@ export async function resolveThreadRoot(
       `?channel=${encodeURIComponent(channel)}` +
       `&message_ts=${encodeURIComponent(messageTs)}`;
     const linkRes = await fetch(permalinkUrl, {
-      headers: { authorization: `Bearer ${env.SLACK_BOT_TOKEN}` },
+      headers: { authorization: `Bearer ${await getSlackBotToken(env, teamId)}` },
     });
     const link = (await linkRes.json()) as PermalinkResponse;
     if (link.ok && link.permalink) {
@@ -143,8 +146,9 @@ export async function buildIssueFromThread(
   env: Env,
   channel: string,
   threadTs: string,
+  teamId?: string,
 ): Promise<string> {
-  const turns = await fetchThreadHistory(env, channel, threadTs);
+  const turns = await fetchThreadHistory(env, channel, threadTs, undefined, teamId);
   const userLines = turns.filter((t) => t.role === 'user').map((t) => t.text);
   if (userLines.length === 0) return '';
   return userLines.join('\n\n');

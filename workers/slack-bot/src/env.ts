@@ -24,4 +24,6 @@ export interface Env {
   EVAL_TOKEN?: string;
   /** Fine-grained PAT: Read for review; Write for create-PR (Contents + Pull requests). */
   GITHUB_PAT?: string;
+  /** AES-GCM secret used to decrypt per-tenant Slack bot tokens from the portal. */
+  SLACK_TOKEN_ENCRYPTION_SECRET?: string;
 }

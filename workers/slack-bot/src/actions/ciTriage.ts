@@ -53,7 +53,7 @@ export async function processTriageJob(env: Env, job: TriageJob): Promise<void> 
   }
 
   try {
-    const channel = await getNotifyChannel(env, job.repoId);
+    const channel = await getNotifyChannel(env, job.repoId, job.slackTeamId);
     if (!channel) {
       console.log('ci triage: no notify channel mapped, skipping', {
         repo: job.repoFullName,
@@ -74,7 +74,7 @@ export async function processTriageJob(env: Env, job: TriageJob): Promise<void> 
       channel,
       text: message.text,
       blocks: message.blocks,
-    });
+    }, job.slackTeamId);
     if (!res.ok) {
       throw new Error(`chat.postMessage failed: ${res.error ?? 'unknown'}`);
     }
@@ -177,7 +177,7 @@ async function buildMessage(
       return '';
     });
 
-  const retrievalPromise = retrieveSmart(env, question, searchText)
+  const retrievalPromise = retrieveSmart(env, question, searchText, undefined, job.slackTeamId)
     .then((outcome) => ({
       indexedContext: outcome.packed.contextText,
       citations: outcome.packed.citations,

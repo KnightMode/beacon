@@ -11,7 +11,15 @@
 
 import { shouldIndexFile } from '@scintel/shared';
 import type { Env } from './env.js';
-import { upsertRepo, addToAllowlist, isAllowlisted, repoIdFor } from './db.js';
+import {
+  upsertRepo,
+  addToAllowlist,
+  addRepoToInstallationTenants,
+  hasLinkedTenants,
+  queuePendingInstallationRepo,
+  isAllowlisted,
+  repoIdFor,
+} from './db.js';
 import {
   enqueueFullIndex,
   enqueueIncrementalIndex,
@@ -27,6 +35,13 @@ interface GithubRepoLite {
 
 interface InstallationPayload {
   action: string;
+  installation?: {
+    id?: number;
+    account?: {
+      login?: string;
+      type?: string;
+    };
+  };
   repositories?: GithubRepoLite[];
   repositories_added?: GithubRepoLite[];
   repositories_removed?: GithubRepoLite[];
@@ -93,7 +108,14 @@ async function handleInstallation(
       defaultBranch: r.default_branch,
       private: r.private,
     });
-    await addToAllowlist(env, repoId, r.full_name, 'installation');
+    const installationId = payload.installation?.id;
+    const linked = await hasLinkedTenants(env, installationId);
+    if (linked) {
+      await addRepoToInstallationTenants(env, installationId, repoId, r.full_name);
+    } else {
+      await queuePendingInstallationRepo(env, installationId, repoId, r.full_name);
+      await addToAllowlist(env, repoId, r.full_name, 'installation');
+    }
     await enqueueFullIndex(env, repoId, r.full_name);
     enqueued.push(r.full_name);
   }

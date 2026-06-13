@@ -7,6 +7,7 @@
  */
 
 import type { Env } from '../env.js';
+import { markFirstCitedAnswer } from '../tenant.js';
 import { streamAnswer } from '../stream.js';
 import { buildAnswer } from '../answer.js';
 import { answerAssistantQuestion } from '../assistant.js';
@@ -25,6 +26,7 @@ export type AnswerJob =
       kind: 'response_url';
       question: string;
       responseUrl: string;
+      teamId?: string;
     }
   | {
       kind: 'assistant';
@@ -58,12 +60,21 @@ export async function processAnswerJob(env: Env, job: AnswerJob): Promise<void> 
       });
       return;
     case 'response_url': {
-      const message = await buildAnswer(env, job.question);
+      const { message, hadCitations } = await buildAnswer(
+        env,
+        job.question,
+        [],
+        undefined,
+        job.teamId,
+      );
       await fetch(job.responseUrl, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ ...message, replace_original: false }),
       });
+      if (hadCitations) {
+        await markFirstCitedAnswer(env, job.teamId).catch(() => undefined);
+      }
       return;
     }
     case 'assistant':
