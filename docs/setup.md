@@ -140,8 +140,8 @@ The marketing site deploys from `site/` to Cloudflare Pages, but the sensitive
 admin surface is path-scoped behind Cloudflare Access. To require email one-time
 PIN login for `/admin`, `/api/admin`, and the OAuth callbacks, run the manual
 `Configure site Access` GitHub Actions workflow with the allowed emails or email
-domains. Copy the printed `ADMIN_CF_ACCESS_ISSUER` and `ADMIN_CF_ACCESS_AUD`
-values into the Pages project vars. See
+domains. The workflow creates the Access apps and writes the required
+`ADMIN_CF_ACCESS_*` runtime vars into the Pages project. See
 [Protect the admin portal with Cloudflare Access](./site-access.md).
 
 ## Environment reference

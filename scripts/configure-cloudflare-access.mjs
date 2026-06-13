@@ -5,6 +5,8 @@ const API_BASE = 'https://api.cloudflare.com/client/v4';
 const accountId = requiredEnv('CLOUDFLARE_ACCOUNT_ID');
 const apiToken = requiredEnv('CLOUDFLARE_API_TOKEN');
 const hostname = cleanHostname(process.env.ACCESS_SITE_HOSTNAME || 'beacon-90k.pages.dev');
+const pagesProjectName = process.env.ACCESS_PAGES_PROJECT_NAME?.trim() || 'beacon';
+const pagesEnvironment = normalizePagesEnvironment(process.env.ACCESS_PAGES_ENVIRONMENT || 'production');
 const appName = process.env.ACCESS_APP_NAME?.trim() || 'Beacon admin portal';
 const organizationName = process.env.ACCESS_ORGANIZATION_NAME?.trim() || 'Beacon';
 const authDomain = cleanAuthDomain(process.env.ACCESS_AUTH_DOMAIN || 'beacon-90k.cloudflareaccess.com');
@@ -36,6 +38,9 @@ for (const domain of protectedPaths.map((path) => `${hostname}${path}`)) {
   results.push({ app, policy, domain });
 }
 
+const accessAudiences = results.map(({ app }) => app.aud).filter(Boolean).join(',');
+await updatePagesAccessVars(accessAudiences);
+
 console.log(`Cloudflare Access is configured for admin paths on ${hostname}.`);
 console.log(`Organization auth domain: ${authDomain}`);
 for (const { app, policy, domain } of results) {
@@ -45,8 +50,7 @@ for (const { app, policy, domain } of results) {
 }
 console.log(`Allowed emails: ${allowedEmails.length || 0}`);
 console.log(`Allowed email domains: ${allowedDomains.length || 0}`);
-console.log(`Set Pages var ADMIN_CF_ACCESS_ISSUER=https://${authDomain}`);
-console.log(`Set Pages var ADMIN_CF_ACCESS_AUD=${results.map(({ app }) => app.aud).filter(Boolean).join(',')}`);
+console.log(`Updated Pages project ${pagesProjectName} ${pagesEnvironment} Access runtime vars.`);
 
 async function ensureAccessOrganization() {
   try {
@@ -170,6 +174,43 @@ async function ensureAccessPolicy(appId) {
   return response.result;
 }
 
+async function updatePagesAccessVars(accessAudiences) {
+  if (!accessAudiences) {
+    throw new Error('Cloudflare Access did not return any application audience tags.');
+  }
+
+  const project = await getPagesProject();
+  const environmentConfig = project.deployment_configs?.[pagesEnvironment] || {};
+  const envVars = {
+    ...(environmentConfig.env_vars || {}),
+    ADMIN_CF_ACCESS_ISSUER: plainTextVar(`https://${authDomain}`),
+    ADMIN_CF_ACCESS_AUD: plainTextVar(accessAudiences),
+    ADMIN_CF_ACCESS_ALLOWED_EMAILS: plainTextVar(allowedEmails.join(',')),
+    ADMIN_CF_ACCESS_ALLOWED_DOMAINS: plainTextVar(allowedDomains.join(',')),
+  };
+
+  await cfFetch(`/pages/projects/${encodeURIComponent(pagesProjectName)}`, {
+    method: 'PATCH',
+    body: {
+      deployment_configs: {
+        [pagesEnvironment]: {
+          ...environmentConfig,
+          env_vars: envVars,
+        },
+      },
+    },
+  });
+}
+
+async function getPagesProject() {
+  const response = await cfFetch(`/pages/projects/${encodeURIComponent(pagesProjectName)}`);
+  return response.result;
+}
+
+function plainTextVar(value) {
+  return { type: 'plain_text', value };
+}
+
 function normalizeAllowedIdps(allowedIdps) {
   if (!Array.isArray(allowedIdps)) {
     return [];
@@ -288,6 +329,14 @@ function normalizeAccessPath(value) {
   return path.startsWith('/') ? path : `/${path}`;
 }
 
+function normalizePagesEnvironment(value) {
+  const normalized = value.trim().toLowerCase();
+  if (normalized === 'production' || normalized === 'preview') {
+    return normalized;
+  }
+  throw new Error('ACCESS_PAGES_ENVIRONMENT must be "production" or "preview".');
+}
+
 function requiredEnv(name) {
   const value = process.env[name]?.trim();
   if (!value) {
@@ -321,6 +370,10 @@ function permissionHint(pathname, status) {
 
   if (pathname.startsWith('/access/organizations') || pathname.startsWith('/access/identity_providers')) {
     return ' Hint: add Account > Access: Organizations, Identity Providers, and Groups > Edit to CLOUDFLARE_API_TOKEN.';
+  }
+
+  if (pathname.startsWith('/pages/projects')) {
+    return ' Hint: add Cloudflare Pages: Edit to CLOUDFLARE_API_TOKEN.';
   }
 
   return '';
