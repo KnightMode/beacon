@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&family=Newsreader:opsz,wght@6..72,500;6..72,650;6..72,750&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="../../styles.css?v=11" />
+  <link rel="stylesheet" href="../../styles.css?v=12" />
 </head>
 <body class="admin-shell" data-admin-page="onboarding">
   <a class="skip-link" href="#main">Skip to content</a>
@@ -92,7 +92,10 @@
 
         <section class="setup-card" data-step-card="indexing">
           <p class="setup-card__index">04 / Indexing</p>
-          <h2>Watch indexing complete.</h2>
+          <div class="setup-card__heading">
+            <h2>Watch indexing complete.</h2>
+            <button class="button button--quiet button--small" type="button" data-refresh>Refresh</button>
+          </div>
           <div class="repo-table" data-repo-table>
             <p class="admin-empty">No indexing jobs yet.</p>
           </div>
@@ -121,6 +124,6 @@
   </main>
 
   <script src="../../main.js?v=7"></script>
-  <script src="../admin.js?v=5"></script>
+  <script src="../admin.js?v=6"></script>
 </body>
 </html>
