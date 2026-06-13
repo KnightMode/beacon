@@ -57,7 +57,7 @@ npm run deploy --workspace workers/github-webhook
 ```
 
 For the Cloudflare Pages admin portal, the `Configure site Access` workflow
-updates the Pages project with:
+updates the Pages project and redeploys it with:
 
 - **D1 binding:** `DB` pointing at the same `scintel` database.
 - **Secrets from GitHub Actions:** `ADMIN_SESSION_SECRET`, `SLACK_CLIENT_SECRET`,
@@ -73,6 +73,11 @@ updates the Pages project with:
 The Slack OAuth redirect URL is
 `https://<pages-host>/oauth/slack/callback`. The GitHub App setup callback is
 `https://<pages-host>/oauth/github/callback`.
+
+If Slack OAuth redirects back with `Cannot read properties of undefined
+(reading 'batch')`, the Pages deployment does not have the `DB` binding yet.
+Rerun `Configure site Access` and keep the default D1 values unless you created
+a different database.
 
 Admin portal Pages Functions live at `functions/` (repo root). Wrangler reads
 that directory from the project root when you run `wrangler pages dev site` or
