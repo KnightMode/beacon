@@ -33,6 +33,11 @@ on:
         required: true
         default: 'Beacon marketing site'
         type: string
+      auth_domain:
+        description: 'Zero Trust team domain for Access login'
+        required: true
+        default: 'beacon-90k.cloudflareaccess.com'
+        type: string
       session_duration:
         description: 'Cloudflare Access session duration'
         required: true
@@ -60,4 +65,5 @@ jobs:
           ACCESS_ALLOWED_DOMAINS: ${{ inputs.allowed_domains }}
           ACCESS_SITE_HOSTNAME: ${{ inputs.site_hostname }}
           ACCESS_APP_NAME: ${{ inputs.app_name }}
+          ACCESS_AUTH_DOMAIN: ${{ inputs.auth_domain }}
           ACCESS_SESSION_DURATION: ${{ inputs.session_duration }}
