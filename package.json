@@ -14,6 +14,7 @@
     "typecheck": "npm run typecheck --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
     "configure:site-access": "node scripts/configure-cloudflare-access.mjs",
+    "remove:site-access": "node scripts/remove-cloudflare-access.mjs",
     "dry-run": "npm run dry-run --workspace workers/github-webhook && npm run dry-run --workspace workers/slack-bot"
   },
   "devDependencies": {
