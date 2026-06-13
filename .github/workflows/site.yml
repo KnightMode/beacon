@@ -10,7 +10,10 @@ on:
     paths:
       - 'site/**'
       - 'functions/**'
+      - 'package.json'
+      - 'package-lock.json'
       - 'packages/shared/migrations/0004_tenants.sql'
+      - 'packages/shared/migrations/0005_tenant_ci_triage_runs.sql'
       - '.github/workflows/site.yml'
   workflow_dispatch: {}
 
@@ -29,6 +32,7 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - run: npm run test:functions
       - name: Deploy
         run: npx wrangler pages deploy site --project-name=beacon --branch=main
         env:

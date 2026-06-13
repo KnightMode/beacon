@@ -5,25 +5,29 @@ const API_BASE = 'https://api.cloudflare.com/client/v4';
 const accountId = requiredEnv('CLOUDFLARE_ACCOUNT_ID');
 const apiToken = requiredEnv('CLOUDFLARE_API_TOKEN');
 const hostname = cleanHostname(process.env.ACCESS_SITE_HOSTNAME || 'beacon-90k.pages.dev');
-const appName = process.env.ACCESS_APP_NAME?.trim() || 'Beacon marketing site';
+const appName = process.env.ACCESS_APP_NAME?.trim() || 'Beacon admin portal';
+const protectedPaths = splitCsv(
+  process.env.ACCESS_PROTECTED_PATHS || '/admin*,/api/admin*,/oauth/slack/callback*,/oauth/github/callback*',
+).map(normalizeAccessPath);
 
-const app = await findAccessApplication();
+const apps = await findAccessApplications();
 
-if (!app) {
-  console.log(`No Cloudflare Access application found for ${hostname}. Site should already be public.`);
+if (apps.length === 0) {
+  console.log(`No Cloudflare Access applications found for admin paths on ${hostname}.`);
   process.exit(0);
 }
 
-await cfFetch(`/access/apps/${app.id}`, { method: 'DELETE' });
+for (const app of apps) {
+  await cfFetch(`/access/apps/${app.id}`, { method: 'DELETE' });
+  console.log(`Deleted Cloudflare Access application ${app.id} for ${app.domain}.`);
+}
 
-console.log(`Deleted Cloudflare Access application ${app.id} for ${hostname}.`);
-console.log('The Pages site should now be publicly accessible once Cloudflare propagation completes.');
+console.log('The admin portal paths should now be publicly accessible once Cloudflare propagation completes.');
 
-async function findAccessApplication() {
+async function findAccessApplications() {
   const apps = await listAll('/access/apps');
-  return apps.find((candidate) => {
-    return candidate.domain === hostname || candidate.name === appName;
-  });
+  const protectedDomains = new Set(protectedPaths.map((path) => `${hostname}${path}`));
+  return apps.filter((candidate) => protectedDomains.has(candidate.domain) || candidate.name === appName);
 }
 
 async function listAll(pathname) {
@@ -69,6 +73,21 @@ function cleanHostname(value) {
     .replace(/^https?:\/\//, '')
     .replace(/\/.*$/, '')
     .toLowerCase();
+}
+
+function splitCsv(value) {
+  return (value || '')
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+}
+
+function normalizeAccessPath(value) {
+  const path = value.trim();
+  if (!path || path === '/') {
+    throw new Error('ACCESS_PROTECTED_PATHS must not include the whole site.');
+  }
+  return path.startsWith('/') ? path : `/${path}`;
 }
 
 function requiredEnv(name) {

@@ -63,6 +63,10 @@ For the Cloudflare Pages admin portal, configure the Pages project with:
   `SLACK_TOKEN_ENCRYPTION_SECRET`, and optionally `PIPELINE_DISPATCH_TOKEN`.
 - **Vars:** `SLACK_CLIENT_ID`, `GITHUB_APP_SLUG`, `PIPELINE_DISPATCH_REPO`, and
   `PIPELINE_DISPATCH_EVENT`.
+- **Cloudflare Access vars:** `ADMIN_CF_ACCESS_ISSUER` and
+  `ADMIN_CF_ACCESS_AUD` are required for deployed admin routes. Optionally set
+  `ADMIN_CF_ACCESS_ALLOWED_EMAILS` or `ADMIN_CF_ACCESS_ALLOWED_DOMAINS` for an
+  in-app allow-list that mirrors the Access policy.
 
 The Slack OAuth redirect URL is
 `https://<pages-host>/oauth/slack/callback`. The GitHub App setup callback is
@@ -130,12 +134,15 @@ Restart `npm run dev:portal` after changing `.dev.vars`.
 > Pushes to `main` in this repository also auto-deploy the workers via
 > `deploy.yml`.
 
-## 6. Marketing site Access
+## 6. Admin portal Access
 
-The marketing site deploys from `site/` to Cloudflare Pages. To require email
-one-time PIN login before viewing it, run the manual `Configure site Access`
-GitHub Actions workflow with the allowed emails or email domains. See
-[Protect the marketing site with Cloudflare Access](./site-access.md).
+The marketing site deploys from `site/` to Cloudflare Pages, but the sensitive
+admin surface is path-scoped behind Cloudflare Access. To require email one-time
+PIN login for `/admin`, `/api/admin`, and the OAuth callbacks, run the manual
+`Configure site Access` GitHub Actions workflow with the allowed emails or email
+domains. Copy the printed `ADMIN_CF_ACCESS_ISSUER` and `ADMIN_CF_ACCESS_AUD`
+values into the Pages project vars. See
+[Protect the admin portal with Cloudflare Access](./site-access.md).
 
 ## Environment reference
 
