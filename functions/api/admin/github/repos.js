@@ -67,7 +67,7 @@ export async function onRequestGet(context) {
         ? `No repositories match "${q}". Try a different owner or repo name.`
         : context.env.GITHUB_APP_ID?.trim() && context.env.GITHUB_APP_PRIVATE_KEY?.trim()
           ? 'No repositories are available on this GitHub installation yet.'
-          : 'Repo list needs GITHUB_APP_ID and GITHUB_APP_PRIVATE_KEY in .dev.vars.';
+          : missingGitHubAppConfigMessage(context.request);
     }
 
     return json({
@@ -110,4 +110,12 @@ async function listReposFromDatabase(env, installationId) {
     defaultBranch: 'main',
     private: true,
   }));
+}
+
+function missingGitHubAppConfigMessage(request) {
+  const host = new URL(request.url).hostname;
+  if (host === 'localhost' || host === '127.0.0.1') {
+    return 'Repo list needs GITHUB_APP_ID and GITHUB_APP_PRIVATE_KEY in .dev.vars.';
+  }
+  return 'Repo list needs BEACON_GITHUB_APP_ID and BEACON_GITHUB_APP_PRIVATE_KEY configured in GitHub Actions, then Configure site Access rerun.';
 }
