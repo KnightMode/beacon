@@ -1,0 +1,18 @@
+# Copy to .dev.vars at the REPO ROOT (not here). Used by: npm run dev:portal
+# See repo root .dev.vars — wrangler loads secrets from the project root only.
+
+ADMIN_SESSION_SECRET=
+SLACK_CLIENT_ID=
+SLACK_CLIENT_SECRET=
+SLACK_TOKEN_ENCRYPTION_SECRET=
+GITHUB_APP_SLUG=
+GITHUB_APP_ID=
+GITHUB_APP_PRIVATE_KEY=
+PIPELINE_DISPATCH_REPO=
+PIPELINE_DISPATCH_TOKEN=
+PIPELINE_DISPATCH_EVENT=index-repo
+
+# Sync indexing progress from production D1 when using local portal + GitHub Actions indexer
+CLOUDFLARE_ACCOUNT_ID=
+CLOUDFLARE_API_TOKEN=
+CLOUDFLARE_D1_DATABASE_ID=27722a79-10d9-4bfc-aa53-1d65a80c8f79

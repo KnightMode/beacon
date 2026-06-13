@@ -63,6 +63,8 @@ export interface TriageJob {
   headBranch: string;
   headSha: string;
   runHtmlUrl: string;
+  /** Slack workspace for per-tenant bot token and notify-channel lookup. */
+  slackTeamId?: string;
   enqueuedAt: string;
 }
 

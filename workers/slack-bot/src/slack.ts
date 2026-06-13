@@ -43,6 +43,7 @@ export function handleSlashCommand(
 ): Response {
   const question = (params.get('text') ?? '').trim();
   const responseUrl = params.get('response_url');
+  const teamId = params.get('team_id') ?? undefined;
 
   if (!question) {
     return ackJson({
@@ -82,7 +83,7 @@ export function handleSlashCommand(
 
   if (intent === 'index_repo' || intent === 'index_status') {
     if (responseUrl) {
-      ctx.waitUntil(indexActionToResponseUrl(env, intent, question, responseUrl));
+      ctx.waitUntil(indexActionToResponseUrl(env, intent, question, responseUrl, teamId));
     }
     return ackJson({
       response_type: 'ephemeral',
@@ -96,8 +97,8 @@ export function handleSlashCommand(
   if (responseUrl) {
     ctx.waitUntil(
       intent === 'pr_review'
-        ? reviewToResponseUrl(env, question, responseUrl)
-        : enqueueAnswer(env, { kind: 'response_url', question, responseUrl }),
+        ? reviewToResponseUrl(env, question, responseUrl, teamId)
+        : enqueueAnswer(env, { kind: 'response_url', question, responseUrl, teamId }),
     );
   }
 
@@ -115,8 +116,9 @@ async function indexActionToResponseUrl(
   intent: 'index_repo' | 'index_status',
   question: string,
   responseUrl: string,
+  teamId?: string,
 ): Promise<void> {
-  const text = await runIndexAction(env, intent, question);
+  const text = await runIndexAction(env, intent, question, teamId);
   await fetch(responseUrl, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -128,12 +130,13 @@ async function runIndexAction(
   env: Env,
   intent: 'index_repo' | 'index_status',
   text: string,
+  teamId?: string,
 ): Promise<string> {
   try {
-    if (intent === 'index_status') return await indexStatusAction(env);
+    if (intent === 'index_status') return await indexStatusAction(env, teamId);
     const repo = parseIndexRepoTarget(text);
     if (!repo) return 'Usage: `index owner/repo`';
-    return await indexRepoAction(env, repo);
+    return await indexRepoAction(env, repo, teamId);
   } catch (err) {
     return `:warning: Index action failed: ${(err as Error).message}`;
   }
@@ -210,6 +213,7 @@ export function handleEvent(
               channel: event.channel,
               threadTs,
               userId: event.user,
+              teamId: body.team_id ?? event.team,
               messageTs: event.ts,
               issueHint: stripCreatePrPrefix(question),
             }),
@@ -218,12 +222,12 @@ export function handleEvent(
           ctx.waitUntil(streamPrReview(env, target));
         } else if (intent === 'index_repo' || intent === 'index_status') {
           ctx.waitUntil(
-            runIndexAction(env, intent, question).then((text) =>
+            runIndexAction(env, intent, question, body.team_id ?? event.team).then((text) =>
               call(env, 'chat.postMessage', {
                 channel: event.channel,
                 thread_ts: threadTs,
                 text,
-              }).then(() => undefined),
+              }, body.team_id ?? event.team).then(() => undefined),
             ),
           );
         } else if (intent === 'notify_repo') {
@@ -235,12 +239,13 @@ export function handleEvent(
                 notify.repo,
                 notify.channelId ?? event.channel,
                 event.user,
+                body.team_id ?? event.team,
               ).then((text) =>
                 call(env, 'chat.postMessage', {
                   channel: event.channel,
                   thread_ts: threadTs,
                   text,
-                }).then(() => undefined),
+                }, body.team_id ?? event.team).then(() => undefined),
               ),
             );
           }
@@ -252,7 +257,7 @@ export function handleEvent(
               channel_id: event.channel,
               thread_ts: threadTs,
               status: 'is reading your question…',
-            })
+            }, body.team_id ?? event.team)
               .catch(() => undefined)
               .then(() => enqueueAnswer(env, { kind: 'stream', ...target })),
           );
@@ -267,7 +272,7 @@ export function handleEvent(
     const at = event.assistant_thread;
     if (at?.channel_id && at.thread_ts) {
       ctx.waitUntil(
-        handleAssistantThreadStarted(env, at.channel_id, at.thread_ts),
+        handleAssistantThreadStarted(env, at.channel_id, at.thread_ts, body.team_id ?? event.team),
       );
     }
     return ackJson({ ok: true });

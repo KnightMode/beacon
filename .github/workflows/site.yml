@@ -9,6 +9,8 @@ on:
     branches: [main]
     paths:
       - 'site/**'
+      - 'functions/**'
+      - 'packages/shared/migrations/0004_tenants.sql'
       - '.github/workflows/site.yml'
   workflow_dispatch: {}
 

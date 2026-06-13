@@ -58,9 +58,123 @@ export async function addToAllowlist(
     .run();
 }
 
+export async function hasLinkedTenants(
+  env: Env,
+  installationId: number | undefined,
+): Promise<boolean> {
+  if (!installationId) return false;
+  const row = await env.DB.prepare(
+    `SELECT tenant_id FROM tenant_github_installations WHERE installation_id = ?1 LIMIT 1`,
+  )
+    .bind(installationId)
+    .first();
+  return row !== null;
+}
+
+export async function queuePendingInstallationRepo(
+  env: Env,
+  installationId: number | undefined,
+  repoId: string,
+  fullName: string,
+): Promise<void> {
+  if (!installationId) return;
+  await env.DB.prepare(
+    `INSERT INTO pending_installation_repos (installation_id, repo_id, full_name)
+     VALUES (?1, ?2, ?3)
+     ON CONFLICT(installation_id, repo_id) DO UPDATE SET full_name = excluded.full_name`,
+  )
+    .bind(installationId, repoId, fullName)
+    .run();
+}
+
+export async function addRepoToInstallationTenants(
+  env: Env,
+  installationId: number | undefined,
+  repoId: string,
+  fullName: string,
+): Promise<void> {
+  if (!installationId) return;
+  const { results } = await env.DB.prepare(
+    `SELECT tenant_id FROM tenant_github_installations WHERE installation_id = ?1`,
+  )
+    .bind(installationId)
+    .all<{ tenant_id: string }>();
+  for (const row of results) {
+    await env.DB.prepare(
+      `INSERT INTO tenant_repos (tenant_id, repo_id, full_name, enabled, selected_by, updated_at)
+       VALUES (?1, ?2, ?3, 1, 'github-installation', datetime('now'))
+       ON CONFLICT(tenant_id, repo_id) DO UPDATE SET
+         enabled = 1,
+         full_name = excluded.full_name,
+         updated_at = datetime('now')`,
+    )
+      .bind(row.tenant_id, repoId, fullName)
+      .run();
+    await env.DB.prepare(
+      `DELETE FROM pending_installation_repos
+       WHERE installation_id = ?1 AND repo_id = ?2`,
+    )
+      .bind(installationId, repoId)
+      .run();
+  }
+}
+
+/** Backfill tenant repos after the GitHub App install OAuth callback. */
+export async function linkPendingInstallationRepos(
+  env: Env,
+  tenantId: string,
+  installationId: number,
+): Promise<number> {
+  const { results } = await env.DB.prepare(
+    `SELECT repo_id, full_name FROM pending_installation_repos
+     WHERE installation_id = ?1`,
+  )
+    .bind(installationId)
+    .all<{ repo_id: string; full_name: string }>();
+
+  for (const row of results) {
+    await env.DB.prepare(
+      `INSERT INTO tenant_repos (tenant_id, repo_id, full_name, enabled, selected_by, updated_at)
+       VALUES (?1, ?2, ?3, 1, 'github-installation', datetime('now'))
+       ON CONFLICT(tenant_id, repo_id) DO UPDATE SET
+         enabled = 1,
+         full_name = excluded.full_name,
+         updated_at = datetime('now')`,
+    )
+      .bind(tenantId, row.repo_id, row.full_name)
+      .run();
+    await env.DB.prepare(
+      `DELETE FROM pending_installation_repos
+       WHERE installation_id = ?1 AND repo_id = ?2`,
+    )
+      .bind(installationId, row.repo_id)
+      .run();
+  }
+  return results.length;
+}
+
+export async function getSlackTeamIdForRepo(
+  env: Env,
+  repoId: string,
+): Promise<string | null> {
+  const row = await env.DB.prepare(
+    `SELECT t.slack_team_id
+     FROM tenants t
+     JOIN tenant_repos tr ON tr.tenant_id = t.id
+     WHERE tr.repo_id = ?1 AND tr.enabled = 1 AND t.status = 'ACTIVE'
+     LIMIT 1`,
+  )
+    .bind(repoId)
+    .first<{ slack_team_id: string }>();
+  return row?.slack_team_id ?? null;
+}
+
 export async function isAllowlisted(env: Env, repoId: string): Promise<boolean> {
   const row = await env.DB.prepare(
-    `SELECT repo_id FROM prototype_repo_allowlist WHERE repo_id = ?1 AND enabled = 1`,
+    `SELECT repo_id FROM prototype_repo_allowlist WHERE repo_id = ?1 AND enabled = 1
+     UNION ALL
+     SELECT repo_id FROM tenant_repos WHERE repo_id = ?1 AND enabled = 1
+     LIMIT 1`,
   )
     .bind(repoId)
     .first();

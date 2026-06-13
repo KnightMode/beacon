@@ -132,10 +132,11 @@ export async function agenticRetrieve(
   question: string,
   searchText?: string,
   onProgress?: ProgressFn,
+  teamId?: string,
 ): Promise<RetrievalOutcome> {
   const query = searchText ?? question;
   const parsed = parseQuery(query);
-  const allowlist = scopeAllowlist(query, await getAllowlistedRepoIds(env));
+  const allowlist = scopeAllowlist(query, await getAllowlistedRepoIds(env, teamId));
 
   if (allowlist.length === 0) {
     return {
