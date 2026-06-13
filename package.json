@@ -12,7 +12,15 @@
   "scripts": {
     "build": "npm run build --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",
-    "test": "npm run test --workspaces --if-present",
+    "test": "npm run test:functions && npm run test --workspaces --if-present",
+    "test:functions": "vitest run functions",
+    "db:local:init": "wrangler d1 execute scintel --local --persist-to .wrangler/state --file=packages/shared/schema.sql && wrangler d1 execute scintel --local --persist-to .wrangler/state --file=packages/shared/migrations/0004_tenants.sql && wrangler d1 execute scintel --local --persist-to .wrangler/state --file=packages/shared/migrations/0005_tenant_ci_triage_runs.sql",
+    "db:local:migrate": "wrangler d1 execute scintel --local --persist-to .wrangler/state --file=packages/shared/migrations/0004_tenants.sql && wrangler d1 execute scintel --local --persist-to .wrangler/state --file=packages/shared/migrations/0005_tenant_ci_triage_runs.sql",
+    "db:local:query": "wrangler d1 execute scintel --local --persist-to .wrangler/state --command",
+    "db:local:sync-index": "node scripts/sync-remote-index-status.mjs",
+    "dev:portal": "wrangler pages dev site --port 8788 --persist-to .wrangler/state",
+    "dev:bot": "npm run dev --workspace @scintel/slack-bot -- --persist-to ../../.wrangler/state",
+    "verify:local": "node scripts/verify-local-onboarding.mjs",
     "configure:site-access": "node scripts/configure-cloudflare-access.mjs",
     "remove:site-access": "node scripts/remove-cloudflare-access.mjs",
     "dry-run": "npm run dry-run --workspace workers/github-webhook && npm run dry-run --workspace workers/slack-bot"

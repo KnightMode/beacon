@@ -24,7 +24,7 @@ export async function enqueueCreatePr(
     channel: target.channel,
     thread_ts: target.threadTs,
     text: ':hourglass_flowing_sand: Got it — drafting the pull request. This usually takes 1–2 minutes…',
-  });
+  }, target.teamId);
   if (!posted.ok) {
     console.error('create-pr queue ack failed', {
       error: posted.error,

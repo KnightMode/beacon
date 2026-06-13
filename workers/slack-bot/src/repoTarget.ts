@@ -3,6 +3,7 @@
  */
 
 import type { Env } from './env.js';
+import { getTenantRepoAccess } from './tenant.js';
 
 export interface RepoTarget {
   owner: string;
@@ -31,15 +32,9 @@ export function parseRepoFromText(text: string): RepoTarget | null {
 
 export async function getDefaultAllowlistedRepo(
   env: Env,
+  teamId?: string,
 ): Promise<RepoTarget | null> {
-  const { results } = await env.DB.prepare(
-    `SELECT r.full_name
-     FROM prototype_repo_allowlist a
-     JOIN repos r ON r.id = a.repo_id
-     WHERE a.enabled = 1
-     ORDER BY r.full_name
-     LIMIT 1`,
-  ).all<{ full_name: string }>();
+  const results = await listAccessibleRepos(env, teamId);
 
   const fullName = results[0]?.full_name;
   if (!fullName) return null;
@@ -52,13 +47,9 @@ export async function getDefaultAllowlistedRepo(
 export async function fuzzyMatchAllowlistedRepo(
   env: Env,
   text: string,
+  teamId?: string,
 ): Promise<RepoTarget | null> {
-  const { results } = await env.DB.prepare(
-    `SELECT r.full_name
-     FROM prototype_repo_allowlist a
-     JOIN repos r ON r.id = a.repo_id
-     WHERE a.enabled = 1`,
-  ).all<{ full_name: string }>();
+  const results = await listAccessibleRepos(env, teamId);
 
   const lower = text.toLowerCase();
   const words =
@@ -115,20 +106,56 @@ const REPO_STOPWORDS = new Set([
 export async function resolveTargetRepo(
   env: Env,
   text: string,
+  teamId?: string,
 ): Promise<RepoTarget | null> {
-  const fromText = parseRepoFromText(text);
-  if (fromText) return fromText;
+  const access = await getTenantRepoAccess(env, teamId);
+  if (teamId && !access) return null;
 
-  const fuzzy = await fuzzyMatchAllowlistedRepo(env, text);
+  const fromText = parseRepoFromText(text);
+  if (fromText) {
+    if (!access) return fromText;
+    return access.repoIds.includes(fromText.fullName.toLowerCase()) ? fromText : null;
+  }
+
+  const fuzzy = await fuzzyMatchAllowlistedRepo(env, text, teamId);
   if (fuzzy) return fuzzy;
 
   const configured = env.DEFAULT_PR_REPO?.trim();
-  if (configured) {
+  if (configured && (!access || access.repoIds.includes(configured.toLowerCase()))) {
     const [owner, repo] = configured.split('/');
     if (owner && repo) {
       return { owner, repo, fullName: `${owner}/${repo}` };
     }
   }
 
-  return getDefaultAllowlistedRepo(env);
+  return getDefaultAllowlistedRepo(env, teamId);
+}
+
+async function listAccessibleRepos(
+  env: Env,
+  teamId?: string,
+): Promise<Array<{ full_name: string }>> {
+  const access = await getTenantRepoAccess(env, teamId);
+  if (access) {
+    if (access.repoIds.length === 0) return [];
+    const placeholders = access.repoIds.map(() => '?').join(',');
+    const { results } = await env.DB.prepare(
+      `SELECT full_name FROM repos
+       WHERE id IN (${placeholders})
+       ORDER BY full_name`,
+    )
+      .bind(...access.repoIds)
+      .all<{ full_name: string }>();
+    return results;
+  }
+  if (teamId) return [];
+
+  const { results } = await env.DB.prepare(
+    `SELECT r.full_name
+     FROM prototype_repo_allowlist a
+     JOIN repos r ON r.id = a.repo_id
+     WHERE a.enabled = 1
+     ORDER BY r.full_name`,
+  ).all<{ full_name: string }>();
+  return results;
 }

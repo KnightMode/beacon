@@ -34,29 +34,25 @@ const DIFF_BUDGET = 6_000;
 const MAX_FAILED_JOBS = 2;
 
 export async function processTriageJob(env: Env, job: TriageJob): Promise<void> {
-  // Claim (run, attempt) before doing any work. A lost claim means another
-  // delivery of the same event already handled (or is handling) it.
-  const claim = await env.DB.prepare(
-    `INSERT INTO ci_triage_runs (run_id, run_attempt, repo_id)
-     VALUES (?1, ?2, ?3)
-     ON CONFLICT (run_id, run_attempt) DO NOTHING`,
-  )
-    .bind(job.runId, job.runAttempt, job.repoId)
-    .run();
-  if ((claim.meta?.changes ?? 0) === 0) {
+  // Claim before doing any work. Tenant-scoped jobs dedupe per Slack workspace;
+  // legacy prototype jobs keep the original global (run, attempt) claim.
+  const claimed = await claimTriageRun(env, job);
+  if (!claimed) {
     console.log('ci triage: duplicate run, skipping', {
       repo: job.repoFullName,
       runId: job.runId,
       runAttempt: job.runAttempt,
+      slackTeamId: job.slackTeamId,
     });
     return;
   }
 
   try {
-    const channel = await getNotifyChannel(env, job.repoId);
+    const channel = await getNotifyChannel(env, job.repoId, job.slackTeamId);
     if (!channel) {
       console.log('ci triage: no notify channel mapped, skipping', {
         repo: job.repoFullName,
+        slackTeamId: job.slackTeamId,
       });
       return;
     }
@@ -74,29 +70,81 @@ export async function processTriageJob(env: Env, job: TriageJob): Promise<void> 
       channel,
       text: message.text,
       blocks: message.blocks,
-    });
+    }, job.slackTeamId);
     if (!res.ok) {
       throw new Error(`chat.postMessage failed: ${res.error ?? 'unknown'}`);
     }
-    await env.DB.prepare(
-      `UPDATE ci_triage_runs SET message_ts = ?3
-       WHERE run_id = ?1 AND run_attempt = ?2`,
-    )
-      .bind(job.runId, job.runAttempt, res.ts ?? 'posted')
-      .run();
+    await markTriagePosted(env, job, res.ts ?? 'posted');
   } catch (err) {
     // Release the claim so a queue retry can reprocess; keep it when the
     // message was already posted (message_ts set) to avoid double posts.
-    await env.DB.prepare(
-      `DELETE FROM ci_triage_runs
-       WHERE run_id = ?1 AND run_attempt = ?2 AND message_ts IS NULL`,
-    )
-      .bind(job.runId, job.runAttempt)
-      .run()
-      .catch(() => undefined);
+    await releaseTriageClaim(env, job).catch(() => undefined);
     throw err;
   }
 }
+
+async function claimTriageRun(env: Env, job: TriageJob): Promise<boolean> {
+  const claim = job.slackTeamId
+    ? await env.DB.prepare(
+        `INSERT INTO tenant_ci_triage_runs (run_id, run_attempt, slack_team_id, repo_id)
+         VALUES (?1, ?2, ?3, ?4)
+         ON CONFLICT (run_id, run_attempt, slack_team_id) DO NOTHING`,
+      )
+        .bind(job.runId, job.runAttempt, job.slackTeamId, job.repoId)
+        .run()
+    : await env.DB.prepare(
+        `INSERT INTO ci_triage_runs (run_id, run_attempt, repo_id)
+         VALUES (?1, ?2, ?3)
+         ON CONFLICT (run_id, run_attempt) DO NOTHING`,
+      )
+        .bind(job.runId, job.runAttempt, job.repoId)
+        .run();
+  return (claim.meta?.changes ?? 0) > 0;
+}
+
+async function markTriagePosted(
+  env: Env,
+  job: TriageJob,
+  messageTs: string,
+): Promise<void> {
+  if (job.slackTeamId) {
+    await env.DB.prepare(
+      `UPDATE tenant_ci_triage_runs SET message_ts = ?4
+       WHERE run_id = ?1 AND run_attempt = ?2 AND slack_team_id = ?3`,
+    )
+      .bind(job.runId, job.runAttempt, job.slackTeamId, messageTs)
+      .run();
+    return;
+  }
+
+  await env.DB.prepare(
+    `UPDATE ci_triage_runs SET message_ts = ?3
+     WHERE run_id = ?1 AND run_attempt = ?2`,
+  )
+    .bind(job.runId, job.runAttempt, messageTs)
+    .run();
+}
+
+async function releaseTriageClaim(env: Env, job: TriageJob): Promise<void> {
+  if (job.slackTeamId) {
+    await env.DB.prepare(
+      `DELETE FROM tenant_ci_triage_runs
+       WHERE run_id = ?1 AND run_attempt = ?2 AND slack_team_id = ?3
+         AND message_ts IS NULL`,
+    )
+      .bind(job.runId, job.runAttempt, job.slackTeamId)
+      .run();
+    return;
+  }
+
+  await env.DB.prepare(
+    `DELETE FROM ci_triage_runs
+     WHERE run_id = ?1 AND run_attempt = ?2 AND message_ts IS NULL`,
+  )
+    .bind(job.runId, job.runAttempt)
+    .run();
+}
+
 
 async function buildMessage(
   env: Env,
@@ -177,7 +225,7 @@ async function buildMessage(
       return '';
     });
 
-  const retrievalPromise = retrieveSmart(env, question, searchText)
+  const retrievalPromise = retrieveSmart(env, question, searchText, undefined, job.slackTeamId)
     .then((outcome) => ({
       indexedContext: outcome.packed.contextText,
       citations: outcome.packed.citations,

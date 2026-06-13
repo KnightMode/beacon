@@ -6,13 +6,21 @@
   untrusted data in prompts, never as instructions.
 - **Secret redaction** — chunks with obvious credentials are redacted before
   embedding.
+- **Admin portal Access** — deployed `/admin`, `/api/admin`, and OAuth callback
+  routes require a valid Cloudflare Access JWT. The Pages middleware verifies
+  the `Cf-Access-Jwt-Assertion` signature, issuer, audience, expiry, and optional
+  email/domain allow-list before serving admin UI or API routes. Localhost is
+  exempt by default so `wrangler pages dev` remains usable.
 
-## Prototype auth
+## Tenant auth
 
-One PAT does the indexing, and all Slack users can query everything on the
-allowlist. This is the deliberate boundary for a prototype.
+Multi-tenant onboarding stores Slack installs, selected GitHub repos, and
+notification channels per tenant. Slack bot retrieval is restricted to repos
+selected for the requesting Slack team.
 
-The extension points for real, per-user access control are already in place:
+One PAT still does the indexing, and user-level GitHub permissions are not
+enforced yet. The extension points for per-user access control are already in
+place:
 
 - the `users` and `github_user_repo_permissions` tables, and
 - the per-repo retrieval filter.

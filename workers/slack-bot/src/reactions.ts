@@ -79,14 +79,14 @@ export async function handleReactionAdded(
   if (env.SLACK_BOT_USER_ID && event.user === env.SLACK_BOT_USER_ID) return;
 
   const channel = event.item.channel;
-  const threadTs = await resolveThreadRoot(env, channel, event.item.ts);
+  const threadTs = await resolveThreadRoot(env, channel, event.item.ts, event.teamId);
 
   // Immediate ack — if you never see this, Slack is not delivering reaction_added.
   const ack = await call(env, 'chat.postMessage', {
     channel,
     thread_ts: threadTs,
     text: `:${normalizeReactionName(event.reaction)}: received — working on it…`,
-  });
+  }, event.teamId);
   if (!ack.ok) {
     console.error('reaction ack postMessage failed', {
       error: ack.error,
@@ -97,11 +97,12 @@ export async function handleReactionAdded(
 
   switch (action) {
     case 'create_pr': {
-      const issue = await fetchMessageText(env, channel, event.item.ts);
+      const issue = await fetchMessageText(env, channel, event.item.ts, event.teamId);
       await createPrFromThread(env, {
         channel,
         threadTs,
         userId: event.user,
+        teamId: event.teamId,
         messageTs: event.item.ts,
         issueHint: issue || undefined,
       });
@@ -109,8 +110,8 @@ export async function handleReactionAdded(
     }
 
     case 'pr_review': {
-      const anchor = await fetchMessageText(env, channel, event.item.ts);
-      const turns = await fetchThreadHistory(env, channel, threadTs, event.item.ts);
+      const anchor = await fetchMessageText(env, channel, event.item.ts, event.teamId);
+      const turns = await fetchThreadHistory(env, channel, threadTs, event.item.ts, event.teamId);
       const threadText = turns
         .filter((t) => t.role === 'user')
         .map((t) => t.text)
@@ -143,7 +144,7 @@ export async function handleReactionAdded(
     }
 
     case 'answer': {
-      const turns = await fetchThreadHistory(env, channel, threadTs, event.item.ts);
+      const turns = await fetchThreadHistory(env, channel, threadTs, event.item.ts, event.teamId);
       const question =
         turns.filter((t) => t.role === 'user').at(-1)?.text ?? 'What is this about?';
       await streamAnswer(env, {

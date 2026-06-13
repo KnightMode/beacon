@@ -5,6 +5,7 @@ import { parsePlannerOutput } from '../src/retrieval/agent.js';
 import { detectIntent, parseIndexRepoTarget } from '../src/intent.js';
 import { scopeAllowlist } from '../src/retrieval/pipeline.js';
 import { citedMarkers } from '../src/format.js';
+import { getAllowlistedRepoIds } from '../src/allowlist.js';
 
 const REPOS = [
   'knightmode/slack-code-intelligence',
@@ -35,6 +36,23 @@ describe('scopeAllowlist', () => {
     expect(scopeAllowlist('where is the webhook signature verified?', REPOS)).toEqual(
       REPOS,
     );
+  });
+});
+
+describe('tenant allowlist fallback', () => {
+  it('does not use the prototype allowlist for an unknown Slack workspace', async () => {
+    const env = {
+      DB: {
+        prepare: () => ({
+          bind: () => ({ first: async () => null }),
+          all: async () => {
+            throw new Error('prototype allowlist should not be queried');
+          },
+        }),
+      },
+    };
+
+    await expect(getAllowlistedRepoIds(env as never, 'T_UNKNOWN')).resolves.toEqual([]);
   });
 });
 
