@@ -20,6 +20,23 @@ const allowedEmails = splitCsv(process.env.ACCESS_ALLOWED_EMAILS || 'differentia
 const allowedDomains = splitCsv(process.env.ACCESS_ALLOWED_DOMAINS).map((domain) =>
   domain.replace(/^@/, '').toLowerCase(),
 );
+const pagePlainVars = compactVars({
+  SLACK_CLIENT_ID: firstValue(process.env.PAGES_SLACK_CLIENT_ID, process.env.SLACK_CLIENT_ID),
+  GITHUB_APP_SLUG: firstValue(process.env.PAGES_GITHUB_APP_SLUG, process.env.GITHUB_APP_SLUG),
+  GITHUB_APP_ID: firstValue(process.env.PAGES_GITHUB_APP_ID, process.env.GITHUB_APP_ID),
+  PIPELINE_DISPATCH_REPO: firstValue(process.env.PAGES_PIPELINE_DISPATCH_REPO, process.env.PIPELINE_DISPATCH_REPO),
+  PIPELINE_DISPATCH_EVENT: firstValue(process.env.PAGES_PIPELINE_DISPATCH_EVENT, process.env.PIPELINE_DISPATCH_EVENT),
+});
+const pageSecretVars = compactVars({
+  ADMIN_SESSION_SECRET: firstValue(process.env.PAGES_ADMIN_SESSION_SECRET, process.env.ADMIN_SESSION_SECRET),
+  SLACK_CLIENT_SECRET: firstValue(process.env.PAGES_SLACK_CLIENT_SECRET, process.env.SLACK_CLIENT_SECRET),
+  SLACK_TOKEN_ENCRYPTION_SECRET: firstValue(
+    process.env.PAGES_SLACK_TOKEN_ENCRYPTION_SECRET,
+    process.env.SLACK_TOKEN_ENCRYPTION_SECRET,
+  ),
+  GITHUB_APP_PRIVATE_KEY: firstValue(process.env.PAGES_GITHUB_APP_PRIVATE_KEY, process.env.GITHUB_APP_PRIVATE_KEY),
+  PIPELINE_DISPATCH_TOKEN: firstValue(process.env.PAGES_PIPELINE_DISPATCH_TOKEN, process.env.PIPELINE_DISPATCH_TOKEN),
+});
 
 if (allowedEmails.length === 0 && allowedDomains.length === 0) {
   throw new Error('Set ACCESS_ALLOWED_EMAILS and/or ACCESS_ALLOWED_DOMAINS.');
@@ -182,11 +199,7 @@ async function updatePagesAccessVars(accessAudiences) {
 
   const project = await getPagesProject();
   const deploymentConfigs = pagesDeploymentConfigs(project, pagesEnvironment, (envVars) => ({
-    ...envVars,
-    ADMIN_CF_ACCESS_ISSUER: plainTextVar(`https://${authDomain}`),
-    ADMIN_CF_ACCESS_AUD: plainTextVar(accessAudiences),
-    ADMIN_CF_ACCESS_ALLOWED_EMAILS: plainTextVar(allowedEmails.join(',')),
-    ADMIN_CF_ACCESS_ALLOWED_DOMAINS: plainTextVar(allowedDomains.join(',')),
+    ...adminRuntimeVars(envVars, accessAudiences),
   }));
 
   await cfFetch(`/pages/projects/${encodeURIComponent(pagesProjectName)}`, {
@@ -198,6 +211,41 @@ async function updatePagesAccessVars(accessAudiences) {
 async function getPagesProject() {
   const response = await cfFetch(`/pages/projects/${encodeURIComponent(pagesProjectName)}`);
   return response.result;
+}
+
+function adminRuntimeVars(existingEnvVars, accessAudiences) {
+  const envVars = {
+    ...existingEnvVars,
+    ADMIN_CF_ACCESS_ISSUER: plainTextVar(`https://${authDomain}`),
+    ADMIN_CF_ACCESS_AUD: plainTextVar(accessAudiences),
+    ADMIN_CF_ACCESS_ALLOWED_EMAILS: plainTextVar(allowedEmails.join(',')),
+    ADMIN_CF_ACCESS_ALLOWED_DOMAINS: plainTextVar(allowedDomains.join(',')),
+  };
+
+  for (const [name, value] of Object.entries(pagePlainVars)) {
+    envVars[name] = plainTextVar(value);
+  }
+  for (const [name, value] of Object.entries(pageSecretVars)) {
+    envVars[name] = secretTextVar(value);
+  }
+
+  assertAdminRuntimeConfigured(envVars);
+  return envVars;
+}
+
+function assertAdminRuntimeConfigured(envVars) {
+  const missing = [
+    'SLACK_CLIENT_ID',
+    'ADMIN_SESSION_SECRET',
+    'SLACK_CLIENT_SECRET',
+    'SLACK_TOKEN_ENCRYPTION_SECRET',
+  ].filter((name) => !envVars[name]);
+  if (missing.length === 0) return;
+
+  throw new Error(
+    `Missing Pages admin runtime config: ${missing.join(', ')}. ` +
+      'Set matching GitHub Actions variables/secrets or provide workflow inputs before rerunning Configure site Access.',
+  );
 }
 
 function pagesDeploymentConfigs(project, targetEnvironment, updateEnvVars) {
@@ -226,6 +274,20 @@ function sharedFailOpen(configs) {
 
 function plainTextVar(value) {
   return { type: 'plain_text', value };
+}
+
+function secretTextVar(value) {
+  return { type: 'secret_text', value };
+}
+
+function compactVars(values) {
+  return Object.fromEntries(
+    Object.entries(values).filter(([, value]) => value !== undefined && value !== null && String(value).trim() !== ''),
+  );
+}
+
+function firstValue(...values) {
+  return values.find((value) => value !== undefined && value !== null && String(value).trim() !== '');
 }
 
 function normalizeAllowedIdps(allowedIdps) {
