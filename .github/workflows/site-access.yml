@@ -41,6 +41,21 @@ on:
         options:
           - production
           - preview
+      d1_binding:
+        description: 'Cloudflare Pages D1 binding name for the admin portal'
+        required: true
+        default: 'DB'
+        type: string
+      d1_database_name:
+        description: 'Cloudflare D1 database name for the admin portal'
+        required: true
+        default: 'scintel'
+        type: string
+      d1_database_id:
+        description: 'Cloudflare D1 database id for the admin portal'
+        required: false
+        default: '27722a79-10d9-4bfc-aa53-1d65a80c8f79'
+        type: string
       slack_client_id:
         description: 'Slack OAuth client id for the admin portal'
         required: false
@@ -108,6 +123,9 @@ jobs:
           ACCESS_APP_NAME: ${{ inputs.app_name }}
           ACCESS_AUTH_DOMAIN: ${{ inputs.auth_domain }}
           ACCESS_SESSION_DURATION: ${{ inputs.session_duration }}
+          PAGES_D1_BINDING: ${{ inputs.d1_binding }}
+          PAGES_D1_DATABASE_NAME: ${{ inputs.d1_database_name }}
+          PAGES_D1_DATABASE_ID: ${{ inputs.d1_database_id || vars.CLOUDFLARE_D1_DATABASE_ID }}
           PAGES_SLACK_CLIENT_ID: ${{ inputs.slack_client_id || vars.SLACK_CLIENT_ID }}
           PAGES_GITHUB_APP_SLUG: ${{ inputs.github_app_slug || vars.GITHUB_APP_SLUG }}
           PAGES_GITHUB_APP_ID: ${{ inputs.github_app_id || vars.GITHUB_APP_ID }}

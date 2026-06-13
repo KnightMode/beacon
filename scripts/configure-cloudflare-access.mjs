@@ -37,6 +37,15 @@ const pageSecretVars = compactVars({
   GITHUB_APP_PRIVATE_KEY: firstValue(process.env.PAGES_GITHUB_APP_PRIVATE_KEY, process.env.GITHUB_APP_PRIVATE_KEY),
   PIPELINE_DISPATCH_TOKEN: firstValue(process.env.PAGES_PIPELINE_DISPATCH_TOKEN, process.env.PIPELINE_DISPATCH_TOKEN),
 });
+const pagesD1Binding = String(firstValue(process.env.PAGES_D1_BINDING, 'DB')).trim();
+const pagesD1DatabaseName = String(firstValue(process.env.PAGES_D1_DATABASE_NAME, 'scintel')).trim();
+const pagesD1DatabaseId = String(
+  firstValue(
+    process.env.PAGES_D1_DATABASE_ID,
+    process.env.CLOUDFLARE_D1_DATABASE_ID,
+    '27722a79-10d9-4bfc-aa53-1d65a80c8f79',
+  ),
+).trim();
 
 if (allowedEmails.length === 0 && allowedDomains.length === 0) {
   throw new Error('Set ACCESS_ALLOWED_EMAILS and/or ACCESS_ALLOWED_DOMAINS.');
@@ -69,6 +78,7 @@ for (const { app, policy, domain } of results) {
 console.log(`Allowed emails: ${allowedEmails.length || 0}`);
 console.log(`Allowed email domains: ${allowedDomains.length || 0}`);
 console.log(`Updated Pages project ${pagesProjectName} ${pagesEnvironment} Access runtime vars.`);
+console.log(`Bound D1 database ${pagesD1DatabaseName} to Pages as ${pagesD1Binding}.`);
 
 async function ensureAccessOrganization() {
   try {
@@ -198,8 +208,10 @@ async function updatePagesAccessVars(accessAudiences) {
   }
 
   const project = await getPagesProject();
-  const deploymentConfigs = pagesDeploymentConfigs(project, pagesEnvironment, (envVars) => ({
-    ...adminRuntimeVars(envVars, accessAudiences),
+  const deploymentConfigs = pagesDeploymentConfigs(project, pagesEnvironment, (config) => ({
+    ...config,
+    env_vars: adminRuntimeVars(config.env_vars, accessAudiences),
+    d1_databases: adminD1Databases(config.d1_databases),
   }));
 
   await cfFetch(`/pages/projects/${encodeURIComponent(pagesProjectName)}`, {
@@ -233,6 +245,17 @@ function adminRuntimeVars(existingEnvVars, accessAudiences) {
   return envVars;
 }
 
+function adminD1Databases(existingD1Databases) {
+  assertD1BindingConfigured();
+  return {
+    ...existingD1Databases,
+    [pagesD1Binding]: {
+      ...existingD1Databases?.[pagesD1Binding],
+      id: pagesD1DatabaseId,
+    },
+  };
+}
+
 function assertAdminRuntimeConfigured(envVars) {
   const missing = [
     'SLACK_CLIENT_ID',
@@ -248,19 +271,32 @@ function assertAdminRuntimeConfigured(envVars) {
   );
 }
 
-function pagesDeploymentConfigs(project, targetEnvironment, updateEnvVars) {
+function assertD1BindingConfigured() {
+  const missing = [];
+  if (!pagesD1Binding) missing.push('PAGES_D1_BINDING');
+  if (!pagesD1DatabaseId) missing.push('PAGES_D1_DATABASE_ID');
+  if (missing.length === 0) return;
+
+  throw new Error(
+    `Missing Pages D1 binding config: ${missing.join(', ')}. ` +
+      'Set matching GitHub Actions variables or provide workflow inputs before rerunning Configure site Access.',
+  );
+}
+
+function pagesDeploymentConfigs(project, targetEnvironment, updateConfig) {
   const configs = project.deployment_configs || {};
   const failOpen = sharedFailOpen(configs);
   const deploymentConfigs = {};
 
   for (const environment of PAGES_ENVIRONMENTS) {
     const config = configs[environment] || {};
-    const envVars = { ...(config.env_vars || {}) };
-    deploymentConfigs[environment] = {
+    const nextConfig = {
       ...config,
       fail_open: failOpen,
-      env_vars: environment === targetEnvironment ? updateEnvVars(envVars) : envVars,
+      env_vars: { ...(config.env_vars || {}) },
+      d1_databases: { ...(config.d1_databases || {}) },
     };
+    deploymentConfigs[environment] = environment === targetEnvironment ? updateConfig(nextConfig) : nextConfig;
   }
 
   return deploymentConfigs;
