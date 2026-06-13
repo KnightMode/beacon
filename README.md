@@ -14,7 +14,8 @@
   <a href="docs/setup.md">Setup</a> ·
   <a href="docs/usage.md">Usage</a> ·
   <a href="docs/security.md">Security</a> ·
-  <a href="docs/roadmap.md">Roadmap</a>
+  <a href="docs/roadmap.md">Roadmap</a> ·
+  <a href="LICENSE">License</a>
 </p>
 
 ## Demo
@@ -97,9 +98,14 @@ action grounded **only in retrieved evidence**.
 (SQLite + FTS5), Vectorize, Queues, Workers AI · GitHub Actions for indexing.
 Full walkthrough in [docs/architecture.md](docs/architecture.md).
 
+## Licensing
+
+Beacon is proprietary software. This repository is not open source, and no
+permission is granted to use, copy, modify, distribute, sublicense, or sell the
+source code except under a separate written agreement with the copyright
+holder. See [LICENSE](LICENSE).
+
 ## Get started
 
 → **[Set it up](docs/setup.md)** · **[Use it](docs/usage.md)** ·
 **[Read the architecture](docs/architecture.md)**
-
-MIT licensed.
