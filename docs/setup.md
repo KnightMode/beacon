@@ -70,6 +70,13 @@ index; pushes keep it fresh.
 > Pushes to `main` in this repository also auto-deploy the workers via
 > `deploy.yml`.
 
+## 6. Marketing site Access
+
+The marketing site deploys from `site/` to Cloudflare Pages. To require email
+one-time PIN login before viewing it, run the manual `Configure site Access`
+GitHub Actions workflow with the allowed emails or email domains. See
+[Protect the marketing site with Cloudflare Access](./site-access.md).
+
 ## Environment reference
 
 See [`.env.example`](../.env.example) for the full set of variables and secrets
