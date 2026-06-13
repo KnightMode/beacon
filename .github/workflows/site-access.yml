@@ -145,7 +145,7 @@ jobs:
           PAGES_SLACK_CLIENT_SECRET: ${{ secrets.SLACK_CLIENT_SECRET }}
           PAGES_SLACK_TOKEN_ENCRYPTION_SECRET: ${{ secrets.SLACK_TOKEN_ENCRYPTION_SECRET }}
           PAGES_GITHUB_APP_PRIVATE_KEY: ${{ secrets.BEACON_GITHUB_APP_PRIVATE_KEY }}
-          PAGES_PIPELINE_DISPATCH_TOKEN: ${{ secrets.PIPELINE_DISPATCH_TOKEN }}
+          PAGES_PIPELINE_DISPATCH_TOKEN: ${{ secrets.PIPELINE_DISPATCH_TOKEN || secrets.INDEXER_GITHUB_PAT }}
       - name: Deploy Pages with Access vars
         run: npx wrangler pages deploy site --project-name="${ACCESS_PAGES_PROJECT_NAME}" --branch=main
         env:
