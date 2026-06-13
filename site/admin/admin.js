@@ -168,7 +168,9 @@
   }
 
   function bindForms() {
-    $("[data-refresh]")?.addEventListener("click", () => load().catch(showError));
+    $$("[data-refresh]").forEach((button) => {
+      button.addEventListener("click", () => load().catch(showError));
+    });
 
     $("[data-repo-form]")?.addEventListener("submit", async (event) => {
       event.preventDefault();
