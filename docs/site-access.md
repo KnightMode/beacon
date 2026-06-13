@@ -13,6 +13,7 @@ workflow must also include:
 
 - `Access: Apps and Policies Write`
 - `Access: Organizations, Identity Providers, and Groups Write`
+- `D1: Edit`
 - `Cloudflare Pages: Edit`
 
 The workflow also syncs admin portal runtime config into Pages. Set these
@@ -52,9 +53,10 @@ Cloudflare credentials locally:
 
 The workflow writes the generated `ADMIN_CF_ACCESS_*` runtime vars directly to
 the Pages project, syncs the Slack/session admin runtime config from workflow
-inputs and GitHub Actions secrets, binds the `DB` D1 database, then deploys the
-Pages site so the Functions runtime receives those bindings. No manual
-copy/paste or separate redeploy step is needed.
+inputs and GitHub Actions secrets, applies the admin D1 tenant migrations,
+binds the `DB` D1 database, then deploys the Pages site so the Functions
+runtime receives those bindings. No manual copy/paste or separate redeploy step
+is needed.
 
 Example values:
 
@@ -106,14 +108,16 @@ npm run configure:site-access
 The workflow creates or reuses the Zero Trust organization, creates or reuses a
 Cloudflare One-time PIN identity provider, creates or reuses path-scoped Access
 self-hosted applications for the admin paths, and creates or updates an allow
-policy named `Allow approved email OTP` on each application. It then updates the
-Pages project's `production` runtime variables with the Access issuer, audience,
-and optional in-app email/domain allow-list while preserving unrelated Pages
-environment variables, and it binds the Pages D1 `DB` binding to the configured
-database. Finally, it deploys the Pages site so the new runtime variables and
-bindings are available to the middleware. The workflow fails fast if the
-required admin runtime variables or D1 binding config are missing, instead of
-letting the deployed site redirect back with a missing-config error.
+policy named `Allow approved email OTP` on each application. It also applies the
+idempotent tenant migrations (`0004_tenants.sql` and
+`0005_tenant_ci_triage_runs.sql`) to the configured remote D1 database. It then
+updates the Pages project's `production` runtime variables with the Access
+issuer, audience, and optional in-app email/domain allow-list while preserving
+unrelated Pages environment variables, and it binds the Pages D1 `DB` binding to
+the configured database. Finally, it deploys the Pages site so the new runtime
+variables and bindings are available to the middleware. The workflow fails fast
+if the required admin runtime variables or D1 binding config are missing,
+instead of letting the deployed site redirect back with a missing-config error.
 
 The Pages app also verifies Cloudflare Access at runtime. For any non-local
 request to `/admin`, `/api/admin`, `/oauth/slack/callback`, or
@@ -169,6 +173,10 @@ If Slack OAuth redirects back with `Cannot read properties of undefined
 (reading 'batch')`, the deployed Pages environment is missing the `DB` D1
 binding. Rerun `Configure site Access` after this change lands; the workflow
 will bind `DB` to `scintel` and redeploy Pages.
+
+If Slack OAuth redirects back with `D1_ERROR: no such table: tenants`, the
+remote D1 database is missing the tenant migration. Rerun `Configure site
+Access`; it applies the admin tenant migrations before redeploying Pages.
 
 ## Temporarily make the admin portal public
 
