@@ -6,6 +6,12 @@ name: Configure site Access
 # - Access: Organizations, Identity Providers, and Groups Write
 
 on:
+  push:
+    branches:
+      - KnightMode/access-email-otp
+    paths:
+      - '.github/workflows/site-access.yml'
+      - 'scripts/configure-cloudflare-access.mjs'
   workflow_dispatch:
     inputs:
       allowed_emails:
