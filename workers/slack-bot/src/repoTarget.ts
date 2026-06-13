@@ -108,9 +108,11 @@ export async function resolveTargetRepo(
   text: string,
   teamId?: string,
 ): Promise<RepoTarget | null> {
+  const access = await getTenantRepoAccess(env, teamId);
+  if (teamId && !access) return null;
+
   const fromText = parseRepoFromText(text);
   if (fromText) {
-    const access = await getTenantRepoAccess(env, teamId);
     if (!access) return fromText;
     return access.repoIds.includes(fromText.fullName.toLowerCase()) ? fromText : null;
   }
@@ -118,7 +120,6 @@ export async function resolveTargetRepo(
   const fuzzy = await fuzzyMatchAllowlistedRepo(env, text, teamId);
   if (fuzzy) return fuzzy;
 
-  const access = await getTenantRepoAccess(env, teamId);
   const configured = env.DEFAULT_PR_REPO?.trim();
   if (configured && (!access || access.repoIds.includes(configured.toLowerCase()))) {
     const [owner, repo] = configured.split('/');
@@ -147,6 +148,7 @@ async function listAccessibleRepos(
       .all<{ full_name: string }>();
     return results;
   }
+  if (teamId) return [];
 
   const { results } = await env.DB.prepare(
     `SELECT r.full_name
