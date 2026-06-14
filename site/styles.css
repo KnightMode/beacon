@@ -1646,20 +1646,25 @@ code {
 }
 
 .admin-hero {
+  position: relative;
+  isolation: isolate;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 2rem;
-  align-items: end;
-  margin-bottom: 2rem;
-  padding: clamp(2rem, 5vw, 4rem);
+  grid-template-columns: minmax(0, 1.35fr) minmax(17rem, 0.7fr);
+  gap: clamp(1.5rem, 3vw, 3rem);
+  align-items: center;
+  margin-bottom: 1.1rem;
+  padding: clamp(1.75rem, 4vw, 3.25rem);
+  overflow: hidden;
   color: var(--paper);
   background:
+    radial-gradient(circle at 88% 12%, color-mix(in oklch, var(--signal) 24%, transparent), transparent 22rem),
+    radial-gradient(circle at 8% 120%, color-mix(in oklch, var(--acid) 16%, transparent), transparent 24rem),
     linear-gradient(90deg, var(--white-line) 1px, transparent 1px),
     linear-gradient(var(--white-line) 1px, transparent 1px),
     linear-gradient(145deg, var(--coal), var(--coal-2) 64%, oklch(0.18 0.045 214));
-  background-size: 4rem 4rem, 4rem 4rem, auto;
+  background-size: auto, auto, 4rem 4rem, 4rem 4rem, auto;
   border: 1px solid var(--coal);
-  box-shadow: 10px 10px 0 color-mix(in oklch, var(--coal) 18%, transparent);
+  box-shadow: 10px 10px 0 color-mix(in oklch, black 26%, transparent);
 }
 
 .admin-hero--workspace {
@@ -1668,27 +1673,227 @@ code {
   margin-bottom: 1rem;
 }
 
+.admin-hero__lead {
+  min-width: 0;
+}
+
 .admin-hero h1 {
-  max-width: 12ch;
+  max-width: 14ch;
   margin: 0;
   font-family: var(--font-display);
-  font-size: clamp(3rem, 7vw, 6.2rem);
+  font-size: clamp(2.6rem, 5.4vw, 4.6rem);
   font-weight: 750;
   letter-spacing: -0.05em;
   line-height: 0.9;
 }
 
 .admin-hero p:not(.kicker) {
-  max-width: 58ch;
+  max-width: 52ch;
+  margin: 1.1rem 0 0;
   color: color-mix(in oklch, var(--paper) 78%, transparent);
-  font-size: 1.05rem;
+  font-size: 1.02rem;
 }
 
 .admin-hero__actions {
   display: flex;
   flex-wrap: wrap;
   gap: 0.75rem;
-  justify-content: flex-end;
+  margin-top: 1.5rem;
+}
+
+/* Workspace receipt card sitting on the dark hero */
+.admin-hero__card {
+  display: grid;
+  gap: 0.85rem;
+  padding: 1.15rem 1.2rem;
+  border: 1px solid var(--line-strong);
+  background: color-mix(in oklch, var(--paper) 94%, white);
+  color: var(--ink);
+  box-shadow: 7px 7px 0 color-mix(in oklch, black 32%, transparent);
+}
+
+.admin-hero__card-label {
+  color: var(--signal);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.admin-hero__card > strong {
+  margin-top: -0.35rem;
+  overflow-wrap: anywhere;
+  font-size: 1.3rem;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+}
+
+.admin-hero__progress {
+  display: grid;
+  gap: 0.42rem;
+  padding-top: 0.85rem;
+  border-top: 1px solid var(--line);
+}
+
+.admin-hero__progress-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.6rem;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.admin-hero__progress-head b {
+  color: var(--signal);
+  font-size: 0.95rem;
+}
+
+.admin-hero__progress-head em {
+  font-style: normal;
+}
+
+.admin-hero__card-state {
+  justify-self: start;
+  padding: 0.22rem 0.5rem;
+  border: 1px solid var(--line-strong);
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-style: normal;
+  color: var(--muted);
+}
+
+.admin-stack {
+  display: grid;
+  gap: 1rem;
+  align-content: start;
+  min-width: 0;
+}
+
+/* KPI stat tiles */
+.admin-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.85rem;
+  margin-bottom: 1.1rem;
+}
+
+.stat-tile {
+  display: grid;
+  gap: 0.5rem;
+  align-content: space-between;
+  min-height: 6.5rem;
+  padding: 1.1rem 1.15rem;
+  border: 1px solid var(--line-strong);
+  background: color-mix(in oklch, var(--paper) 90%, white 16%);
+  box-shadow: 6px 6px 0 color-mix(in oklch, black 20%, transparent);
+}
+
+.stat-tile > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.stat-tile[data-tile] > span::before {
+  content: "";
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 999px;
+  background: var(--faint);
+}
+
+.stat-tile[data-state="on"] > span::before {
+  background: var(--acid);
+}
+
+.stat-tile[data-state="off"] > span::before {
+  background: var(--signal);
+}
+
+.stat-tile > strong {
+  font-size: clamp(1.25rem, 2vw, 1.75rem);
+  line-height: 1;
+  letter-spacing: -0.02em;
+  overflow-wrap: anywhere;
+}
+
+.stat-tile[data-state="on"] > strong {
+  color: color-mix(in oklch, var(--acid) 34%, var(--ink));
+}
+
+/* Index health rollup */
+.index-health {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1px;
+  border: 1px solid var(--line-strong);
+  background: var(--line-strong);
+}
+
+.index-stat {
+  display: grid;
+  gap: 0.4rem;
+  min-height: 6rem;
+  padding: 0.95rem 1rem;
+  background: color-mix(in oklch, var(--paper) 92%, white 14%);
+}
+
+.index-stat span {
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.index-stat strong {
+  align-self: end;
+  font-family: var(--font-display);
+  font-size: clamp(2rem, 3.5vw, 3rem);
+  font-weight: 750;
+  line-height: 0.9;
+  letter-spacing: -0.02em;
+}
+
+.index-stat[data-tone="ready"] strong {
+  color: color-mix(in oklch, var(--acid) 38%, var(--ink));
+}
+
+.index-stat[data-tone="active"] strong {
+  color: var(--gold);
+}
+
+.index-stat[data-tone="failed"] strong {
+  color: var(--signal);
+}
+
+@media (max-width: 900px) {
+  .admin-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 520px) {
+  .admin-stats,
+  .index-health {
+    grid-template-columns: 1fr;
+  }
 }
 
 .admin-grid,
