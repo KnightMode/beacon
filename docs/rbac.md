@@ -1,5 +1,9 @@
 # RBAC: roles and repo access (multi-tenant design)
 
+Status: future design. The current runtime enforces tenant repo selection, but
+does not yet enforce owner/admin/member roles or per-user GitHub permission
+mirroring.
+
 Who can do what inside a tenant — especially around the sensitive actions:
 indexing repos, creating PRs, and seeing code in answers.
 

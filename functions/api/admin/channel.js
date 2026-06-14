@@ -1,10 +1,11 @@
+import { repoIdFor } from '@scintel/shared';
 import { audit, handleError, HttpError, json, markStep, requireSession } from '../../_lib/admin.js';
 
 export async function onRequestPost(context) {
   try {
     const session = await requireSession(context);
     const body = await context.request.json();
-    const repoId = String(body.repo || '').trim().toLowerCase();
+    const repoId = repoIdFor(String(body.repo || ''));
     const channelId = String(body.channelId || '').trim();
     if (!repoId || !channelId) throw new HttpError(400, 'Repo and channel are required.');
 

@@ -1,4 +1,17 @@
-const GITHUB_API = 'https://api.github.com';
+import { createAppAuth } from '@octokit/auth-app';
+import { request as octokitRequest } from '@octokit/request';
+
+const GITHUB_API_VERSION = '2022-11-28';
+const USER_AGENT = 'beacon-admin-portal';
+const GITHUB_REPO_PAGE_SIZE = 100;
+
+const baseRequest = octokitRequest.defaults({
+  headers: {
+    accept: 'application/vnd.github+json',
+    'user-agent': USER_AGENT,
+    'x-github-api-version': GITHUB_API_VERSION,
+  },
+});
 
 export async function listInstallationRepositories(env, installationId) {
   const result = await queryInstallationRepositories(env, installationId, {
@@ -23,8 +36,8 @@ export async function findInstallationRepository(env, installationId, fullName) 
 }
 
 export async function queryInstallationRepositories(env, installationId, options = {}) {
-  const auth = await getInstallationAuth(env, installationId);
-  if (!auth) return null;
+  const request = installationRequest(env, installationId);
+  if (!request) return null;
 
   const needle = String(options.q || '').trim().toLowerCase();
   const limit = Math.min(Math.max(Number(options.limit) || 50, 1), 100);
@@ -32,11 +45,11 @@ export async function queryInstallationRepositories(env, installationId, options
   const maxPages = Math.min(Math.max(Number(options.maxPages) || 30, 1), 50);
 
   if (!needle) {
-    const batch = await fetchInstallationRepoPage(auth, page);
+    const batch = await fetchInstallationRepoPage(request, page);
     return {
       repos: batch.slice(0, limit),
       page,
-      hasMore: batch.length === 100,
+      hasMore: batch.length === GITHUB_REPO_PAGE_SIZE,
       totalScanned: batch.length,
     };
   }
@@ -44,8 +57,10 @@ export async function queryInstallationRepositories(env, installationId, options
   const matches = [];
   let githubPage = 1;
   let hasMore = false;
+  let totalScanned = 0;
   while (githubPage <= maxPages && matches.length < limit) {
-    const batch = await fetchInstallationRepoPage(auth, githubPage);
+    const batch = await fetchInstallationRepoPage(request, githubPage);
+    totalScanned += batch.length;
     if (batch.length === 0) break;
     for (const repo of batch) {
       if (repo.fullName.toLowerCase().includes(needle)) {
@@ -53,7 +68,7 @@ export async function queryInstallationRepositories(env, installationId, options
         if (matches.length >= limit) break;
       }
     }
-    if (batch.length < 100) break;
+    if (batch.length < GITHUB_REPO_PAGE_SIZE) break;
     hasMore = true;
     githubPage += 1;
   }
@@ -62,31 +77,35 @@ export async function queryInstallationRepositories(env, installationId, options
     repos: matches,
     page: 1,
     hasMore,
-    totalScanned: githubPage * 100,
+    totalScanned,
   };
 }
 
-async function getInstallationAuth(env, installationId) {
+function installationRequest(env, installationId) {
   const appId = env.GITHUB_APP_ID?.trim();
   const privateKey = normalizePrivateKey(env.GITHUB_APP_PRIVATE_KEY);
   if (!appId || !privateKey) return null;
-  const jwt = await createAppJwt(appId, privateKey);
-  const token = await createInstallationAccessToken(jwt, installationId);
-  return { jwt, token };
+
+  const auth = createAppAuth({
+    appId,
+    privateKey: toPkcs8IfPkcs1(privateKey),
+    installationId: Number(installationId),
+    request: baseRequest,
+  });
+
+  return baseRequest.defaults({
+    request: { hook: auth.hook },
+  });
 }
 
-async function fetchInstallationRepoPage(auth, page) {
-  const res = await githubFetch(
-    `${GITHUB_API}/installation/repositories?per_page=100&page=${page}`,
-    auth.jwt,
-    auth.token,
+async function fetchInstallationRepoPage(request, page) {
+  const response = await githubRequest(
+    request,
+    'GET /installation/repositories',
+    { per_page: GITHUB_REPO_PAGE_SIZE, page },
+    'GitHub repo list',
   );
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new Error(`GitHub repo list failed (${res.status}): ${text.slice(0, 200)}`);
-  }
-  const body = await res.json();
-  return (body.repositories ?? []).map((repo) => ({
+  return (response.data.repositories ?? []).map((repo) => ({
     fullName: repo.full_name,
     githubId: repo.id,
     defaultBranch: repo.default_branch || 'main',
@@ -94,61 +113,29 @@ async function fetchInstallationRepoPage(auth, page) {
   }));
 }
 
-async function createInstallationAccessToken(appJwt, installationId) {
-  const res = await githubFetch(
-    `${GITHUB_API}/app/installations/${installationId}/access_tokens`,
-    appJwt,
-    null,
-    { method: 'POST' },
-  );
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new Error(`GitHub installation token failed (${res.status}): ${text.slice(0, 200)}`);
+async function githubRequest(request, route, parameters, label) {
+  try {
+    return await request(route, parameters);
+  } catch (err) {
+    throw new Error(`${label} failed${githubStatus(err)}: ${githubErrorMessage(err)}`);
   }
-  const body = await res.json();
-  if (!body.token) throw new Error('GitHub installation token response missing token.');
-  return body.token;
 }
 
-async function githubFetch(url, appJwt, installationToken, init = {}) {
-  return fetch(url, {
-    ...init,
-    headers: {
-      accept: 'application/vnd.github+json',
-      'content-type': 'application/json',
-      'user-agent': 'beacon-admin-portal',
-      'x-github-api-version': '2022-11-28',
-      authorization: `Bearer ${installationToken || appJwt}`,
-      ...(init.headers || {}),
-    },
-  });
+function githubStatus(err) {
+  return err?.status ? ` (${err.status})` : '';
 }
 
-async function createAppJwt(appId, privateKeyPem) {
-  const now = Math.floor(Date.now() / 1000);
-  const header = base64url(JSON.stringify({ alg: 'RS256', typ: 'JWT' }));
-  const payload = base64url(JSON.stringify({
-    iat: now - 60,
-    exp: now + 9 * 60,
-    iss: appId,
-  }));
-  const input = new TextEncoder().encode(`${header}.${payload}`);
-  const key = await importPrivateKey(privateKeyPem);
-  const signature = await crypto.subtle.sign('RSASSA-PKCS1-v1_5', key, input);
-  return `${header}.${payload}.${base64url(signature)}`;
-}
-
-async function importPrivateKey(pem) {
-  const isPkcs1 = /BEGIN RSA PRIVATE KEY/.test(pem);
-  const der = pemToDer(pem);
-  const keyData = isPkcs1 ? wrapPkcs1AsPkcs8(der) : der;
-  return crypto.subtle.importKey(
-    'pkcs8',
-    keyData,
-    { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' },
-    false,
-    ['sign'],
-  );
+function githubErrorMessage(err) {
+  const data = err?.response?.data;
+  if (typeof data === 'string') return data.slice(0, 200);
+  if (data?.message) return String(data.message).slice(0, 200);
+  if (Array.isArray(data?.errors) && data.errors.length > 0) {
+    return data.errors
+      .map((entry) => entry.message || entry.code || JSON.stringify(entry))
+      .join('; ')
+      .slice(0, 200);
+  }
+  return String(err?.message || 'unknown error').slice(0, 200);
 }
 
 function pemToDer(pem) {
@@ -159,6 +146,20 @@ function pemToDer(pem) {
     .replace(/-----END PRIVATE KEY-----/g, '')
     .replace(/\s/g, '');
   return Uint8Array.from(atob(normalized), (char) => char.charCodeAt(0));
+}
+
+function toPkcs8IfPkcs1(pem) {
+  return /BEGIN RSA PRIVATE KEY/.test(pem)
+    ? derToPem('PRIVATE KEY', wrapPkcs1AsPkcs8(pemToDer(pem)))
+    : pem;
+}
+
+function derToPem(label, der) {
+  let binary = '';
+  for (const byte of der) binary += String.fromCharCode(byte);
+  const base64 = btoa(binary);
+  const lines = base64.match(/.{1,64}/g) || [];
+  return `-----BEGIN ${label}-----\n${lines.join('\n')}\n-----END ${label}-----`;
 }
 
 function wrapPkcs1AsPkcs8(pkcs1) {
@@ -215,15 +216,4 @@ function normalizePrivateKey(raw) {
     return trimmed.replace(/\\n/g, '\n');
   }
   return trimmed;
-}
-
-function base64url(value) {
-  const bytes = typeof value === 'string'
-    ? new TextEncoder().encode(value)
-    : value instanceof ArrayBuffer
-      ? new Uint8Array(value)
-      : value;
-  let binary = '';
-  for (const byte of bytes) binary += String.fromCharCode(byte);
-  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }

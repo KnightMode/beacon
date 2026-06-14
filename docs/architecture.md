@@ -1,11 +1,19 @@
 # Architecture
 
-Beacon is a serverless, two-worker system on Cloudflare with an indexing
-pipeline that runs in GitHub Actions. Nothing to operate, nothing to keep warm.
+Beacon is a serverless Cloudflare system with two Workers, a Pages admin
+portal, shared D1/Vectorize storage, and an indexing pipeline that runs in
+GitHub Actions. Nothing to operate, nothing to keep warm.
 
 ```
+ Cloudflare Pages site
+   /admin/onboarding ──Slack OAuth · GitHub App · repo picker──▶ functions/*
+                                                                  │
+                                                                  ▼
+                                                        D1 tenant rows
+                                                                  │
  Slack ──/ask-code · @mention · DM · emoji──▶ workers/slack-bot (CF Worker)
                                               │  verify sig → intent routing
+                                              │  resolve Slack team → tenant
                                               │  agentic retrieval:
                                               │   FTS5(D1) + Vectorize + graph
                                               │   → planner tools → rerank
@@ -29,19 +37,45 @@ pipeline that runs in GitHub Actions. Nothing to operate, nothing to keep warm.
 ## The query path (`workers/slack-bot`)
 
 1. **Verify** the Slack signature on every request.
-2. **Route** the intent: question, index command, PR review, PR creation.
-3. **Retrieve** evidence with hybrid search:
+2. **Resolve tenant context** from the signed Slack `team_id`. Tenant-scoped
+   installs use encrypted bot tokens stored by the admin portal; the static
+   `SLACK_BOT_TOKEN` remains a fallback for local/prototype paths.
+3. **Route** the intent: question, index command, index status, notify-channel
+   mapping, PR review, PR creation.
+4. **Retrieve** evidence with hybrid search:
    - BM25 full-text over code (SQLite FTS5 in D1)
    - vector similarity (Vectorize + `embeddinggemma-300m`, 768d)
    - one-hop expansion over extracted `CALLS` / `IMPORTS` edges
    - merge + rerank with symbol and diversity heuristics
-4. **Plan (agentic)** — a planner LLM inspects the first round of results and,
+5. **Plan (agentic)** — a planner LLM inspects the first round of results and,
    when something is missing, runs follow-up tools (search, read file, find
    callers/callees over the code graph) before answering. Hard time-budgeted,
    with graceful fallback to single-shot retrieval.
-5. **Answer** with an LLM (Workers AI, Kimi), grounded strictly in the
+6. **Answer** with an LLM (Workers AI, Kimi), grounded strictly in the
    retrieved evidence, streamed token-by-token into the Slack thread with a
    `Sources` list of `repo/path:lines`. If the evidence isn't there, it says so.
+
+## The admin path (`site/` + `functions/`)
+
+The admin portal lives inside the existing Cloudflare Pages site, not a
+separate service. Static files are served from `site/`; Pages Functions under
+the repo-root `functions/` directory implement the JSON and OAuth routes.
+
+Current onboarding steps:
+
+1. Slack OAuth creates or updates a tenant keyed by Slack workspace/team ID.
+   The workspace bot token is encrypted with AES-GCM before storage.
+2. GitHub App setup links an installation to that tenant. The repo picker lists
+   repositories visible to the installation through short-lived installation
+   tokens.
+3. Selected repositories are written to `tenant_repos`; indexing is started by
+   a GitHub `repository_dispatch` into the indexing workflow.
+4. The admin UI shows repo indexing state from `repo_index_status`, supports CI
+   notification channel mapping, and marks onboarding complete after the first
+   cited answer.
+
+Cloudflare Access protects `/admin`, `/api/admin`, and OAuth callbacks in
+deployed environments. Localhost stays usable for `wrangler pages dev`.
 
 ## The indexing path (`workers/github-webhook` + `services/indexer`)
 
@@ -60,6 +94,10 @@ Tree-sitter parsing is too heavy for a request-path Worker, so the indexer runs
 as a Node process in GitHub Actions. The optional hosted HTTP indexer path is
 only a fallback for deployments that choose to operate one.
 
+The indexer writes through Cloudflare REST clients, not Worker bindings. The
+REST plumbing is centralized in `services/indexer/src/cloudflare/api.ts`, with
+D1, Vectorize, and Workers AI clients layered on top.
+
 ### Chunking by language
 
 - **Go, TypeScript/JavaScript, Python** — full semantic chunking: functions,
@@ -75,14 +113,33 @@ Every push to the default branch incrementally reindexes only the changed files;
 deleted files are cleaned out of the index. Installation of the GitHub App
 triggers the first full index.
 
+## Shared package boundaries
+
+`packages/shared` is the cross-runtime contract. It contains:
+
+- D1 schema and migrations.
+- Shared TypeScript types for chunks, citations, jobs, and eval data.
+- Text, language, hashing, filtering, and embedding helpers.
+- Runtime-neutral repo parsing and repo IDs.
+- Encoding and AES-GCM secret helpers used by Pages Functions and Workers.
+- GitHub REST header and `repository_dispatch` helpers used by the admin portal,
+  Slack bot, and webhook worker.
+
+Domain clients stay in their domain packages: Slack API calls live behind
+Slack clients in Pages/Slack worker code, while richer GitHub PR/review/indexer
+clients remain in `workers/slack-bot/src/github.ts` and
+`services/indexer/src/github.ts`.
+
 ## Stack
 
 npm-workspaces TypeScript monorepo · Cloudflare Workers, D1 (SQLite + FTS5),
-Vectorize, Queues, Workers AI · GitHub Actions for indexing CI ·
-`web-tree-sitter` 0.22.x.
+Vectorize, Queues, Workers AI · Cloudflare Pages Functions · GitHub Actions for
+indexing CI · `web-tree-sitter` 0.22.x.
 
 ```
-packages/   shared (schema, types) · eval (answer-quality harness)
+packages/   shared (schema, types, utilities) · eval (answer-quality harness)
 services/   indexer (tree-sitter chunking CLI)
 workers/    slack-bot · github-webhook
+functions/  Cloudflare Pages admin APIs and OAuth callbacks
+site/       marketing site and admin onboarding UI
 ```

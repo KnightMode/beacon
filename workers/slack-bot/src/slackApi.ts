@@ -4,9 +4,7 @@
 
 import type { Env } from './env.js';
 import { fetchThreadHistory, type Turn } from './history.js';
-import { getSlackBotToken } from './tenant.js';
-
-const SLACK_API = 'https://slack.com/api';
+import { slackGet } from './slackClient.js';
 
 interface SlackMessage {
   ts?: string;
@@ -40,28 +38,22 @@ export async function fetchMessageText(
   teamId?: string,
 ): Promise<string> {
   try {
-    const repliesUrl =
-      `${SLACK_API}/conversations.replies` +
-      `?channel=${encodeURIComponent(channel)}` +
-      `&ts=${encodeURIComponent(messageTs)}` +
-      `&inclusive=true&limit=1`;
-    const repliesRes = await fetch(repliesUrl, {
-      headers: { authorization: `Bearer ${await getSlackBotToken(env, teamId)}` },
-    });
-    const replies = (await repliesRes.json()) as RepliesResponse;
+    const replies = await slackGet<RepliesResponse>(
+      env,
+      'conversations.replies',
+      { channel, ts: messageTs, inclusive: true, limit: 1 },
+      teamId,
+    );
     if (replies.ok && replies.messages?.[0]?.text) {
       return replies.messages[0].text.trim();
     }
 
-    const historyUrl =
-      `${SLACK_API}/conversations.history` +
-      `?channel=${encodeURIComponent(channel)}` +
-      `&latest=${encodeURIComponent(messageTs)}` +
-      `&inclusive=true&limit=1`;
-    const historyRes = await fetch(historyUrl, {
-      headers: { authorization: `Bearer ${await getSlackBotToken(env, teamId)}` },
-    });
-    const history = (await historyRes.json()) as HistoryResponse;
+    const history = await slackGet<HistoryResponse>(
+      env,
+      'conversations.history',
+      { channel, latest: messageTs, inclusive: true, limit: 1 },
+      teamId,
+    );
     return history.messages?.[0]?.text?.trim() ?? '';
   } catch {
     return '';
@@ -81,43 +73,35 @@ export async function resolveThreadRoot(
   teamId?: string,
 ): Promise<string> {
   try {
-    const repliesUrl =
-      `${SLACK_API}/conversations.replies` +
-      `?channel=${encodeURIComponent(channel)}` +
-      `&ts=${encodeURIComponent(messageTs)}` +
-      `&inclusive=true&limit=1`;
-    const repliesRes = await fetch(repliesUrl, {
-      headers: { authorization: `Bearer ${await getSlackBotToken(env, teamId)}` },
-    });
-    const replies = (await repliesRes.json()) as RepliesResponse;
+    const replies = await slackGet<RepliesResponse>(
+      env,
+      'conversations.replies',
+      { channel, ts: messageTs, inclusive: true, limit: 1 },
+      teamId,
+    );
     if (replies.ok && replies.messages?.[0]) {
       const msg = replies.messages[0];
       return msg.thread_ts ?? msg.ts ?? messageTs;
     }
 
     // Top-level channel message (not in a thread).
-    const historyUrl =
-      `${SLACK_API}/conversations.history` +
-      `?channel=${encodeURIComponent(channel)}` +
-      `&latest=${encodeURIComponent(messageTs)}` +
-      `&inclusive=true&limit=1`;
-    const historyRes = await fetch(historyUrl, {
-      headers: { authorization: `Bearer ${await getSlackBotToken(env, teamId)}` },
-    });
-    const history = (await historyRes.json()) as HistoryResponse;
+    const history = await slackGet<HistoryResponse>(
+      env,
+      'conversations.history',
+      { channel, latest: messageTs, inclusive: true, limit: 1 },
+      teamId,
+    );
     if (history.ok && history.messages?.[0]) {
       const msg = history.messages[0];
       return msg.thread_ts ?? msg.ts ?? messageTs;
     }
 
-    const permalinkUrl =
-      `${SLACK_API}/chat.getPermalink` +
-      `?channel=${encodeURIComponent(channel)}` +
-      `&message_ts=${encodeURIComponent(messageTs)}`;
-    const linkRes = await fetch(permalinkUrl, {
-      headers: { authorization: `Bearer ${await getSlackBotToken(env, teamId)}` },
-    });
-    const link = (await linkRes.json()) as PermalinkResponse;
+    const link = await slackGet<PermalinkResponse>(
+      env,
+      'chat.getPermalink',
+      { channel, message_ts: messageTs },
+      teamId,
+    );
     if (link.ok && link.permalink) {
       try {
         const threadFromUrl = new URL(link.permalink).searchParams.get('thread_ts');

@@ -1,3 +1,4 @@
+import { base64UrlToBytes, bytesToUtf8 } from '@scintel/shared';
 import { HttpError } from './admin.js';
 
 const ACCESS_HEADER = 'cf-access-jwt-assertion';
@@ -59,7 +60,7 @@ export async function verifyAccessJwt(token, options) {
   const ok = await crypto.subtle.verify(
     { name: 'RSASSA-PKCS1-v1_5' },
     key,
-    base64urlDecode(signatureB64),
+    base64UrlToBytes(signatureB64),
     new TextEncoder().encode(`${headerB64}.${payloadB64}`),
   );
   if (!ok) throw new HttpError(403, 'Invalid Cloudflare Access token.');
@@ -130,16 +131,8 @@ function splitCsv(value) {
 
 function jsonFromBase64url(value) {
   try {
-    return JSON.parse(new TextDecoder().decode(base64urlDecode(value)));
+    return JSON.parse(bytesToUtf8(base64UrlToBytes(value)));
   } catch {
     throw new HttpError(403, 'Invalid Cloudflare Access token.');
   }
-}
-
-function base64urlDecode(value) {
-  const padded = value.replace(/-/g, '+').replace(/_/g, '/').padEnd(Math.ceil(value.length / 4) * 4, '=');
-  const bin = atob(padded);
-  const out = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i += 1) out[i] = bin.charCodeAt(i);
-  return out;
 }

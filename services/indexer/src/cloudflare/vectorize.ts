@@ -6,8 +6,8 @@
 
 import type { IndexerConfig } from '../config.js';
 import type { VectorMetadata } from '@scintel/shared';
+import { CloudflareApiClient } from './api.js';
 
-const BASE = 'https://api.cloudflare.com/client/v4';
 // Vectorize REST limits: delete_by_ids accepts at most 100 ids per request
 // (error 40007), upsert at most 5000 vectors per NDJSON body.
 const DELETE_BATCH = 100;
@@ -20,44 +20,42 @@ export interface UpsertVector {
 }
 
 export class VectorizeClient {
-  private readonly accountId: string;
   private readonly indexName: string;
-  private readonly apiToken: string;
+  private readonly api: CloudflareApiClient;
 
   constructor(config: IndexerConfig) {
-    this.accountId = config.cloudflare.accountId;
     this.indexName = config.cloudflare.vectorizeIndex;
-    this.apiToken = config.cloudflare.apiToken;
+    this.api = new CloudflareApiClient(
+      config.cloudflare.accountId,
+      config.cloudflare.apiToken,
+    );
   }
 
   async upsert(vectors: UpsertVector[]): Promise<void> {
     for (const batch of chunked(vectors, UPSERT_BATCH)) {
       const ndjson = batch.map((v) => JSON.stringify(v)).join('\n');
-      const url = `${BASE}/accounts/${this.accountId}/vectorize/v2/indexes/${this.indexName}/upsert`;
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: {
-          authorization: `Bearer ${this.apiToken}`,
-          'content-type': 'application/x-ndjson',
+      await this.api.accountRequest<unknown>(
+        `/vectorize/v2/indexes/${this.indexName}/upsert`,
+        {
+          method: 'POST',
+          body: ndjson,
+          contentType: 'application/x-ndjson',
+          label: 'vectorize upsert',
         },
-        body: ndjson,
-      });
-      await assertOk(res, 'vectorize upsert');
+      );
     }
   }
 
   async deleteByIds(ids: string[]): Promise<void> {
     for (const batch of chunked(ids, DELETE_BATCH)) {
-      const url = `${BASE}/accounts/${this.accountId}/vectorize/v2/indexes/${this.indexName}/delete_by_ids`;
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: {
-          authorization: `Bearer ${this.apiToken}`,
-          'content-type': 'application/json',
+      await this.api.accountRequest<unknown>(
+        `/vectorize/v2/indexes/${this.indexName}/delete_by_ids`,
+        {
+          method: 'POST',
+          body: { ids: batch },
+          label: 'vectorize delete_by_ids',
         },
-        body: JSON.stringify({ ids: batch }),
-      });
-      await assertOk(res, 'vectorize delete_by_ids');
+      );
     }
   }
 }
@@ -68,11 +66,4 @@ function chunked<T>(items: T[], size: number): T[][] {
     out.push(items.slice(i, i + size));
   }
   return out;
-}
-
-async function assertOk(res: Response, ctx: string): Promise<void> {
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new Error(`${ctx} failed: ${res.status} ${text.slice(0, 500)}`);
-  }
 }

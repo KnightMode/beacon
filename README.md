@@ -52,8 +52,9 @@ action grounded **only in retrieved evidence**.
   and callees over the code graph — before answering multi-hop questions.
 - **Lives where the work happens.** Channels, DMs, and the Slack assistant pane.
   Answers stream in token-by-token and use thread history to resolve follow-ups.
-- **Zero servers to babysit.** Two Cloudflare Workers plus a GitHub Actions
-  indexing pipeline. Nothing to keep warm, nothing to operate.
+- **Zero servers to babysit.** Cloudflare Workers, Cloudflare Pages Functions,
+  and a GitHub Actions indexing pipeline. Nothing to keep warm, nothing to
+  operate.
 
 ## What it does
 
@@ -74,8 +75,12 @@ action grounded **only in retrieved evidence**.
   failing logs and the head commit's diff — and a :rocket: reaction opens a fix
   PR. Transient/infra flakes (timeouts, rate limits, OOM) get a re-run nudge
   instead of a false alarm.
-- **Self-serve indexing** — `@bot index owner/repo` onboards a repo from Slack;
-  `index status` shows live progress per repo.
+- **Admin onboarding portal** — the existing Pages site includes a guided
+  `/admin/onboarding` flow for Slack OAuth, GitHub App connection, repo
+  selection, indexing status, channel mapping, and the first cited answer.
+- **Self-serve indexing** — select repos in the admin portal or run
+  `@bot index owner/repo` from Slack; `index status` shows live progress per
+  repo.
 - **Fully automatic indexing** — install the companion GitHub App and every push
   to the default branch incrementally reindexes only the changed files. No
   commands, no servers.
@@ -83,21 +88,25 @@ action grounded **only in retrieved evidence**.
 ## How it works
 
 ```
- Slack ──/ask-code · @mention · DM · emoji──▶ slack-bot (CF Worker)
-                                              │  verify → route → hybrid +
-                                              │  agentic retrieval → reranked
-                                              │  LLM answer, streamed + cited
-                                              ▼
-                       D1 (FTS5 + graph) · Vectorize (768d vectors)
+ Cloudflare Pages admin ──Slack OAuth · GitHub App · repo picker──▶ D1 tenants
+                                                                        │
+ Slack ──/ask-code · @mention · DM · emoji──▶ slack-bot (CF Worker)      │
+                                              │  verify → route → tenant │
+                                              │  scoped retrieval → LLM  │
+                                              │  streamed + cited        │
+                                              ▼                         │
+                       D1 (tenants + FTS5 + graph) · Vectorize (768d vectors)
                                               ▲
  GitHub App ──push──▶ github-webhook (CF Worker) ──▶ Queue ──▶ GitHub Actions
                        (App installation token → tree-sitter → redaction → embed → upsert)
 ```
 
 **Stack:** npm-workspaces TypeScript monorepo · Cloudflare Workers, D1
-(SQLite + FTS5), Vectorize, Queues, Workers AI · GitHub App installation auth
-for tenant GitHub access · GitHub Actions as the Node indexer runner.
-Full walkthrough in [docs/architecture.md](docs/architecture.md).
+(SQLite + FTS5), Vectorize, Queues, Workers AI · Cloudflare Pages Functions ·
+GitHub App installation auth for tenant GitHub access · GitHub Actions as the
+Node indexer runner. Shared package utilities own schema/types plus
+cross-runtime repo parsing, encoding, secret crypto, and GitHub dispatch
+plumbing. Full walkthrough in [docs/architecture.md](docs/architecture.md).
 
 ## Licensing
 

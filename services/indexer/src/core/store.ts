@@ -7,11 +7,13 @@ import {
   type CodeChunk,
   type CodeEdge,
   type IndexStatus,
+  parseRepoRef,
+  repoIdFor as sharedRepoIdFor,
 } from '@scintel/shared';
 import type { D1Client } from '../cloudflare/d1.js';
 
 export function repoIdFor(fullName: string): string {
-  return fullName.toLowerCase();
+  return sharedRepoIdFor(fullName);
 }
 
 export function fileIdFor(repoId: string, path: string): string {
@@ -25,8 +27,8 @@ export async function ensureRepoRow(
   isPrivate: boolean,
   githubId: number | null,
 ): Promise<string> {
-  const [owner, name] = fullName.split('/');
-  const id = repoIdFor(fullName);
+  const parsed = parseRepoRef(fullName);
+  if (!parsed) throw new Error(`Invalid GitHub repository: ${fullName}`);
   await d1.exec(
     `INSERT INTO repos (id, github_id, full_name, owner, name, default_branch, private, updated_at)
      VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, datetime('now'))
@@ -35,9 +37,17 @@ export async function ensureRepoRow(
        default_branch = excluded.default_branch,
        private = excluded.private,
        updated_at = datetime('now')`,
-    [id, githubId, fullName, owner ?? '', name ?? '', defaultBranch, isPrivate ? 1 : 0],
+    [
+      parsed.id,
+      githubId,
+      parsed.fullName,
+      parsed.owner,
+      parsed.name,
+      defaultBranch,
+      isPrivate ? 1 : 0,
+    ],
   );
-  return id;
+  return parsed.id;
 }
 
 export async function setRepoStatus(

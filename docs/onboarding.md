@@ -1,98 +1,108 @@
-# Onboarding flows (multi-tenant design)
+# Onboarding flows
 
-How a new customer goes from "never heard of Beacon" to "asking questions about
-their code in Slack". Each flow below is a separate step a customer walks
-through, in order.
+This document describes the onboarding flow implemented in the current repo.
+The future SaaS expansion is tracked separately in
+[multi-tenant-saas.md](multi-tenant-saas.md).
 
-## The big picture
+## Big picture
 
 ```
-Add to Slack  →  workspace provisioned  →  connect GitHub  →  index a repo  →  ask questions
-   (2 min)          (automatic, ~10s)         (1 min)           (minutes)        (forever)
+Connect Slack → connect GitHub App → choose repos → start indexing → map CI channel → ask first question
 ```
 
-A customer can stop at any step and come back later. The bot always knows what
-step they're on and tells them what to do next.
+The flow lives in the existing Pages app at `/admin/onboarding/`. It is backed
+by Cloudflare Pages Functions in `functions/` and the shared `scintel` D1
+database.
 
-## Flow 1: Add to Slack (creates the tenant)
+## Step 1: Connect Slack
 
-1. Customer clicks **"Add to Slack"** on the marketing site (or a shared link).
-2. Slack shows the standard permission screen. The customer (must be someone
-   allowed to install apps in their workspace) clicks Allow.
-3. Slack redirects to our `GET /slack/oauth/callback` with a temporary code.
-   We exchange it for a bot token for *their* workspace.
-4. We create a `tenants` row keyed by their Slack `team_id`, store the bot
-   token (encrypted), and set status to `provisioning`.
-5. A background job creates their private D1 database, applies the schema, and
-   flips the tenant to `active`. This takes a few seconds.
-6. The bot DMs the installer: *"You're all set up. Next step: connect GitHub
-   so I can read your code."* with a button.
+1. The user opens `/admin/onboarding/` and clicks **Connect Slack**.
+2. `GET /api/admin/slack/start` redirects to Slack OAuth.
+3. Slack redirects to `/oauth/slack/callback`.
+4. The callback exchanges the code with Slack, creates or updates a tenant keyed
+   by Slack team ID, stores the bot token encrypted with
+   `SLACK_TOKEN_ENCRYPTION_SECRET`, records the Slack install, marks the
+   `slack` onboarding step complete, and sets the signed admin session cookie.
 
-If the same workspace installs twice, we just refresh the token — no duplicate
-tenant.
+If the same workspace reconnects, Beacon refreshes the install instead of
+creating a duplicate tenant.
 
-**What the customer sees:** click a button, click Allow, get a friendly DM.
-They never see "provisioning".
+## Step 2: Connect GitHub App
 
-## Flow 2: Connect GitHub (gives us read access to their code)
+1. The user clicks **Connect GitHub**.
+2. `GET /api/admin/github/start` creates a short-lived GitHub link cookie and
+   redirects to the configured GitHub App install URL.
+3. GitHub redirects to `/oauth/github/callback` with an `installation_id`.
+4. The callback validates the tenant linkage, records the installation, links
+   any pending installation repositories, and marks the `github` step complete.
 
-1. From the DM (or by typing `@beacon connect github`), the customer gets a
-   link to install our **GitHub App** on their org or personal account.
-2. The link carries a short-lived signed state token that says "this install
-   belongs to Slack workspace T024ABC". This is how we tie the two accounts
-   together safely — nobody can connect their GitHub to someone else's Slack.
-3. On the GitHub side, the customer picks **which repos** the app can see
-   (all repos, or a hand-picked list). This is GitHub's own screen — we never
-   get more access than they grant.
-4. GitHub sends us an `installation` webhook. We verify the state token, store
-   the `installation_id` against the tenant, and DM the customer: *"GitHub
-   connected. Say `@beacon index owner/repo` to index your first repo."*
+Repo listing in the admin portal uses short-lived GitHub App installation access
+through Octokit App auth. The picker is therefore scoped to the repositories
+approved during GitHub App installation.
 
-From this point on, all GitHub access for this tenant uses short-lived
-installation tokens (refreshed automatically) — no PATs anywhere.
+## Step 3: Choose repositories
 
-## Flow 3: Index the first repo
+The repo picker calls `/api/admin/github/repos` to page/search repositories
+visible to the tenant's GitHub App installation.
 
-1. Customer types `@beacon index owner/repo` in Slack.
-2. We check: is the repo visible to their GitHub installation? Is it within
-   their plan's repo limit and size limit? If not, we say so plainly and (for
-   plan limits) offer an upgrade link.
-3. We enqueue an index job carrying the tenant context (tenant id, their
-   database id, their vector namespace).
-4. The bot posts progress in the thread: *"Indexing owner/repo… 1,204 files,
-   ~3 minutes."* and a final *"Done — ask me anything about owner/repo."*
-5. After this, pushes to the repo trigger automatic incremental re-indexing
-   through the GitHub App webhook.
+Submitting repos to `/api/admin/repos`:
 
-## Flow 4: First question
+- validates each repo against the tenant's installation,
+- upserts canonical repo rows with shared repo parsing/IDs,
+- writes `tenant_repos`,
+- marks the `repos` step complete,
+- marks indexing pending unless the repo is already ready, and
+- triggers the GitHub Actions indexing workflow through
+  `repository_dispatch` when `PIPELINE_DISPATCH_*` is configured.
 
-Nothing to set up. `/ask-code how does auth work?` or `@beacon <question>`
-works the moment the first repo finishes indexing. The first answer includes a
-one-line tip about citations and the `:rocket:` fix-PR reaction.
+## Step 4: Watch indexing
 
-## Flow 5: Billing (only when they hit a limit)
+The admin UI reads `repo_index_status` to show repo progress. When remote
+Cloudflare API credentials are present, the Pages Functions can sync remote D1
+index status back into the local/admin view before returning the summary.
 
-Customers start on the **Free plan** automatically — no card required.
-Billing onboarding happens lazily:
+The Slack command `@bot index status` reads the same status model.
 
-1. When they hit a Free limit (e.g. question quota, second repo), the bot
-   replies with what happened and a **Stripe Checkout** link.
-2. After checkout, the Stripe webhook updates the tenant's plan immediately
-   and the bot DMs a confirmation. No re-install, no downtime.
-3. `@beacon billing` always returns a link to the Stripe customer portal
-   (change plan, update card, see invoices).
+## Step 5: Map CI notification channel
 
-## Resuming a half-finished setup
+The portal can map a selected repo to a Slack channel through
+`/api/admin/channel`. The Slack command equivalent is:
 
-The bot infers the customer's state from the tenant row and answers any
-message accordingly:
+```text
+@bot notify owner/repo here
+```
 
-| State | Bot's reply to any question |
-|---|---|
-| Provisioning | "Still setting up your workspace — about a minute." |
-| No GitHub install | "Connect GitHub first: <button>" |
-| No repos indexed | "Index a repo first: `@beacon index owner/repo`" |
-| Active | Answers normally |
+For tenant-scoped installs, CI triage claims are deduped per Slack workspace so
+multiple tenants can select the same repo without sharing Slack notifications.
 
-This means there is no separate "wizard" to abandon — the product itself is
-the wizard.
+## Step 6: First cited answer
+
+Once a tenant gets a cited Slack answer, the Slack bot marks
+`first_answer` complete and sets `tenants.onboarding_completed_at`. The admin UI
+then treats the setup journey as complete.
+
+## Local mock mode
+
+Local smoke tests do not require real Slack or GitHub OAuth:
+
+```bash
+cp site/.dev.vars.example .dev.vars
+npm run db:local:init
+npm run dev:portal
+npm run verify:local
+```
+
+Mock endpoints:
+
+- `/api/admin/slack/start?mock=1`
+- `/api/admin/github/start?mock=1`
+
+## Current limits
+
+- Data is tenant-scoped in the shared `scintel` D1 database; the repo does not
+  provision one D1 database per tenant yet.
+- The indexing workflow and Slack-side PR actions still use configured GitHub
+  PATs. The GitHub App is used for install linkage, repository selection, and
+  automatic webhook-driven indexing.
+- Billing, user roles, and strict per-user GitHub permission mirroring are not
+  implemented yet.

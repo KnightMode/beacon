@@ -9,14 +9,13 @@
  */
 
 import type { Env } from './env.js';
-import { getSlackBotToken } from './tenant.js';
+import { slackGet } from './slackClient.js';
 
 export interface Turn {
   role: 'user' | 'assistant';
   text: string;
 }
 
-const SLACK_API = 'https://slack.com/api';
 const MAX_TURNS = 8;
 const USER_TRUNCATE = 800;
 const ASSISTANT_TRUNCATE = 1200;
@@ -61,15 +60,12 @@ export async function fetchThreadHistory(
   teamId?: string,
 ): Promise<Turn[]> {
   try {
-    const url =
-      `${SLACK_API}/conversations.replies` +
-      `?channel=${encodeURIComponent(channel)}` +
-      `&ts=${encodeURIComponent(threadTs)}` +
-      `&limit=20`;
-    const res = await fetch(url, {
-      headers: { authorization: `Bearer ${await getSlackBotToken(env, teamId)}` },
-    });
-    const data = (await res.json()) as RepliesResponse;
+    const data = await slackGet<RepliesResponse>(
+      env,
+      'conversations.replies',
+      { channel, ts: threadTs, limit: 20 },
+      teamId,
+    );
 
     if (!data.ok) {
       console.warn('conversations.replies failed', { error: data.error });

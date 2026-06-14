@@ -1,3 +1,4 @@
+import { parseRepoRef } from '@scintel/shared';
 import {
   clearGithubLinkCookie,
   clientErrorMessage,
@@ -68,33 +69,14 @@ async function seedMockInstallationRepos(env, installationId) {
     : ['KnightMode/beacon', 'KnightMode/slack-code-intelligence'];
   const repos = [];
   for (const fullName of samples) {
-    const [owner, name] = fullName.split('/');
-    const repoId = fullName.toLowerCase();
+    const repo = parseRepoRef(fullName);
+    if (!repo) continue;
     repos.push({
-      fullName,
+      fullName: repo.fullName,
       githubId: installationId * 1000 + repos.length + 1,
       defaultBranch: 'main',
       private: true,
     });
-    await env.DB.batch([
-      env.DB.prepare(
-        `INSERT INTO repos (id, github_id, full_name, owner, name, default_branch, private, updated_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, 'main', 1, datetime('now'))
-         ON CONFLICT(id) DO UPDATE SET
-           github_id = COALESCE(excluded.github_id, repos.github_id),
-           full_name = excluded.full_name,
-           updated_at = datetime('now')`,
-      ).bind(repoId, installationId * 1000 + repos.length, fullName, owner, name),
-      env.DB.prepare(
-        `INSERT INTO github_installation_repos
-           (installation_id, repo_id, full_name, github_id, default_branch, private, updated_at)
-         VALUES (?1, ?2, ?3, ?4, 'main', 1, datetime('now'))
-         ON CONFLICT(installation_id, repo_id) DO UPDATE SET
-           full_name = excluded.full_name,
-           github_id = excluded.github_id,
-           updated_at = datetime('now')`,
-      ).bind(installationId, repoId, fullName, installationId * 1000 + repos.length),
-    ]);
   }
   return repos;
 }

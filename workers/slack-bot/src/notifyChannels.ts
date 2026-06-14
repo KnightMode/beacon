@@ -5,6 +5,7 @@
  */
 
 import type { Env } from './env.js';
+import { repoIdFor } from '@scintel/shared';
 import { getTenantIdForSlackTeam } from './tenant.js';
 
 /** Registers the mapping and returns the Slack reply text. */
@@ -15,7 +16,7 @@ export async function setNotifyChannel(
   addedBy?: string,
   teamId?: string,
 ): Promise<string> {
-  const repoId = repoRef.toLowerCase();
+  const repoId = repoIdFor(repoRef);
   const tenantId = await getTenantIdForSlackTeam(env, teamId);
   if (teamId && !tenantId) {
     return ':information_source: This workspace is not onboarded yet. Open the admin portal to connect Slack and GitHub first.';

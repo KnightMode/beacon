@@ -1,6 +1,8 @@
 # Usage
 
 Everything happens in Slack — in channels, DMs, or the assistant pane.
+Initial workspace setup and repo selection can also happen in the admin portal
+at `/admin/onboarding`.
 
 | In Slack | What happens |
 |---|---|
@@ -42,6 +44,8 @@ installation tokens.
 
 Legacy/internal options remain available for development and non-tenant repos:
 
+- **Admin portal** — select repos in `/admin/onboarding`; Beacon records them
+  under the tenant and fires the indexing workflow when dispatch is configured.
 - **Actions tab** — `Index Repository` → Run workflow
 - **Admin endpoint** — `POST /admin/index` on the webhook worker
 - **Locally** — `npm run index --workspace services/indexer -- owner/repo`

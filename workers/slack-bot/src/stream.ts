@@ -21,9 +21,9 @@ import {
   buildRetrievalText,
   type Turn,
 } from './history.js';
-import { getSlackBotToken, markFirstCitedAnswer } from './tenant.js';
+import { markFirstCitedAnswer } from './tenant.js';
+import { slackPostJson } from './slackClient.js';
 
-const SLACK_API = 'https://slack.com/api';
 // Steady flush cadence for appendStream. Token reading and Slack writes are
 // decoupled (reader fills a buffer, a timer drains it), so the stream renders
 // at an even pace instead of bursting whenever the Slack API round trip ends.
@@ -91,15 +91,7 @@ export async function call(
   body: Record<string, unknown>,
   teamId?: string,
 ): Promise<SlackResult> {
-  const res = await fetch(`${SLACK_API}/${method}`, {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json; charset=utf-8',
-      authorization: `Bearer ${await getSlackBotToken(env, teamId)}`,
-    },
-    body: JSON.stringify(body),
-  });
-  const result = (await res.json()) as SlackResult;
+  const result = await slackPostJson<SlackResult>(env, method, body, teamId);
   if (!result.ok) {
     console.warn(`slack ${method} failed`, { error: result.error });
   }

@@ -9,6 +9,7 @@ import {
   sessionCookie,
   validateOAuthState,
 } from '../../_lib/admin.js';
+import { slackPostForm } from '../../_lib/slackClient.js';
 
 export async function onRequestGet(context) {
   try {
@@ -79,19 +80,16 @@ async function exchangeSlackCode(context, url) {
   const code = url.searchParams.get('code');
   if (!code) throw new HttpError(400, 'Missing Slack OAuth code.');
   const redirectUri = `${url.origin}/oauth/slack/callback`;
-  const res = await fetch('https://slack.com/api/oauth.v2.access', {
-    method: 'POST',
-    headers: { 'content-type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
+  return slackPostForm(
+    'oauth.v2.access',
+    {
       code,
       client_id: context.env.SLACK_CLIENT_ID || '',
       client_secret: context.env.SLACK_CLIENT_SECRET || '',
       redirect_uri: redirectUri,
-    }),
-  });
-  const data = await res.json();
-  if (!data.ok) throw new HttpError(400, `Slack OAuth failed: ${data.error || 'unknown'}`);
-  return data;
+    },
+    { label: 'OAuth' },
+  );
 }
 
 function mockInstall() {
