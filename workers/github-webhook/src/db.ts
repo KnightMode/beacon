@@ -1,6 +1,7 @@
 /**
- * D1 helpers for the webhook worker: upserting repos, seeding the allowlist,
- * and tracking index-status lifecycle.
+ * D1 helpers for the webhook worker: upserting repos, syncing tenant
+ * installation grants, maintaining legacy allowlist entries, and tracking
+ * index-status lifecycle.
  */
 
 import { INDEX_STATUS, type IndexStatus } from '@scintel/shared';
@@ -71,6 +72,35 @@ export async function hasLinkedTenants(
   return row !== null;
 }
 
+export async function upsertInstallationRepoGrant(
+  env: Env,
+  installationId: number | undefined,
+  repoId: string,
+  repo: RepoUpsert,
+): Promise<void> {
+  if (!installationId) return;
+  await env.DB.prepare(
+    `INSERT INTO github_installation_repos
+       (installation_id, repo_id, full_name, github_id, default_branch, private, updated_at)
+     VALUES (?1, ?2, ?3, ?4, ?5, ?6, datetime('now'))
+     ON CONFLICT(installation_id, repo_id) DO UPDATE SET
+       full_name = excluded.full_name,
+       github_id = COALESCE(excluded.github_id, github_installation_repos.github_id),
+       default_branch = excluded.default_branch,
+       private = excluded.private,
+       updated_at = datetime('now')`,
+  )
+    .bind(
+      installationId,
+      repoId,
+      repo.fullName,
+      repo.githubId ?? null,
+      repo.defaultBranch ?? 'main',
+      repo.private === false ? 0 : 1,
+    )
+    .run();
+}
+
 export async function queuePendingInstallationRepo(
   env: Env,
   installationId: number | undefined,
@@ -101,14 +131,15 @@ export async function addRepoToInstallationTenants(
     .all<{ tenant_id: string }>();
   for (const row of results) {
     await env.DB.prepare(
-      `INSERT INTO tenant_repos (tenant_id, repo_id, full_name, enabled, selected_by, updated_at)
-       VALUES (?1, ?2, ?3, 1, 'github-installation', datetime('now'))
+      `INSERT INTO tenant_repos (tenant_id, repo_id, installation_id, full_name, enabled, selected_by, updated_at)
+       VALUES (?1, ?2, ?3, ?4, 1, 'github-installation', datetime('now'))
        ON CONFLICT(tenant_id, repo_id) DO UPDATE SET
          enabled = 1,
+         installation_id = excluded.installation_id,
          full_name = excluded.full_name,
          updated_at = datetime('now')`,
     )
-      .bind(row.tenant_id, repoId, fullName)
+      .bind(row.tenant_id, repoId, installationId, fullName)
       .run();
     await env.DB.prepare(
       `DELETE FROM pending_installation_repos
@@ -130,6 +161,7 @@ export async function revokeRepoFromInstallationTenants(
       `UPDATE tenant_repos
        SET enabled = 0, updated_at = datetime('now')
        WHERE repo_id = ?1
+         AND installation_id = ?2
          AND tenant_id IN (
            SELECT tenant_id FROM tenant_github_installations
            WHERE installation_id = ?2
@@ -137,6 +169,10 @@ export async function revokeRepoFromInstallationTenants(
     ).bind(repoId, installationId),
     env.DB.prepare(
       `DELETE FROM pending_installation_repos
+       WHERE installation_id = ?1 AND repo_id = ?2`,
+    ).bind(installationId, repoId),
+    env.DB.prepare(
+      `DELETE FROM github_installation_repos
        WHERE installation_id = ?1 AND repo_id = ?2`,
     ).bind(installationId, repoId),
   ]);
@@ -218,22 +254,31 @@ export async function linkPendingInstallationRepos(
   installationId: number,
 ): Promise<number> {
   const { results } = await env.DB.prepare(
-    `SELECT repo_id, full_name FROM pending_installation_repos
+    `SELECT repo_id, full_name FROM github_installation_repos
      WHERE installation_id = ?1`,
   )
     .bind(installationId)
     .all<{ repo_id: string; full_name: string }>();
+  const rows = results.length > 0
+    ? results
+    : (await env.DB.prepare(
+        `SELECT repo_id, full_name FROM pending_installation_repos
+         WHERE installation_id = ?1`,
+      )
+        .bind(installationId)
+        .all<{ repo_id: string; full_name: string }>()).results;
 
-  for (const row of results) {
+  for (const row of rows) {
     await env.DB.prepare(
-      `INSERT INTO tenant_repos (tenant_id, repo_id, full_name, enabled, selected_by, updated_at)
-       VALUES (?1, ?2, ?3, 1, 'github-installation', datetime('now'))
+      `INSERT INTO tenant_repos (tenant_id, repo_id, installation_id, full_name, enabled, selected_by, updated_at)
+       VALUES (?1, ?2, ?3, ?4, 1, 'github-installation', datetime('now'))
        ON CONFLICT(tenant_id, repo_id) DO UPDATE SET
          enabled = 1,
+         installation_id = excluded.installation_id,
          full_name = excluded.full_name,
          updated_at = datetime('now')`,
     )
-      .bind(tenantId, row.repo_id, row.full_name)
+      .bind(tenantId, row.repo_id, installationId, row.full_name)
       .run();
     await env.DB.prepare(
       `DELETE FROM pending_installation_repos
@@ -242,7 +287,31 @@ export async function linkPendingInstallationRepos(
       .bind(installationId, row.repo_id)
       .run();
   }
-  return results.length;
+  return rows.length;
+}
+
+export async function getTenantSelectionsForInstallationRepo(
+  env: Env,
+  installationId: number | undefined,
+  repoId: string,
+): Promise<Array<{ tenantId: string; installationId: number }>> {
+  if (!installationId) return [];
+  const { results } = await env.DB.prepare(
+    `SELECT tr.tenant_id, tr.installation_id
+     FROM tenant_repos tr
+     JOIN tenants t ON t.id = tr.tenant_id
+     WHERE tr.repo_id = ?1
+       AND tr.installation_id = ?2
+       AND tr.enabled = 1
+       AND t.status = 'ACTIVE'
+     ORDER BY tr.tenant_id`,
+  )
+    .bind(repoId, installationId)
+    .all<{ tenant_id: string; installation_id: number }>();
+  return results.map((row) => ({
+    tenantId: row.tenant_id,
+    installationId: row.installation_id,
+  }));
 }
 
 export async function getSlackTeamIdsForRepo(

@@ -7,3 +7,4 @@ export * from './utils/language.js';
 export * from './utils/fileFilter.js';
 export * from './utils/secrets.js';
 export * from './utils/embeddingText.js';
+export * from './githubApp.js';

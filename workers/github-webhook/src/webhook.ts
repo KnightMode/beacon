@@ -13,16 +13,14 @@ import { shouldIndexFile } from '@scintel/shared';
 import type { Env } from './env.js';
 import {
   upsertRepo,
-  addToAllowlist,
-  addRepoToInstallationTenants,
-  hasLinkedTenants,
-  queuePendingInstallationRepo,
+  getTenantSelectionsForInstallationRepo,
   revokeRepoFromInstallationTenants,
   disableInstallationAllowlist,
   isRepoInUse,
   purgeRepoIndex,
   isAllowlisted,
   repoIdFor,
+  upsertInstallationRepoGrant,
 } from './db.js';
 import {
   enqueueFullIndex,
@@ -147,14 +145,23 @@ async function handleInstallation(
       defaultBranch: r.default_branch,
       private: r.private,
     });
-    const linked = await hasLinkedTenants(env, installationId);
-    if (linked) {
-      await addRepoToInstallationTenants(env, installationId, repoId, r.full_name);
-    } else {
-      await queuePendingInstallationRepo(env, installationId, repoId, r.full_name);
-      await addToAllowlist(env, repoId, r.full_name, 'installation');
+    await upsertInstallationRepoGrant(env, installationId, repoId, {
+      githubId: r.id ?? null,
+      fullName: r.full_name,
+      defaultBranch: r.default_branch,
+      private: r.private,
+    });
+    const selections = await getTenantSelectionsForInstallationRepo(env, installationId, repoId);
+    for (const selection of selections) {
+      await enqueueFullIndex(
+        env,
+        repoId,
+        r.full_name,
+        undefined,
+        selection.tenantId,
+        selection.installationId,
+      );
     }
-    await enqueueFullIndex(env, repoId, r.full_name);
     enqueued.push(r.full_name);
   }
   return json({ ok: true, action: payload.action, enqueued, revoked, purged });
@@ -163,6 +170,7 @@ async function handleInstallation(
 async function handlePush(env: Env, payload: PushPayload): Promise<Response> {
   const repo = payload.repository;
   const repoId = repoIdFor(repo.full_name);
+  const installationId = (payload as { installation?: { id?: number } }).installation?.id;
 
   // Only index pushes to the default branch for the MVP.
   const defaultBranch = repo.default_branch ?? 'main';
@@ -199,20 +207,39 @@ async function handlePush(env: Env, payload: PushPayload): Promise<Response> {
     private: repo.private,
   });
 
-  await enqueueIncrementalIndex(
-    env,
-    repoId,
-    repo.full_name,
-    [...changed],
-    [...removed],
-    payload.after,
-  );
+  const selections = await getTenantSelectionsForInstallationRepo(env, installationId, repoId);
+  if (selections.length > 0) {
+    for (const selection of selections) {
+      await enqueueIncrementalIndex(
+        env,
+        repoId,
+        repo.full_name,
+        [...changed],
+        [...removed],
+        payload.after,
+        selection.tenantId,
+        selection.installationId,
+      );
+    }
+  } else if (!installationId && (await isAllowlisted(env, repoId))) {
+    await enqueueIncrementalIndex(
+      env,
+      repoId,
+      repo.full_name,
+      [...changed],
+      [...removed],
+      payload.after,
+    );
+  } else {
+    return json({ ok: true, ignored: 'not-selected-for-tenant', repo: repo.full_name });
+  }
 
   return json({
     ok: true,
     repo: repo.full_name,
     changed: changed.size,
     removed: removed.size,
+    enqueued: selections.length || 1,
   });
 }
 

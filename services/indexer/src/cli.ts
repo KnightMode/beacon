@@ -25,7 +25,8 @@ Usage:
                                                          also delete removed files
   npm run index -- --help                                Show this help
 
-Environment (see .env.example): GITHUB_PAT, CLOUDFLARE_ACCOUNT_ID,
+Environment (see .env.example): GITHUB_APP_ID, GITHUB_APP_PRIVATE_KEY
+(tenant jobs) or GITHUB_PAT (legacy local jobs), CLOUDFLARE_ACCOUNT_ID,
 CLOUDFLARE_API_TOKEN, CLOUDFLARE_D1_DATABASE_ID, CLOUDFLARE_VECTORIZE_INDEX,
 INDEXER_SHARED_SECRET, EMBEDDING_MODEL, LLM_MODEL.
 `;

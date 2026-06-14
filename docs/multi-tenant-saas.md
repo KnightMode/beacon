@@ -14,12 +14,17 @@ Companion design docs:
 - [emergency-handling.md](emergency-handling.md) — incident runbook
 - [admin-portal.md](admin-portal.md) — customer admin portal
 
-## Current state (summary)
+## Original prototype state (summary)
 
 Single-tenant prototype: one static `SLACK_BOT_TOKEN`, one `GITHUB_PAT`, one
 shared D1 (`scintel`) + Vectorize index, a global repo allowlist, no metering
 or billing. Schema stubs (`slack_workspaces`, `users`) exist in
 `packages/shared/schema.sql` but are unused.
+
+The current tenant migration keeps the shared D1 control plane but stores
+Slack workspaces, tenant GitHub App installations, live installation repo
+grants, and tenant repo selections. Customer repo access should now use
+short-lived GitHub App installation tokens; PATs are legacy/dev-only.
 
 ## Target architecture
 
@@ -53,7 +58,9 @@ Cloudflare API and reached over the D1 HTTP REST API using the tenant's
     stripe_customer_id, status)
   - `slack_installations` (team_id, encrypted bot_token, bot_user_id,
     installed_by)
-  - `github_installations` (installation_id, tenant_id, account login)
+  - `github_installations` (installation_id, tenant_id, account login; many
+    installations per tenant)
+  - `github_installation_repos` (live grant cache by installation + repo)
   - `usage_events` (tenant_id, event_type, quantity, period, metadata)
 - Slack OAuth v2 install flow: new routes `GET /slack/install` and
   `GET /slack/oauth/callback` in `workers/slack-bot/src/index.ts`. Encrypt
@@ -64,8 +71,9 @@ Cloudflare API and reached over the D1 HTTP REST API using the tenant's
   (`workers/slack-bot/src/slack.ts`).
 - Replace `GITHUB_PAT` with per-tenant GitHub App installation tokens (App
   JWT → installation access token, cached ~50 min). The webhook handler
-  (`workers/github-webhook/src/webhook.ts`) already receives `installation`
-  events — wire them to `github_installations`.
+  (`workers/github-webhook/src/webhook.ts`) receives `installation` events,
+  syncs the grant cache, and tenant repo selections persist the
+  `installation_id`.
 - Tenant linking: a Slack command (e.g. `@bot connect github`) that issues a
   signed state token for the GitHub App install URL, binding
   `installation_id` to the Slack tenant.

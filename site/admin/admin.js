@@ -6,7 +6,6 @@
     github: "Connect GitHub",
     repos: "Choose repos",
     indexing: "Watch indexing",
-    channel: "Map channel",
     first_answer: "First cited answer",
   };
   const stepOrder = Object.keys(stepLabels);
@@ -24,6 +23,7 @@
     repoSource: "empty",
     repoMessage: "",
     repoInstallation: null,
+    repoInstallations: [],
     availableRepos: new Map(),
     selectedRepos: new Map(),
     searchTimer: null,
@@ -140,6 +140,7 @@
       state.repoSource = data.source || "github-api";
       state.repoHasMore = Boolean(data.hasMore) && !state.repoQuery;
       state.repoInstallation = data.installation || null;
+      state.repoInstallations = data.installations || [];
       state.repoMessage = data.message || "";
       mergeAvailableRepos(data.repos || []);
       mergeSelectedRepoSummaries(data.selectedRepos || []);
@@ -413,7 +414,11 @@
     if (!state.summary?.integrations?.github) return "";
     if (state.repoLoading) return state.repoMessage || "Loading repositories...";
     if (state.repoMessage) return state.repoMessage;
-    const account = state.repoInstallation?.accountLogin ? ` for ${state.repoInstallation.accountLogin}` : "";
+    const account = state.repoInstallation?.accountLogin
+      ? ` for ${state.repoInstallation.accountLogin}`
+      : state.repoInstallations.length > 1
+        ? ` across ${state.repoInstallations.length} GitHub installs`
+        : "";
     const source = state.repoSource === "database" ? " from cached install data" : "";
     if (loadedCount === 0) return `No repositories loaded${account}.`;
     return `${formatNumber(loadedCount)} repos loaded${account}${source}. ${formatNumber(visibleCount)} visible in the current view.`;
@@ -465,6 +470,7 @@
         <span class="repo-row__main">
           <strong>${escapeHtml(repoParts.name)}</strong>
           <em>${escapeHtml(repo.fullName)}</em>
+          ${repo.accountLogin ? `<small>${escapeHtml(repo.accountLogin)}</small>` : ""}
         </span>
         <span class="repo-row__privacy"><span class="repo-badge ${isPublic ? "is-public" : "is-private"}">${isPublic ? "Public" : "Private"}</span></span>
         <span class="repo-row__branch">${escapeHtml(repo.defaultBranch || "main")}</span>
@@ -494,8 +500,11 @@
     }).join("");
   }
 
-  function selectedRepoNames() {
-    return Array.from(state.selectedRepos.keys());
+  function selectedRepoPayload() {
+    return Array.from(state.selectedRepos.values()).map((repo) => ({
+      fullName: repo.fullName,
+      installationId: repo.installationId || repo.selectedInstallationId,
+    }));
   }
 
   function bindForms() {
@@ -524,7 +533,7 @@
 
     $("[data-repo-form]")?.addEventListener("submit", async (event) => {
       event.preventDefault();
-      const repos = selectedRepoNames();
+      const repos = selectedRepoPayload();
       if (repos.length === 0) {
         setText("[data-repo-form-status]", "Select at least one repository.");
         return;
