@@ -58,9 +58,7 @@ npx wrangler secret put SLACK_BOT_TOKEN
 # workers/github-webhook bootstrap secrets:
 npx wrangler secret put GITHUB_WEBHOOK_SECRET
 npx wrangler secret put ADMIN_TOKEN
-npx wrangler secret put INDEXER_SHARED_SECRET
-npx wrangler secret put GITHUB_APP_ID
-npx wrangler secret put GITHUB_APP_PRIVATE_KEY
+npx wrangler secret put PIPELINE_DISPATCH_TOKEN
 
 npm run deploy --workspace workers/slack-bot
 npm run deploy --workspace workers/github-webhook
@@ -79,10 +77,10 @@ updates the Pages project and redeploys it with:
   `0005_tenant_ci_triage_runs.sql`, and `0006_installation_repo_grants.sql`
   applied to the remote database.
 - **Secrets from GitHub Actions:** `ADMIN_SESSION_SECRET`, `SLACK_CLIENT_SECRET`,
-  `SLACK_TOKEN_ENCRYPTION_SECRET`, `INDEXER_SHARED_SECRET`, and
+  `SLACK_TOKEN_ENCRYPTION_SECRET`, `PIPELINE_DISPATCH_TOKEN`, and
   `BEACON_GITHUB_APP_PRIVATE_KEY` (written to Pages as `GITHUB_APP_PRIVATE_KEY`).
 - **Vars:** `SLACK_CLIENT_ID`, `GITHUB_APP_SLUG`, `GITHUB_APP_ID`, and
-  `INDEXER_URL`.
+  `PIPELINE_DISPATCH_REPO`.
 - **Cloudflare Access vars:** `ADMIN_CF_ACCESS_ISSUER` and
   `ADMIN_CF_ACCESS_AUD` are required for deployed admin routes. Optionally set
   `ADMIN_CF_ACCESS_ALLOWED_EMAILS` or `ADMIN_CF_ACCESS_ALLOWED_DOMAINS` for an
@@ -115,11 +113,13 @@ For local UI testing without real OAuth, append `?mock=1` to
 `/api/admin/slack/start` or `/api/admin/github/start`. The automated E2E path
 connects two mock GitHub installations.
 
-**Hosted indexer secrets:** `GITHUB_APP_ID`, `GITHUB_APP_PRIVATE_KEY`,
-`CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN`, and `INDEXER_SHARED_SECRET`.
+**Indexer workflow secrets:** `BEACON_GITHUB_APP_PRIVATE_KEY`,
+`CLOUDFLARE_ACCOUNT_ID`, and `CLOUDFLARE_API_TOKEN`. `INDEXER_GITHUB_PAT` or a
+dedicated `PIPELINE_DISPATCH_TOKEN` can be used only to trigger the workflow;
+tenant repo contents are read with GitHub App installation tokens.
 
 **Key vars** (`wrangler.toml`): `LLM_MODEL`, `EMBEDDING_MODEL`,
-`AGENTIC_RETRIEVAL`, `INDEXER_URL`.
+`AGENTIC_RETRIEVAL`, `PIPELINE_DISPATCH_REPO`.
 
 ## 5. GitHub App (tenant access and webhooks)
 
@@ -148,7 +148,7 @@ GITHUB_APP_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY--
 ```
 
 `GITHUB_APP_ID` and `GITHUB_APP_PRIVATE_KEY` power the onboarding repo picker,
-hosted indexing, PR review, CI triage, and create-PR by minting installation
+GitHub Actions indexing, PR review, CI triage, and create-PR by minting installation
 tokens for the tenant-selected repo. Generate a new private key in the app
 settings if you do not have one yet.
 
