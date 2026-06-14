@@ -83,8 +83,8 @@ updates the Pages project and redeploys it with:
   in-app allow-list that mirrors the Access policy.
 
 The Slack OAuth redirect URL is
-`https://<pages-host>/oauth/slack/callback`. The GitHub App setup callback is
-`https://<pages-host>/oauth/github/callback`.
+`https://askbeacon.dev/oauth/slack/callback`. The GitHub App setup callback is
+`https://askbeacon.dev/oauth/github/callback`.
 
 If Slack OAuth redirects back with `Cannot read properties of undefined
 (reading 'batch')`, the Pages deployment does not have the `DB` binding yet.
@@ -121,9 +121,9 @@ For local UI testing without real OAuth, append `?mock=1` to
 Create one under [GitHub → Settings → Developer settings → GitHub Apps](https://github.com/settings/apps/new):
 
 - **GitHub App name:** e.g. `Beacon` (pick any name)
-- **Homepage URL:** your marketing site or `http://localhost:8788`
+- **Homepage URL:** `https://askbeacon.dev` (or `http://localhost:8788` for local dev)
 - **Setup URL (OAuth callback):** `http://localhost:8788/oauth/github/callback` for local dev,
-  or `https://<pages-host>/oauth/github/callback` in production
+  or `https://askbeacon.dev/oauth/github/callback` in production
 - **Redirect on update:** enable this so saving repo access on GitHub sends users back to onboarding
 - **Webhook URL:** `https://<github-webhook-url>/webhooks/github`
 - **Webhook secret:** your `GITHUB_WEBHOOK_SECRET`
