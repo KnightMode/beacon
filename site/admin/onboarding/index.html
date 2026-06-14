@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&family=Newsreader:opsz,wght@6..72,500;6..72,650;6..72,750&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="../../styles.css?v=12" />
+  <link rel="stylesheet" href="../../styles.css?v=15" />
 </head>
 <body class="admin-shell" data-admin-page="onboarding">
   <a class="skip-link" href="#main">Skip to content</a>
@@ -18,6 +18,10 @@
       <img class="brand__mark" src="../../assets/beacon-logo.png" alt="" width="40" height="40" />
       <span>Beacon</span>
     </a>
+    <div class="admin-system-state" aria-live="polite">
+      <span>Status</span>
+      <strong data-live-state>Checking setup</strong>
+    </div>
     <nav class="admin-topbar__links" aria-label="Admin navigation">
       <a href="/admin/">Status</a>
       <a aria-current="page" href="/admin/onboarding/">Onboarding</a>
@@ -25,98 +29,243 @@
     </nav>
   </header>
 
-  <main id="main" class="admin-main">
-    <section class="admin-hero" aria-labelledby="onboarding-title">
-      <div>
-        <p class="kicker">First cited answer</p>
-        <h1 id="onboarding-title">Bring one workspace online.</h1>
-        <p>Connect Slack, connect GitHub, choose pilot repos, map one channel, and ship the first cited answer.</p>
-      </div>
-      <div class="admin-hero__actions">
-        <button class="button button--quiet" type="button" data-refresh>Refresh</button>
-      </div>
-    </section>
-
-    <section class="onboarding-layout">
-      <aside class="admin-panel">
-        <div class="admin-panel__topline">
-          <span>Progress</span>
-          <strong data-onboarding-state>Pending</strong>
+  <main id="main" class="admin-main admin-main--journey">
+    <section class="journey-shell" aria-labelledby="journey-title">
+      <div class="journey-shell__top">
+        <div class="journey-shell__copy">
+          <p class="setup-card__index">Onboarding journey</p>
+          <h1 id="journey-title">Get Beacon ready for your first Slack answer.</h1>
+          <p>Connect Slack and GitHub, choose the repositories Beacon can use, then confirm the index is ready before asking your first cited question.</p>
         </div>
-        <ol class="setup-rail setup-rail--sticky" data-step-list></ol>
-      </aside>
+        <aside class="journey-shell__tenant" aria-label="Current workspace">
+          <span>Workspace</span>
+          <strong data-tenant-name>Not connected</strong>
+          <em data-onboarding-state>Pending</em>
+        </aside>
+      </div>
 
-      <div class="onboarding-stack">
-        <section class="setup-card" data-step-card="slack">
-          <p class="setup-card__index">01 / Slack</p>
-          <h2>Connect the workspace.</h2>
-          <p>Slack is the tenant boundary for v1. Installing the bot creates the admin workspace and records the bot token for this team.</p>
-          <a class="button button--primary" href="/api/admin/slack/start">Add to Slack</a>
-          <p class="setup-card__status" data-slack-status>Disconnected</p>
-        </section>
+      <nav class="journey-track" aria-label="Beacon setup stages" role="tablist">
+        <button id="journey-card-slack" class="journey-card is-active" type="button" role="tab" aria-selected="true" aria-controls="journey-panel-slack" data-journey-card="slack">
+          <span>01</span>
+          <strong>Slack</strong>
+          <em data-journey-status="slack">Pending</em>
+        </button>
+        <span class="journey-connector" aria-hidden="true"></span>
+        <button id="journey-card-github" class="journey-card" type="button" role="tab" aria-selected="false" aria-controls="journey-panel-github" data-journey-card="github">
+          <span>02</span>
+          <strong>GitHub</strong>
+          <em data-journey-status="github">Pending</em>
+        </button>
+        <span class="journey-connector" aria-hidden="true"></span>
+        <button id="journey-card-repos" class="journey-card" type="button" role="tab" aria-selected="false" aria-controls="journey-panel-repos" data-journey-card="repos">
+          <span>03</span>
+          <strong>Repos</strong>
+          <em data-journey-status="repos">Pending</em>
+        </button>
+        <span class="journey-connector" aria-hidden="true"></span>
+        <button id="journey-card-indexing" class="journey-card" type="button" role="tab" aria-selected="false" aria-controls="journey-panel-indexing" data-journey-card="indexing">
+          <span>04</span>
+          <strong>Indexing</strong>
+          <em data-journey-status="indexing">Pending</em>
+        </button>
+        <span class="journey-connector" aria-hidden="true"></span>
+        <button id="journey-card-channel" class="journey-card" type="button" role="tab" aria-selected="false" aria-controls="journey-panel-channel" data-journey-card="channel">
+          <span>05</span>
+          <strong>Channel</strong>
+          <em data-journey-status="channel">Pending</em>
+        </button>
+        <span class="journey-connector" aria-hidden="true"></span>
+        <button id="journey-card-first_answer" class="journey-card" type="button" role="tab" aria-selected="false" aria-controls="journey-panel-first_answer" data-journey-card="first_answer">
+          <span>06</span>
+          <strong>First answer</strong>
+          <em data-journey-status="first_answer">Pending</em>
+        </button>
+      </nav>
 
-        <section class="setup-card" data-step-card="github">
-          <p class="setup-card__index">02 / GitHub</p>
-          <h2>Connect the GitHub App.</h2>
-          <p>Install Beacon on the repos this workspace should be allowed to index and query. After you click <strong>Install</strong> on GitHub, you should land back here automatically.</p>
-          <a class="button button--primary" href="/api/admin/github/start">Connect GitHub</a>
-          <p class="setup-card__status" data-github-status>Disconnected</p>
-          <details class="setup-card__details">
-            <summary>Stuck on GitHub after saving repos?</summary>
-            <p>In your GitHub App settings, set <strong>Setup URL</strong> to <code data-github-callback-url>/oauth/github/callback</code> and enable <strong>Redirect on update</strong>. Use the same host you opened here.</p>
-            <form class="github-complete-form" data-github-complete>
-              <label for="github-installation-id">Installation ID</label>
-              <input id="github-installation-id" name="installationId" placeholder="From github.com/settings/installations/12345" />
-              <button class="button button--quiet" type="submit">Finish setup</button>
-            </form>
-            <p class="setup-card__status" data-github-complete-status></p>
-          </details>
-        </section>
-
-        <section class="setup-card" data-step-card="repos">
-          <p class="setup-card__index">03 / Repos</p>
-          <h2>Choose pilot repos.</h2>
-          <p>Select from the repositories granted to your GitHub App install. Hold <kbd>Cmd</kbd> or <kbd>Ctrl</kbd> to pick multiple repos in the list below.</p>
-          <form class="repo-form" data-repo-form>
-            <div class="repo-picker" data-repo-picker>
-              <p class="admin-empty" data-repo-picker-status>Connect GitHub to load repositories.</p>
+      <div class="journey-stage">
+        <section id="journey-panel-slack" class="journey-panel is-active" data-step-card="slack" data-journey-panel="slack" role="tabpanel" aria-labelledby="journey-card-slack">
+          <div class="journey-panel__header">
+            <p class="setup-card__index">01 / Slack</p>
+            <div>
+              <h2>Connect the workspace.</h2>
+              <p>Connect the Slack workspace where your team will ask code questions and receive cited answers.</p>
             </div>
-            <div class="repo-picker__actions">
-              <button class="button button--quiet" type="button" data-repo-select-all>Select all</button>
-              <button class="button button--quiet" type="button" data-repo-clear-all>Clear</button>
-              <button class="button button--primary" type="submit" data-repo-submit disabled>Start indexing</button>
+          </div>
+          <div class="journey-action-grid">
+            <article class="journey-action-card">
+              <span>Status</span>
+              <strong data-slack-status>Disconnected</strong>
+              <p>After Slack is connected, Beacon can finish setup for this workspace and keep future answers scoped to the right team.</p>
+              <a class="button button--primary" href="/api/admin/slack/start">Connect Slack</a>
+            </article>
+            <aside class="journey-proof">
+              <span>What this unlocks</span>
+              <ul>
+                <li>Workspace-scoped tenant record</li>
+                <li>Slack bot access for answers</li>
+                <li>A setup session for this workspace</li>
+              </ul>
+            </aside>
+          </div>
+        </section>
+
+        <section id="journey-panel-github" class="journey-panel" data-step-card="github" data-journey-panel="github" role="tabpanel" aria-labelledby="journey-card-github" hidden>
+          <div class="journey-panel__header">
+            <p class="setup-card__index">02 / GitHub</p>
+            <div>
+              <h2>Connect GitHub App.</h2>
+              <p>Choose the GitHub account or organization that contains the repositories Beacon should be able to index.</p>
+            </div>
+          </div>
+          <div class="journey-action-grid">
+            <article class="journey-action-card">
+              <span>Status</span>
+              <strong data-github-status>Disconnected</strong>
+              <p>Beacon will only show repositories approved through this installation, so the next step starts from the right source list.</p>
+              <a class="button button--primary" href="/api/admin/github/start">Connect GitHub</a>
+            </article>
+            <aside class="journey-proof journey-proof--callback">
+              <span>Setup URL</span>
+              <code data-github-callback-url>/oauth/github/callback</code>
+              <p>Enable Redirect on update. If GitHub returns here without finishing, paste the Installation ID.</p>
+              <form class="github-complete-form" data-github-complete>
+                <input id="github-installation-id" name="installationId" placeholder="Installation ID" />
+                <button class="button button--quiet button--small" type="submit">Finish</button>
+              </form>
+              <p class="setup-card__status" data-github-complete-status></p>
+            </aside>
+          </div>
+        </section>
+
+        <section id="journey-panel-repos" class="journey-panel journey-panel--repo" data-step-card="repos" data-journey-panel="repos" role="tabpanel" aria-labelledby="journey-card-repos" hidden>
+          <div class="journey-panel__header">
+            <p class="setup-card__index">03 / Repositories</p>
+            <div>
+              <h2>Choose repositories.</h2>
+              <p>Select the repositories your team wants available in Slack. Start with the repos people ask about most often.</p>
+            </div>
+            <p class="setup-card__status" data-repo-form-status></p>
+          </div>
+
+          <form class="repo-form repo-form--browser" data-repo-form>
+            <div class="repo-workbench repo-workbench--stage">
+              <div class="repo-workbench__main">
+                <div class="repo-browser" data-repo-picker>
+                  <div class="repo-browser__toolbar">
+                    <label class="repo-search" for="repo-search">
+                      <span>Search repos</span>
+                      <input id="repo-search" name="repoSearch" autocomplete="off" placeholder="Search repositories, owners, or topics..." data-repo-search />
+                    </label>
+                    <div class="repo-filter" role="group" aria-label="Repository filters">
+                      <button class="repo-filter__button is-active" type="button" data-repo-filter="all">All</button>
+                      <button class="repo-filter__button" type="button" data-repo-filter="selected">Selected</button>
+                      <button class="repo-filter__button" type="button" data-repo-filter="private">Private</button>
+                      <button class="repo-filter__button" type="button" data-repo-filter="public">Public</button>
+                    </div>
+                  </div>
+                  <div class="repo-browser__meta">
+                    <p data-repo-picker-status>Connect GitHub to load repositories.</p>
+                    <span><strong data-repo-visible-count>0</strong> visible</span>
+                    <span><strong data-repo-selected-count>0</strong> selected</span>
+                    <span><strong data-repo-total-scanned>0</strong> scanned</span>
+                  </div>
+                  <div class="repo-picker__actions">
+                    <button class="button button--quiet" type="button" data-repo-select-all>Select visible</button>
+                    <button class="button button--quiet" type="button" data-repo-clear-all>Clear unsaved</button>
+                    <button class="button button--quiet" type="button" data-repo-load-more disabled>Load more</button>
+                    <button class="button button--primary" type="submit" data-repo-submit disabled>Start indexing</button>
+                  </div>
+                  <div class="repo-list repo-list--table" data-repo-list aria-live="polite">
+                    <p class="admin-empty">Connect GitHub to load repositories.</p>
+                  </div>
+                </div>
+              </div>
+
+              <aside class="repo-selected-panel" aria-label="Selected repositories">
+                <div class="repo-selected-panel__hero">
+                  <span>Selected repositories</span>
+                  <strong data-repo-selected-total>0</strong>
+                  <em><span data-repo-selected-percent>0%</span> of loaded repositories</em>
+                </div>
+                <dl class="repo-selected-breakdown">
+                  <div>
+                    <dt>Private</dt>
+                    <dd data-repo-private-count>0</dd>
+                  </div>
+                  <div>
+                    <dt>Public</dt>
+                    <dd data-repo-public-count>0</dd>
+                  </div>
+                </dl>
+                <div class="repo-selected-list" data-repo-selected-list>
+                  <p class="admin-empty">No repos selected yet.</p>
+                </div>
+              </aside>
             </div>
           </form>
-          <p class="setup-card__status" data-repo-form-status></p>
         </section>
 
-        <section class="setup-card" data-step-card="indexing">
-          <p class="setup-card__index">04 / Indexing</p>
-          <div class="setup-card__heading">
-            <h2>Watch indexing complete.</h2>
-            <button class="button button--quiet button--small" type="button" data-refresh>Refresh</button>
+        <section id="journey-panel-indexing" class="journey-panel journey-panel--dark" data-step-card="indexing" data-journey-panel="indexing" role="tabpanel" aria-labelledby="journey-card-indexing" hidden>
+          <div class="journey-panel__header">
+            <p class="setup-card__index">04 / Indexing</p>
+            <div>
+              <h2>Watch indexing move in real time.</h2>
+              <p>Track indexing as repositories become searchable. When jobs are ready, Beacon can use those files in Slack answers.</p>
+            </div>
+            <div class="live-toolbar">
+              <span class="live-badge" data-live-state>Checking setup</span>
+              <button class="button button--quiet button--small" type="button" data-refresh>Refresh</button>
+            </div>
           </div>
-          <div class="repo-table" data-repo-table>
-            <p class="admin-empty">No indexing jobs yet.</p>
+          <div class="indexing-dashboard">
+            <div class="indexing-summary" aria-label="Indexing summary">
+              <div>
+                <span>Ready</span>
+                <strong data-index-ready>0</strong>
+              </div>
+              <div>
+                <span>Indexing</span>
+                <strong data-index-active>0</strong>
+              </div>
+              <div>
+                <span>Failed</span>
+                <strong data-index-failed>0</strong>
+              </div>
+              <div>
+                <span>Chunks</span>
+                <strong data-index-chunks>0</strong>
+              </div>
+            </div>
+            <div class="repo-table repo-table--status" data-repo-table>
+              <p class="admin-empty">No indexing jobs yet.</p>
+            </div>
           </div>
         </section>
 
-        <section class="setup-card" data-step-card="channel">
-          <p class="setup-card__index">05 / Channel</p>
-          <h2>Map the first Slack channel.</h2>
-          <p>Link one indexed repo to the channel where your team will ask questions. Use the channel ID from Slack (right-click channel → View channel details).</p>
-          <form class="channel-form" data-channel-form>
+        <section id="journey-panel-channel" class="journey-panel" data-step-card="channel" data-journey-panel="channel" role="tabpanel" aria-labelledby="journey-card-channel" hidden>
+          <div class="journey-panel__header">
+            <p class="setup-card__index">05 / Channel</p>
+            <div>
+              <h2>Map the first Slack channel.</h2>
+              <p>Pick the Slack channel where your team will try Beacon first, and connect it to the repo they ask about there.</p>
+            </div>
+          </div>
+          <form class="channel-form channel-form--stage" data-channel-form>
             <input name="repo" placeholder="owner/repo" />
             <input name="channelId" placeholder="Channel ID (C0123ABC)" />
-            <button class="button button--quiet" type="submit">Save channel</button>
+            <button class="button button--primary" type="submit">Save channel</button>
           </form>
           <p class="setup-card__status" data-channel-form-status></p>
         </section>
 
-        <section class="setup-card setup-card--dark" data-step-card="first_answer">
-          <p class="setup-card__index">06 / First answer</p>
-          <h2>Ask a real question in Slack.</h2>
-          <p>The setup is complete when Beacon responds with file and line citations from an onboarded repo.</p>
+        <section id="journey-panel-first_answer" class="journey-panel journey-panel--dark" data-step-card="first_answer" data-journey-panel="first_answer" role="tabpanel" aria-labelledby="journey-card-first_answer" hidden>
+          <div class="journey-panel__header">
+            <p class="setup-card__index">06 / First answer</p>
+            <div>
+              <h2>Ask a real question in Slack.</h2>
+              <p>Use a real question from your codebase. Beacon should answer with file and line citations from an indexed repository.</p>
+            </div>
+          </div>
           <code class="prompt-strip">@beacon where is request signature verification implemented?</code>
         </section>
       </div>
@@ -124,6 +273,6 @@
   </main>
 
   <script src="../../main.js?v=7"></script>
-  <script src="../admin.js?v=6"></script>
+  <script src="../admin.js?v=9"></script>
 </body>
 </html>
