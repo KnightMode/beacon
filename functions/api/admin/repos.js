@@ -178,6 +178,39 @@ async function dispatchIndex(context, job) {
     return null;
   }
 
+  if (env.PIPELINE_DISPATCH_REPO && env.PIPELINE_DISPATCH_TOKEN) {
+    const res = await fetch(`https://api.github.com/repos/${env.PIPELINE_DISPATCH_REPO}/dispatches`, {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${env.PIPELINE_DISPATCH_TOKEN}`,
+        accept: 'application/vnd.github+json',
+        'content-type': 'application/json',
+        'user-agent': 'beacon-admin-portal',
+        'x-github-api-version': '2022-11-28',
+      },
+      body: JSON.stringify({
+        event_type: env.PIPELINE_DISPATCH_EVENT || 'index-repo',
+        client_payload: {
+          repo: job.repoFullName,
+          repoId: job.repoId,
+          tenantId: job.tenantId,
+          installationId: job.installationId,
+          jobType: 'FULL_INDEX',
+        },
+      }),
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      console.error('GitHub Actions index dispatch failed', {
+        repo: job.repoFullName,
+        status: res.status,
+        body: text.slice(0, 200),
+      });
+      return 'Could not start indexing for this repository. Try again or contact support.';
+    }
+    return null;
+  }
+
   if (env.INDEXER_URL && env.INDEXER_SHARED_SECRET) {
     const res = await fetch(`${env.INDEXER_URL.replace(/\/$/, '')}/index`, {
       method: 'POST',
@@ -206,45 +239,8 @@ async function dispatchIndex(context, job) {
     return null;
   }
 
-  if (env.BEACON_ALLOW_LEGACY_PIPELINE !== '1') {
-    console.error('Hosted index dispatch is not configured.');
-    return 'Indexing is not configured. Contact an administrator.';
-  }
-
-  if (!env.PIPELINE_DISPATCH_REPO || !env.PIPELINE_DISPATCH_TOKEN) {
-    console.error('Legacy pipeline dispatch is not configured.');
-    return 'Indexing is not configured. Contact an administrator.';
-  }
-  const res = await fetch(`https://api.github.com/repos/${env.PIPELINE_DISPATCH_REPO}/dispatches`, {
-    method: 'POST',
-    headers: {
-      authorization: `Bearer ${env.PIPELINE_DISPATCH_TOKEN}`,
-      accept: 'application/vnd.github+json',
-      'content-type': 'application/json',
-      'user-agent': 'beacon-admin-portal',
-      'x-github-api-version': '2022-11-28',
-    },
-    body: JSON.stringify({
-      event_type: env.PIPELINE_DISPATCH_EVENT || 'index-repo',
-      client_payload: {
-        repo: job.repoFullName,
-        repoId: job.repoId,
-        tenantId: job.tenantId,
-        installationId: job.installationId,
-        jobType: 'FULL_INDEX',
-      },
-    }),
-  });
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    console.error('GitHub dispatch failed', {
-      repo: job.repoFullName,
-      status: res.status,
-      body: text.slice(0, 200),
-    });
-    return 'Could not start indexing for this repository. Try again or contact support.';
-  }
-  return null;
+  console.error('Index dispatch is not configured.');
+  return 'Indexing is not configured. Contact an administrator.';
 }
 
 async function markLocalIndexReady(env, repoId) {

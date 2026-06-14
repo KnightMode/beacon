@@ -1,8 +1,8 @@
 /**
  * Self-serve repo indexing from Slack. Tenant workspaces validate the repo
- * against their GitHub App installation grants and enqueue a hosted index job
- * with tenant + installation context. The repository_dispatch path below is
- * retained only for legacy non-tenant/dev usage.
+ * against their GitHub App installation grants and enqueue an index job with
+ * tenant + installation context. The github-webhook consumer dispatches that
+ * job to the GitHub Actions indexer runner.
  */
 
 import type { Env } from '../env.js';
@@ -165,7 +165,7 @@ export async function indexRepoAction(
     );
   }
 
-  // 3. Fire the legacy GitHub Actions indexing pipeline for non-tenant/dev usage.
+  // 3. Fire the GitHub Actions indexing pipeline directly for non-tenant/dev usage.
   const dispatchRepo = env.INDEX_DISPATCH_REPO || env.DEFAULT_PR_REPO;
   const dispatch = await fetch(`${GITHUB_API}/repos/${dispatchRepo}/dispatches`, {
     method: 'POST',
