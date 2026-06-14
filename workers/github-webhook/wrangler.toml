@@ -7,21 +7,18 @@ compatibility_flags = ["nodejs_compat"]
 [vars]
 # Comma-separated owner/name seed for the allowlist (also stored in D1).
 REPO_ALLOWLIST = ""
-# Base URL of the deployed hosted indexer HTTP service (Node container).
-INDEXER_URL = "https://your-indexer.example.com"
-# ---- Legacy pipeline dispatch (optional, non-tenant jobs only) ---------------
-# Tenant jobs always POST to INDEXER_URL so the indexer can mint GitHub App
-# installation tokens. repository_dispatch remains only for legacy/internal jobs
-# that are not tenant-scoped.
+# ---- GitHub Actions indexer dispatch ---------------------------------------
+# Tenant jobs are dispatched to this repo's Index Repository workflow with
+# tenantId + installationId. The workflow mints GitHub App installation tokens.
 PIPELINE_DISPATCH_REPO = "KnightMode/beacon"
 PIPELINE_DISPATCH_EVENT = "index-repo"
 
 # ---- Secrets (set via: wrangler secret put <NAME>) --------------------------
 # GITHUB_WEBHOOK_SECRET   - verify X-Hub-Signature-256 on incoming webhooks
 # ADMIN_TOKEN             - bearer token for POST /admin/index
-# INDEXER_SHARED_SECRET   - bearer token the queue consumer sends to the indexer
 # PIPELINE_DISPATCH_TOKEN - GitHub token allowed to create repository_dispatch
 #                           (set via: wrangler secret put PIPELINE_DISPATCH_TOKEN)
+# INDEXER_SHARED_SECRET   - optional only if INDEXER_URL hosted fallback is set
 
 # ---- D1 metadata database ---------------------------------------------------
 [[d1_databases]]

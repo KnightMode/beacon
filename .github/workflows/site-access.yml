@@ -142,14 +142,12 @@ jobs:
           PAGES_SLACK_CLIENT_ID: ${{ inputs.slack_client_id || vars.SLACK_CLIENT_ID }}
           PAGES_GITHUB_APP_SLUG: ${{ inputs.github_app_slug || vars.BEACON_GITHUB_APP_SLUG }}
           PAGES_GITHUB_APP_ID: ${{ inputs.github_app_id || vars.BEACON_GITHUB_APP_ID }}
-          PAGES_INDEXER_URL: ${{ vars.INDEXER_URL }}
           PAGES_PIPELINE_DISPATCH_REPO: ${{ inputs.pipeline_dispatch_repo || vars.PIPELINE_DISPATCH_REPO }}
           PAGES_PIPELINE_DISPATCH_EVENT: ${{ inputs.pipeline_dispatch_event || vars.PIPELINE_DISPATCH_EVENT }}
           PAGES_ADMIN_SESSION_SECRET: ${{ secrets.ADMIN_SESSION_SECRET }}
           PAGES_SLACK_CLIENT_SECRET: ${{ secrets.SLACK_CLIENT_SECRET }}
           PAGES_SLACK_TOKEN_ENCRYPTION_SECRET: ${{ secrets.SLACK_TOKEN_ENCRYPTION_SECRET }}
           PAGES_GITHUB_APP_PRIVATE_KEY: ${{ secrets.BEACON_GITHUB_APP_PRIVATE_KEY }}
-          PAGES_INDEXER_SHARED_SECRET: ${{ secrets.INDEXER_SHARED_SECRET }}
           PAGES_PIPELINE_DISPATCH_TOKEN: ${{ secrets.PIPELINE_DISPATCH_TOKEN || secrets.INDEXER_GITHUB_PAT }}
       - name: Deploy Pages with Access vars
         run: npx wrangler pages deploy site --project-name="${ACCESS_PAGES_PROJECT_NAME}" --branch=main
