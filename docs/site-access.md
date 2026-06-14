@@ -42,8 +42,8 @@ Cloudflare credentials locally:
 
 1. Open GitHub Actions.
 2. Run `Configure site Access`.
-3. Keep `site_hostname` as `beacon-90k.pages.dev`, unless you have attached a
-   custom domain to the Pages project.
+3. Keep `site_hostname` as `askbeacon.dev`, unless you are protecting a
+   different hostname on the Pages project.
 4. Keep `protected_paths` as
    `/admin*,/api/admin*,/oauth/slack/callback*,/oauth/github/callback*`.
 5. Keep `pages_project_name` as `beacon` and `pages_environment` as `production`,
@@ -68,7 +68,7 @@ Example values:
 ```text
 allowed_emails: differentialcircuit@gmail.com
 allowed_domains: example.com
-site_hostname: beacon-90k.pages.dev
+site_hostname: askbeacon.dev
 protected_paths: /admin*,/api/admin*,/oauth/slack/callback*,/oauth/github/callback*
 pages_project_name: beacon
 pages_environment: production
@@ -92,7 +92,7 @@ Access permissions:
 CLOUDFLARE_ACCOUNT_ID=<account-id> \
 CLOUDFLARE_API_TOKEN=<api-token> \
 ACCESS_ALLOWED_EMAILS=differentialcircuit@gmail.com \
-ACCESS_SITE_HOSTNAME=beacon-90k.pages.dev \
+ACCESS_SITE_HOSTNAME=askbeacon.dev \
 ACCESS_PROTECTED_PATHS='/admin*,/api/admin*,/oauth/slack/callback*,/oauth/github/callback*' \
 ACCESS_PAGES_PROJECT_NAME=beacon \
 ACCESS_PAGES_ENVIRONMENT=production \
@@ -195,7 +195,7 @@ Local equivalent:
 ```bash
 CLOUDFLARE_ACCOUNT_ID=<account-id> \
 CLOUDFLARE_API_TOKEN=<api-token> \
-ACCESS_SITE_HOSTNAME=beacon-90k.pages.dev \
+ACCESS_SITE_HOSTNAME=askbeacon.dev \
 ACCESS_PROTECTED_PATHS='/admin*,/api/admin*,/oauth/slack/callback*,/oauth/github/callback*' \
 ACCESS_PAGES_PROJECT_NAME=beacon \
 ACCESS_PAGES_ENVIRONMENT=production \
