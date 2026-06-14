@@ -1,11 +1,8 @@
 /**
- * Minimal GitHub REST client (fetch-based) for the single indexing identity.
- * Uses a fine-grained PAT by default. GitHub App auth is stubbed: if app
- * credentials are provided we still fall back to the PAT for the prototype.
+ * Minimal GitHub REST client (fetch-based) for indexing.
+ * Reads repo contents with a GitHub App installation token (preferred) or PAT.
  */
 
-import type { IndexerConfig } from './config.js';
-import { log } from './logger.js';
 import { gunzipSync } from 'node:zlib';
 
 const API = 'https://api.github.com';
@@ -20,12 +17,8 @@ export interface TreeEntry {
 export class GitHubClient {
   private readonly token: string;
 
-  constructor(config: IndexerConfig) {
-    if (config.github.appId) {
-      // GitHub App support is stubbed for the prototype.
-      log.warn('GitHub App credentials present but App auth is stubbed; using PAT');
-    }
-    this.token = config.github.pat;
+  constructor(token: string) {
+    this.token = token;
   }
 
   private headers(): Record<string, string> {
@@ -54,11 +47,6 @@ export class GitHubClient {
       }
       if (attempt < attempts) {
         const delay = 500 * attempt * attempt;
-        log.warn('GitHub request failed; retrying', {
-          url,
-          attempt,
-          error: lastErr?.message,
-        });
         await new Promise((r) => setTimeout(r, delay));
       }
     }
@@ -106,11 +94,6 @@ export class GitHubClient {
       tree: TreeEntry[];
       truncated: boolean;
     };
-    if (body.truncated) {
-      log.warn('git tree truncated; some files will be skipped', {
-        repo: `${owner}/${name}`,
-      });
-    }
     return body.tree.filter((e) => e.type === 'blob');
   }
 
@@ -137,7 +120,7 @@ export class GitHubClient {
       }>;
     };
     const files = body.files ?? [];
-    if (files.length >= 300) return null; // compare API caps at 300 files
+    if (files.length >= 300) return null;
     const changed: string[] = [];
     const removed: string[] = [];
     for (const f of files) {
@@ -210,8 +193,6 @@ function parseTarToPathMap(tar: Buffer): Map<string, string> {
 function parseTarEntries(tar: Buffer): Map<string, Buffer> {
   const files = new Map<string, Buffer>();
   let offset = 0;
-  // Paths longer than the 100-byte ustar name field arrive in a pax extended
-  // header ('x') or GNU longname ('L') entry that precedes the file entry.
   let pendingPath: string | null = null;
   while (offset + 512 <= tar.length) {
     const header = tar.subarray(offset, offset + 512);
@@ -228,12 +209,10 @@ function parseTarEntries(tar: Buffer): Map<string, Buffer> {
     offset += Math.ceil(size / 512) * 512;
 
     if (type === 120) {
-      // 'x' pax extended header: records are "<len> <key>=<value>\n".
       pendingPath = parsePaxPath(data) ?? pendingPath;
       continue;
     }
     if (type === 76) {
-      // 'L' GNU longname: data is the NUL-terminated path of the next entry.
       pendingPath = data.toString('utf-8').replace(/\0+$/, '') || pendingPath;
       continue;
     }
@@ -277,6 +256,9 @@ function readTarString(buf: Buffer, start: number, len: number): string {
 async function assertOk(res: Response, ctx: string): Promise<void> {
   if (!res.ok) {
     const text = await res.text().catch(() => '');
-    throw new Error(`GitHub ${ctx} failed: ${res.status} ${text.slice(0, 300)}`);
+    const hint = res.status === 404
+      ? ' (repo missing or GitHub App installation lacks access)'
+      : '';
+    throw new Error(`GitHub ${ctx} failed: ${res.status} ${text.slice(0, 300)}${hint}`);
   }
 }

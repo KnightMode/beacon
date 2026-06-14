@@ -23,6 +23,7 @@ import {
   purgeRepoIndex,
   isAllowlisted,
   repoIdFor,
+  lookupInstallationIdForRepo,
 } from './db.js';
 import {
   enqueueFullIndex,
@@ -52,6 +53,7 @@ interface InstallationPayload {
 }
 
 interface PushPayload {
+  installation?: { id?: number };
   ref?: string;
   after?: string;
   repository: GithubRepoLite & { default_branch?: string };
@@ -154,7 +156,7 @@ async function handleInstallation(
       await queuePendingInstallationRepo(env, installationId, repoId, r.full_name);
       await addToAllowlist(env, repoId, r.full_name, 'installation');
     }
-    await enqueueFullIndex(env, repoId, r.full_name);
+    await enqueueFullIndex(env, repoId, r.full_name, undefined, installationId);
     enqueued.push(r.full_name);
   }
   return json({ ok: true, action: payload.action, enqueued, revoked, purged });
@@ -206,6 +208,7 @@ async function handlePush(env: Env, payload: PushPayload): Promise<Response> {
     [...changed],
     [...removed],
     payload.after,
+    payload.installation?.id ?? await lookupInstallationIdForRepo(env, repoId),
   );
 
   return json({

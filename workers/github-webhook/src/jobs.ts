@@ -17,12 +17,14 @@ export async function enqueueFullIndex(
   repoId: string,
   repoFullName: string,
   commitSha?: string,
+  installationId?: number,
 ): Promise<void> {
   const job: FullIndexJob = {
     jobType: JOB_TYPES.FULL_INDEX,
     repoId,
     repoFullName,
     commitSha,
+    installationId,
     enqueuedAt: new Date().toISOString(),
   };
   await env.INDEX_QUEUE.send(job);
@@ -36,6 +38,7 @@ export async function enqueueIncrementalIndex(
   changedFiles: string[],
   removedFiles: string[],
   commitSha?: string,
+  installationId?: number,
 ): Promise<void> {
   const job: IncrementalIndexJob = {
     jobType: JOB_TYPES.INCREMENTAL_INDEX,
@@ -44,6 +47,7 @@ export async function enqueueIncrementalIndex(
     commitSha,
     changedFiles,
     removedFiles,
+    installationId,
     enqueuedAt: new Date().toISOString(),
   };
   await env.INDEX_QUEUE.send(job);

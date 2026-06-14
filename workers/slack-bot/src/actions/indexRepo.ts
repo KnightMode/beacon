@@ -1,10 +1,14 @@
 /**
  * Self-serve repo onboarding from Slack: "index owner/repo" validates the repo
- * with the GitHub API, allowlists it in D1, and fires the index.yml GitHub
- * Actions workflow (repository_dispatch) that runs the indexer CLI. "index
- * status" reports per-repo indexing progress from repo_index_status.
+ * with the tenant GitHub App installation, allowlists it in D1, and fires the
+ * index.yml GitHub Actions workflow (repository_dispatch). "index status"
+ * reports per-repo indexing progress from repo_index_status.
  */
 
+import {
+  createInstallationAccessToken,
+  getInstallationIdForTenant,
+} from '@scintel/shared';
 import type { Env } from '../env.js';
 import {
   getTenantIdForSlackTeam,
@@ -30,43 +34,49 @@ export async function indexRepoAction(
   repoRef: string,
   teamId?: string,
 ): Promise<string> {
-  if (!env.GITHUB_PAT) {
-    return ':warning: `GITHUB_PAT` is not configured on the bot, so I cannot index repos.';
-  }
   const dispatchRepo = env.INDEX_DISPATCH_REPO || env.DEFAULT_PR_REPO;
-  if (!dispatchRepo) {
-    return ':warning: `INDEX_DISPATCH_REPO` is not configured, so I cannot trigger the indexing pipeline.';
-  }
-
-  // 1. Validate the repo and get its canonical name + default branch.
-  const res = await fetch(`${GITHUB_API}/repos/${repoRef}`, {
-    headers: githubHeaders(env),
-  });
-  if (res.status === 404 || res.status === 403) {
+  const dispatchToken = env.PIPELINE_DISPATCH_TOKEN;
+  if (!dispatchRepo || !dispatchToken) {
     return (
-      `:no_entry: I can't access \`${repoRef}\` on GitHub. Either it doesn't ` +
-      'exist, or my GitHub token has not been granted access to it — add the ' +
-      'repo to the fine-grained PAT (Contents: Read) and to the ' +
-      '`INDEXER_GITHUB_PAT` Actions secret, then try again.'
+      ':warning: The indexing pipeline is not configured (`INDEX_DISPATCH_REPO` / ' +
+      '`PIPELINE_DISPATCH_TOKEN`). Contact an administrator.'
     );
   }
-  if (!res.ok) {
-    return `:warning: GitHub returned ${res.status} while checking \`${repoRef}\`.`;
-  }
-  const repo = (await res.json()) as GithubRepo;
-  const repoId = repo.full_name.toLowerCase();
-  const [owner, name] = repo.full_name.split('/');
 
   const tenantId = await getTenantIdForSlackTeam(env, teamId);
   if (teamId && !tenantId) {
     return ONBOARDING_REQUIRED;
   }
-  if (tenantId && !(await tenantHasGithubInstallationRepo(env, tenantId, repoId))) {
-    return (
-      `:no_entry: \`${repo.full_name}\` is not available on this workspace's ` +
-      'GitHub App installation. Add it in the admin portal first, then try indexing again.'
-    );
+
+  let repo: GithubRepo;
+  let installationId: number | undefined;
+
+  try {
+    if (tenantId) {
+      installationId = (await getInstallationIdForTenant(env.DB, tenantId)) ?? undefined;
+      if (!installationId) {
+        return ':information_source: Connect GitHub in the admin portal before indexing repos.';
+      }
+      if (!(await tenantHasGithubInstallationRepo(env, tenantId, repoRef.toLowerCase()))) {
+        return (
+          `:no_entry: \`${repoRef}\` is not available on this workspace's ` +
+          'GitHub App installation. Add it in the admin portal first, then try indexing again.'
+        );
+      }
+      repo = await fetchRepoWithInstallation(env, installationId, repoRef);
+    } else {
+      if (!env.GITHUB_PAT) {
+        return ':warning: `GITHUB_PAT` is not configured on the bot, so I cannot index repos.';
+      }
+      repo = await fetchRepoWithPat(env, repoRef);
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return `:no_entry: I can't access \`${repoRef}\` on GitHub (${message}).`;
   }
+
+  const repoId = repo.full_name.toLowerCase();
+  const [owner, name] = repo.full_name.split('/');
 
   // 2. Upsert the repo row, allowlist it, and mark indexing PENDING.
   await env.DB.prepare(
@@ -117,10 +127,14 @@ export async function indexRepoAction(
   // 3. Fire the GitHub Actions indexing pipeline.
   const dispatch = await fetch(`${GITHUB_API}/repos/${dispatchRepo}/dispatches`, {
     method: 'POST',
-    headers: githubHeaders(env),
+    headers: dispatchHeaders(dispatchToken),
     body: JSON.stringify({
       event_type: DISPATCH_EVENT,
-      client_payload: { repo: repo.full_name, jobType: 'FULL_INDEX' },
+      client_payload: {
+        repo: repo.full_name,
+        jobType: 'FULL_INDEX',
+        installationId: installationId ?? null,
+      },
     }),
   });
   if (!dispatch.ok) {
@@ -199,6 +213,45 @@ export async function indexStatusAction(
   return lines.join('\n');
 }
 
+async function fetchRepoWithInstallation(
+  env: Env,
+  installationId: number,
+  repoRef: string,
+): Promise<GithubRepo> {
+  const appId = env.GITHUB_APP_ID?.trim();
+  const privateKey = env.GITHUB_APP_PRIVATE_KEY?.trim();
+  if (!appId || !privateKey) {
+    throw new Error('GITHUB_APP_ID and GITHUB_APP_PRIVATE_KEY are required for tenant indexing.');
+  }
+
+  const token = await createInstallationAccessToken({ appId, privateKey }, installationId);
+  const res = await fetch(`${GITHUB_API}/repos/${repoRef}`, {
+    headers: githubApiHeaders(token),
+  });
+  if (res.status === 404 || res.status === 403) {
+    throw new Error(
+      `cannot access ${repoRef} via GitHub App installation ${installationId}`,
+    );
+  }
+  if (!res.ok) {
+    throw new Error(`GitHub returned ${res.status} while checking ${repoRef}.`);
+  }
+  return (await res.json()) as GithubRepo;
+}
+
+async function fetchRepoWithPat(env: Env, repoRef: string): Promise<GithubRepo> {
+  const res = await fetch(`${GITHUB_API}/repos/${repoRef}`, {
+    headers: githubApiHeaders(env.GITHUB_PAT!),
+  });
+  if (res.status === 404 || res.status === 403) {
+    throw new Error(`cannot access ${repoRef} with configured GITHUB_PAT`);
+  }
+  if (!res.ok) {
+    throw new Error(`GitHub returned ${res.status} while checking ${repoRef}.`);
+  }
+  return (await res.json()) as GithubRepo;
+}
+
 async function markStep(
   env: Env,
   tenantId: string,
@@ -216,11 +269,20 @@ async function markStep(
     .run();
 }
 
-function githubHeaders(env: Env): Record<string, string> {
+function dispatchHeaders(token: string): Record<string, string> {
   return {
-    authorization: `Bearer ${env.GITHUB_PAT}`,
+    authorization: `Bearer ${token}`,
     accept: 'application/vnd.github+json',
     'content-type': 'application/json',
+    'user-agent': 'scintel-slack-bot',
+    'x-github-api-version': '2022-11-28',
+  };
+}
+
+function githubApiHeaders(token: string): Record<string, string> {
+  return {
+    authorization: `Bearer ${token}`,
+    accept: 'application/vnd.github+json',
     'user-agent': 'scintel-slack-bot',
     'x-github-api-version': '2022-11-28',
   };

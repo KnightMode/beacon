@@ -8,7 +8,7 @@
  */
 
 import type { Env } from './env.js';
-import { upsertRepo, addToAllowlist } from './db.js';
+import { upsertRepo, addToAllowlist, lookupInstallationIdForRepo } from './db.js';
 import { enqueueFullIndex } from './jobs.js';
 import { json } from './webhook.js';
 import { timingSafeEqual } from './signature.js';
@@ -37,7 +37,8 @@ export async function handleAdminIndex(
 
   const repoId = await upsertRepo(env, { fullName: repoFullName });
   await addToAllowlist(env, repoId, repoFullName, 'admin');
-  await enqueueFullIndex(env, repoId, repoFullName, body.commitSha);
+  const installationId = await lookupInstallationIdForRepo(env, repoId);
+  await enqueueFullIndex(env, repoId, repoFullName, body.commitSha, installationId);
 
   return json({ ok: true, enqueued: repoFullName, repoId });
 }

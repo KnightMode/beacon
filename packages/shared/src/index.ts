@@ -7,3 +7,6 @@ export * from './utils/language.js';
 export * from './utils/fileFilter.js';
 export * from './utils/secrets.js';
 export * from './utils/embeddingText.js';
+export * from './github/appAuth.js';
+export * from './github/installationLookup.js';
+export * from './github/dispatchPayload.js';

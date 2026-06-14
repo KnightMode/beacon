@@ -20,6 +20,8 @@ export interface BaseIndexJob {
   jobType: JobType;
   repoId: string;
   repoFullName: string;
+  /** GitHub App installation that can read this repo. Required for indexing. */
+  installationId?: number;
   /** Commit sha to index against; defaults to repo default branch HEAD. */
   commitSha?: string;
   enqueuedAt: string;

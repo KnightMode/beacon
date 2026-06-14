@@ -88,19 +88,30 @@ jobs:
 
           put_secret SLACK_TOKEN_ENCRYPTION_SECRET "$SLACK_TOKEN_ENCRYPTION_SECRET"
           put_secret GITHUB_PAT "$GITHUB_PAT"
+          put_secret GITHUB_APP_PRIVATE_KEY "$GITHUB_APP_PRIVATE_KEY"
+          put_secret PIPELINE_DISPATCH_TOKEN "$PIPELINE_DISPATCH_TOKEN"
           put_secret EVAL_TOKEN "$EVAL_TOKEN"
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           SLACK_TOKEN_ENCRYPTION_SECRET: ${{ secrets.SLACK_TOKEN_ENCRYPTION_SECRET }}
           GITHUB_PAT: ${{ secrets.INDEXER_GITHUB_PAT }}
+          GITHUB_APP_PRIVATE_KEY: ${{ secrets.BEACON_GITHUB_APP_PRIVATE_KEY }}
+          PIPELINE_DISPATCH_TOKEN: ${{ secrets.PIPELINE_DISPATCH_TOKEN || secrets.INDEXER_GITHUB_PAT }}
           EVAL_TOKEN: ${{ secrets.EVAL_TOKEN }}
       - name: Deploy
         working-directory: workers/slack-bot
-        run: npx wrangler deploy
+        run: |
+          set -euo pipefail
+          args=(deploy)
+          if [ -n "${GITHUB_APP_ID:-}" ]; then
+            args+=(--var "GITHUB_APP_ID:${GITHUB_APP_ID}")
+          fi
+          npx wrangler "${args[@]}"
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          GITHUB_APP_ID: ${{ vars.BEACON_GITHUB_APP_ID }}
 
   deploy-github-webhook:
     name: Deploy github-webhook

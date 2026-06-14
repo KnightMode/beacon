@@ -23,6 +23,7 @@ import {
 
 import type { IndexerConfig } from '../config.js';
 import { GitHubClient, type TreeEntry } from '../github.js';
+import { resolveGithubAccessToken } from '../resolveGithubToken.js';
 import { D1Client } from '../cloudflare/d1.js';
 import { VectorizeClient, type UpsertVector } from '../cloudflare/vectorize.js';
 import { WorkersAIClient } from '../cloudflare/workersai.js';
@@ -68,7 +69,7 @@ export async function indexRepo(
   config: IndexerConfig,
   job: IndexJob,
 ): Promise<IndexResult> {
-  const github = new GitHubClient(config);
+  const github = new GitHubClient(await resolveGithubAccessToken(config, job));
   const d1 = new D1Client(config);
   const vectorize = new VectorizeClient(config);
   const ai = new WorkersAIClient(config);

@@ -33,6 +33,15 @@ export async function onRequestPost(context) {
         session.tenantId,
         repoInput.fullName,
       );
+      const installation = await context.env.DB.prepare(
+        `SELECT installation_id
+         FROM tenant_github_installations
+         WHERE tenant_id = ?1
+         ORDER BY updated_at DESC
+         LIMIT 1`,
+      )
+        .bind(session.tenantId)
+        .first();
       const repo = await upsertRepo(context.env, repoGrant);
       await context.env.DB.prepare(
         `INSERT INTO tenant_repos (tenant_id, repo_id, full_name, enabled, selected_by, updated_at)
@@ -48,7 +57,11 @@ export async function onRequestPost(context) {
 
       await markRepoIndexRequested(context.env, repo.repoId);
 
-      const dispatchError = await dispatchIndex(context.env, repo.fullName);
+      const dispatchError = await dispatchIndex(
+        context.env,
+        repo.fullName,
+        installation?.installation_id,
+      );
       if (dispatchError) dispatchErrors.push({ repo: repo.fullName, error: dispatchError });
       await audit(context.env, session.tenantId, session.userId, 'repo.selected', 'repo', repo.repoId, repo);
     }
@@ -156,7 +169,7 @@ function repoFromGrant(row) {
   };
 }
 
-async function dispatchIndex(env, repoFullName) {
+async function dispatchIndex(env, repoFullName, installationId) {
   if (!env.PIPELINE_DISPATCH_REPO || !env.PIPELINE_DISPATCH_TOKEN) {
     console.error('Pipeline dispatch is not configured.');
     return 'Indexing is not configured. Contact an administrator.';
@@ -172,7 +185,11 @@ async function dispatchIndex(env, repoFullName) {
     },
     body: JSON.stringify({
       event_type: env.PIPELINE_DISPATCH_EVENT || 'index-repo',
-      client_payload: { repo: repoFullName, jobType: 'FULL_INDEX' },
+      client_payload: {
+        repo: repoFullName,
+        jobType: 'FULL_INDEX',
+        installationId: installationId ?? null,
+      },
     }),
   });
   if (!res.ok) {

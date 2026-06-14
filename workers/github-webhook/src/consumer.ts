@@ -5,6 +5,7 @@
  */
 
 import type { IndexJob } from '@scintel/shared';
+import { buildIndexDispatchPayload } from '@scintel/shared';
 import type { Env } from './env.js';
 
 export async function handleIndexBatch(
@@ -62,14 +63,7 @@ async function dispatchToPipeline(env: Env, job: IndexJob): Promise<void> {
     },
     body: JSON.stringify({
       event_type: env.PIPELINE_DISPATCH_EVENT || 'index-repo',
-      client_payload: {
-        repo: job.repoFullName,
-        jobType: job.jobType,
-        commitSha: job.commitSha ?? null,
-        changedFiles: (job as { changedFiles?: string[] }).changedFiles ?? [],
-        removedFiles: (job as { removedFiles?: string[] }).removedFiles ?? [],
-        force: (job as { force?: boolean }).force ?? false,
-      },
+      client_payload: buildIndexDispatchPayload(job),
     }),
   });
   // GitHub returns 204 No Content on success.

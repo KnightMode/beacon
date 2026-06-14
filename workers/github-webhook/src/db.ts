@@ -3,7 +3,7 @@
  * and tracking index-status lifecycle.
  */
 
-import { INDEX_STATUS, type IndexStatus } from '@scintel/shared';
+import { INDEX_STATUS, lookupInstallationIdForRepo as lookupInstallationIdForRepoShared, type IndexStatus } from '@scintel/shared';
 import type { Env } from './env.js';
 
 export interface RepoUpsert {
@@ -15,6 +15,16 @@ export interface RepoUpsert {
 
 export function repoIdFor(fullName: string): string {
   return fullName.toLowerCase();
+}
+
+export async function lookupInstallationIdForRepo(
+  env: Env,
+  repoId: string,
+  hint?: number,
+): Promise<number | undefined> {
+  if (hint) return hint;
+  const found = await lookupInstallationIdForRepoShared(env.DB, repoId);
+  return found ?? undefined;
 }
 
 export async function upsertRepo(env: Env, repo: RepoUpsert): Promise<string> {

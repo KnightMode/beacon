@@ -56,8 +56,10 @@ describe('Slack tenant boundaries', () => {
       ),
     );
     const env = {
-      GITHUB_PAT: 'github_pat_test',
+      PIPELINE_DISPATCH_TOKEN: 'dispatch-token',
       INDEX_DISPATCH_REPO: 'KnightMode/beacon',
+      GITHUB_APP_ID: '123',
+      GITHUB_APP_PRIVATE_KEY: '-----BEGIN PRIVATE KEY-----\nMIIB\n-----END PRIVATE KEY-----',
       DB: {
         prepare(sql: string) {
           queries.push(sql);
@@ -66,9 +68,14 @@ describe('Slack tenant boundaries', () => {
               bind: () => ({ first: async () => ({ id: 'tenant_1' }) }),
             };
           }
-          if (sql.includes('FROM tenant_github_installations')) {
+          if (sql.includes('SELECT 1 AS ok') && sql.includes('tenant_github_installations')) {
             return {
               bind: () => ({ first: async () => null }),
+            };
+          }
+          if (sql.includes('FROM tenant_github_installations')) {
+            return {
+              bind: () => ({ first: async () => ({ installation_id: 12345 }) }),
             };
           }
           throw new Error(`unauthorized repo should not be written: ${sql}`);

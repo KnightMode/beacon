@@ -16,10 +16,11 @@ export interface IndexerConfig {
   indexerSharedSecret: string;
 
   github: {
-    pat: string;
+    pat?: string;
+    installationToken?: string;
     appId?: string;
     appPrivateKey?: string;
-    appInstallationId?: string;
+    installationId?: number;
   };
 
   cloudflare: {
@@ -49,16 +50,27 @@ function optional(name: string): string | undefined {
   return value && value.trim() !== '' ? value.trim() : undefined;
 }
 
+function optionalInstallationId(name: string): number | undefined {
+  const raw = optional(name);
+  if (!raw) return undefined;
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    throw new Error(`${name} must be a positive integer when set.`);
+  }
+  return parsed;
+}
+
 /** Loads + validates config. Throws on missing required values. */
 export function loadConfig(): IndexerConfig {
   return {
     port: Number(process.env.PORT ?? 8787),
     indexerSharedSecret: required('INDEXER_SHARED_SECRET'),
     github: {
-      pat: required('GITHUB_PAT'),
+      pat: optional('GITHUB_PAT'),
+      installationToken: optional('GITHUB_INSTALLATION_TOKEN'),
       appId: optional('GITHUB_APP_ID'),
       appPrivateKey: optional('GITHUB_APP_PRIVATE_KEY'),
-      appInstallationId: optional('GITHUB_APP_INSTALLATION_ID'),
+      installationId: optionalInstallationId('GITHUB_APP_INSTALLATION_ID'),
     },
     cloudflare: {
       accountId: required('CLOUDFLARE_ACCOUNT_ID'),

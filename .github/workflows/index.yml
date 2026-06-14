@@ -32,6 +32,10 @@ on:
         description: 'optional commit sha'
         required: false
         default: ''
+      installation_id:
+        description: 'GitHub App installation id that can read the repo'
+        required: false
+        default: ''
 
 # Serialize indexings of the same repo so two runs never overlap.
 concurrency:
@@ -61,14 +65,17 @@ jobs:
           PAYLOAD_FILES_JSON: ${{ toJSON(github.event.client_payload.changedFiles) }}
           PAYLOAD_REMOVED_JSON: ${{ toJSON(github.event.client_payload.removedFiles) }}
           PAYLOAD_FORCE: ${{ github.event.client_payload.force }}
+          PAYLOAD_INSTALLATION_ID: ${{ github.event.client_payload.installationId }}
           INPUT_REPO: ${{ github.event.inputs.repo }}
           INPUT_JOBTYPE: ${{ github.event.inputs.job_type }}
           INPUT_SHA: ${{ github.event.inputs.commit_sha }}
           INPUT_FILES: ${{ github.event.inputs.files }}
           INPUT_REMOVED: ${{ github.event.inputs.removed_files }}
           INPUT_FORCE: ${{ github.event.inputs.force }}
-          # indexer runtime config:
-          GITHUB_PAT: ${{ secrets.INDEXER_GITHUB_PAT }}
+          INPUT_INSTALLATION_ID: ${{ github.event.inputs.installation_id }}
+          # Indexer reads repo contents via the tenant GitHub App installation.
+          GITHUB_APP_ID: ${{ secrets.BEACON_GITHUB_APP_ID || vars.BEACON_GITHUB_APP_ID }}
+          GITHUB_APP_PRIVATE_KEY: ${{ secrets.BEACON_GITHUB_APP_PRIVATE_KEY }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_D1_DATABASE_ID: '27722a79-10d9-4bfc-aa53-1d65a80c8f79'

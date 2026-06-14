@@ -25,10 +25,20 @@ Usage:
                                                          also delete removed files
   npm run index -- --help                                Show this help
 
-Environment (see .env.example): GITHUB_PAT, CLOUDFLARE_ACCOUNT_ID,
-CLOUDFLARE_API_TOKEN, CLOUDFLARE_D1_DATABASE_ID, CLOUDFLARE_VECTORIZE_INDEX,
-INDEXER_SHARED_SECRET, EMBEDDING_MODEL, LLM_MODEL.
+Environment (see .env.example): GITHUB_APP_ID, GITHUB_APP_PRIVATE_KEY,
+GITHUB_APP_INSTALLATION_ID (or installationId in dispatch payload),
+CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_API_TOKEN, CLOUDFLARE_D1_DATABASE_ID,
+CLOUDFLARE_VECTORIZE_INDEX, INDEXER_SHARED_SECRET, EMBEDDING_MODEL, LLM_MODEL.
+Legacy fallback: GITHUB_PAT.
 `;
+
+function parseInstallationId(raw: string | undefined): number | undefined {
+  const trimmed = raw?.trim();
+  if (!trimmed) return undefined;
+  const parsed = Number(trimmed);
+  if (!Number.isFinite(parsed) || parsed <= 0) return undefined;
+  return parsed;
+}
 
 async function run(): Promise<void> {
   const argv = process.argv.slice(2);
@@ -75,6 +85,7 @@ async function run(): Promise<void> {
   const config = loadConfig();
 
   const repoId = repoIdFor(repoFullName);
+  const installationId = parseInstallationId(process.env.GITHUB_APP_INSTALLATION_ID);
   const job: IndexJob =
     mode !== 'full'
       ? {
@@ -84,6 +95,7 @@ async function run(): Promise<void> {
           commitSha,
           changedFiles: incrementalFiles,
           removedFiles,
+          installationId,
           enqueuedAt: new Date().toISOString(),
         }
       : {
@@ -92,6 +104,7 @@ async function run(): Promise<void> {
           repoFullName,
           commitSha,
           force,
+          installationId,
           enqueuedAt: new Date().toISOString(),
         };
 

@@ -27,12 +27,26 @@ npx wrangler d1 execute scintel --remote --file=packages/shared/migrations/0004_
 npx wrangler d1 execute scintel --remote --file=packages/shared/migrations/0005_tenant_ci_triage_runs.sql
 ```
 
-## 2. GitHub PAT
+## 2. GitHub App + pipeline token
 
-Create a fine-grained PAT with **Contents: Read** on every repo you want
-indexed (plus **Pull requests: Write** if you use PR creation).
+Customers grant repo access by installing the **Beacon GitHub App** and
+selecting repos. Indexing reads code with short-lived **installation access
+tokens** minted from the App — no per-customer PAT and no repo allowlist on
+your personal token.
 
-> The PAT's repo list is the hard boundary of what can be indexed.
+You still need:
+
+- **GitHub App** (`GITHUB_APP_ID`, `GITHUB_APP_PRIVATE_KEY`) — mints
+  installation tokens for indexing and powers the admin repo picker.
+- **Pipeline dispatch token** (`PIPELINE_DISPATCH_TOKEN`) — fires
+  `repository_dispatch` on the repo that hosts `.github/workflows/index.yml`
+  (usually this repo). Can be a fine-grained PAT with access to that repo only.
+
+Optional legacy fallback:
+
+- **`INDEXER_GITHUB_PAT`** — only used for non-tenant prototype indexing and
+  slack-bot PR create/review actions (`GITHUB_PAT` on the worker). Tenant
+  onboarding does not require adding each customer repo to this PAT.
 
 ## 3. Slack app
 

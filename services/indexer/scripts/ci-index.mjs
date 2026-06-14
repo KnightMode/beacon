@@ -10,6 +10,7 @@
 import { spawnSync } from 'node:child_process';
 
 const REPO_RE = /^[A-Za-z0-9._\/-]+\/[A-Za-z0-9._-]+$/;
+const D1_API = 'https://api.cloudflare.com/client/v4';
 
 function fail(message) {
   process.stderr.write(`ci-index: ${message}\n`);
@@ -31,9 +32,6 @@ const sha = (process.env.PAYLOAD_SHA || process.env.INPUT_SHA || '').trim();
 
 function fileList(payloadJson, inputText) {
   let files = [];
-  // repository_dispatch path: a JSON array. For workflow_dispatch this field is
-  // toJSON(undefined|null) === "null" (a non-empty string), so treat "null"/""
-  // /non-arrays as absent and fall back to the workflow_dispatch input text.
   const pj = (payloadJson || '').trim();
   if (pj !== '' && pj !== 'null') {
     try {
@@ -59,6 +57,8 @@ const force =
     .trim()
     .toLowerCase() === 'true';
 
+const installationId = await resolveInstallationId(repo);
+
 const args = ['tsx', 'src/cli.ts', repo];
 if (jobType === 'INCREMENTAL_INDEX' && (files.length || removed.length)) {
   args.push('--incremental', ...files);
@@ -71,15 +71,96 @@ if (sha) {
 }
 
 process.stdout.write(
-  `ci-index: repo=${repo} jobType=${jobType} files=${files.length} removed=${removed.length}` +
+  `ci-index: repo=${repo} jobType=${jobType} installationId=${installationId}` +
+    ` files=${files.length} removed=${removed.length}` +
     (sha ? ` commit=${sha}` : '') +
     '\n',
 );
+
+const childEnv = {
+  ...process.env,
+  GITHUB_APP_INSTALLATION_ID: String(installationId),
+};
 
 const child = spawnSync('npx', args, {
   stdio: 'inherit',
   cwd: process.cwd(),
   shell: false,
+  env: childEnv,
 });
 
 process.exit(child.status ?? 1);
+
+function parseInstallationId(raw) {
+  const trimmed = (raw || '').trim();
+  if (!trimmed || trimmed === 'null') return null;
+  const parsed = Number(trimmed);
+  if (!Number.isFinite(parsed) || parsed <= 0) return null;
+  return parsed;
+}
+
+async function resolveInstallationId(repoFullName) {
+  const fromPayload = parseInstallationId(process.env.PAYLOAD_INSTALLATION_ID);
+  if (fromPayload) return fromPayload;
+
+  const fromInput = parseInstallationId(process.env.INPUT_INSTALLATION_ID);
+  if (fromInput) return fromInput;
+
+  const fromEnv = parseInstallationId(process.env.GITHUB_APP_INSTALLATION_ID);
+  if (fromEnv) return fromEnv;
+
+  const lookedUp = await lookupInstallationIdFromD1(repoFullName.toLowerCase());
+  if (lookedUp) return lookedUp;
+
+  fail(
+    `missing installationId for ${repoFullName}. Connect the repo via the GitHub App ` +
+      'and include installationId in the index dispatch payload.',
+  );
+}
+
+async function lookupInstallationIdFromD1(repoId) {
+  const accountId = process.env.CLOUDFLARE_ACCOUNT_ID?.trim();
+  const apiToken = process.env.CLOUDFLARE_API_TOKEN?.trim();
+  const databaseId = process.env.CLOUDFLARE_D1_DATABASE_ID?.trim();
+  if (!accountId || !apiToken || !databaseId) return null;
+
+  const pending = await d1Query(accountId, apiToken, databaseId, {
+    sql: `SELECT installation_id
+          FROM pending_installation_repos
+          WHERE repo_id = ?1
+          LIMIT 1`,
+    params: [repoId],
+  });
+  if (pending[0]?.installation_id) return Number(pending[0].installation_id);
+
+  const tenantLinked = await d1Query(accountId, apiToken, databaseId, {
+    sql: `SELECT gi.installation_id
+          FROM tenant_github_installations gi
+          JOIN tenant_repos tr ON tr.tenant_id = gi.tenant_id
+          WHERE tr.repo_id = ?1 AND tr.enabled = 1
+          ORDER BY gi.updated_at DESC
+          LIMIT 1`,
+    params: [repoId],
+  });
+  if (tenantLinked[0]?.installation_id) return Number(tenantLinked[0].installation_id);
+
+  return null;
+}
+
+async function d1Query(accountId, apiToken, databaseId, { sql, params }) {
+  const res = await fetch(
+    `${D1_API}/accounts/${accountId}/d1/database/${databaseId}/query`,
+    {
+      method: 'POST',
+      headers: {
+        authorization: `Bearer ${apiToken}`,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({ sql, params }),
+    },
+  );
+  if (!res.ok) return [];
+  const body = await res.json();
+  if (!body.success) return [];
+  return body.result?.[0]?.results ?? [];
+}
