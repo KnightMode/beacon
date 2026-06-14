@@ -4898,6 +4898,15 @@ code {
   .journey-proof ul {
     gap: 0.45rem;
   }
+
+  .admin-main--journey {
+    overflow: visible;
+    min-height: auto;
+  }
+
+  .journey-shell {
+    min-height: auto;
+  }
 }
 
 @media (max-width: 1100px) {
@@ -4958,12 +4967,29 @@ code {
   }
 
   .admin-topbar {
-    align-items: flex-start;
+    flex-wrap: wrap;
+    align-items: center;
+    row-gap: 0.55rem;
+    padding-inline: max(1rem, env(safe-area-inset-left)) max(1rem, env(safe-area-inset-right));
+    padding-top: max(0.72rem, env(safe-area-inset-top));
   }
 
   .admin-topbar__links,
   .admin-hero__actions {
     justify-content: flex-start;
+  }
+
+  .admin-topbar__links {
+    flex: 1 1 100%;
+    flex-wrap: wrap;
+    gap: 0.45rem 0.65rem;
+    margin-left: 0;
+    min-width: 0;
+    font-size: 0.72rem;
+  }
+
+  .admin-topbar__links a.admin-topbar__logout {
+    margin-left: auto;
   }
 
   .admin-hero h1,
@@ -5010,5 +5036,41 @@ code {
 
   .indexing-summary div:last-child {
     border-bottom: 0;
+  }
+}
+
+@media (max-width: 720px) {
+  .journey-track {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.5rem;
+    overflow: visible;
+    padding: 0.15rem 0 0.25rem;
+  }
+
+  .journey-connector {
+    display: none;
+  }
+
+  .journey-card {
+    flex: initial;
+    width: auto;
+    min-width: 0;
+    min-height: 4.35rem;
+  }
+
+  .journey-shell__top {
+    gap: 0.75rem;
+  }
+
+  .journey-nav {
+    flex-wrap: wrap;
+    gap: 0.55rem;
+    padding: 0.65rem 0.75rem;
+  }
+
+  .journey-nav__hint {
+    flex: 1 1 100%;
+    order: -1;
   }
 }
