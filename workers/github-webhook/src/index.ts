@@ -17,7 +17,7 @@ import { handleAdminIndex } from './admin.js';
 import { handleIndexBatch } from './consumer.js';
 
 export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
+  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
 
     if (request.method === 'GET' && url.pathname === '/health') {
@@ -25,7 +25,7 @@ export default {
     }
 
     if (request.method === 'POST' && url.pathname === '/webhooks/github') {
-      return handleGithubWebhook(request, env);
+      return handleGithubWebhook(request, env, ctx);
     }
 
     if (request.method === 'POST' && url.pathname === '/admin/index') {
@@ -43,6 +43,7 @@ export default {
 async function handleGithubWebhook(
   request: Request,
   env: Env,
+  ctx: ExecutionContext,
 ): Promise<Response> {
   const rawBody = await request.text();
   const signature = request.headers.get('x-hub-signature-256');
@@ -64,5 +65,5 @@ async function handleGithubWebhook(
     return json({ ok: false, error: 'invalid JSON' }, 400);
   }
 
-  return handleWebhookEvent(env, event, payload);
+  return handleWebhookEvent(env, event, payload, ctx);
 }
