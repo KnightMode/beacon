@@ -5,6 +5,12 @@ project. The admin portal is the sensitive surface. Use the manual
 `Configure site Access` GitHub Actions workflow to protect only the admin paths
 with Cloudflare Access and allow login by email one-time PIN.
 
+Cloudflare Access applications, the OTP identity provider, the Pages custom
+domain, queues, and the shared D1 resource are Terraform-managed. Pages runtime
+secret sync, D1 migrations, and the Pages deploy remain imperative. See
+[Cloudflare Terraform](./cloudflare-terraform.md) for the ownership boundary and
+first-time import steps.
+
 ## Required Cloudflare token permissions
 
 The repository already uses `CLOUDFLARE_ACCOUNT_ID` and
@@ -14,6 +20,7 @@ workflow must also include:
 - `Access: Apps and Policies Write`
 - `Access: Organizations, Identity Providers, and Groups Write`
 - `D1: Edit`
+- `Queues: Edit`
 - `Cloudflare Pages: Edit`
 
 The workflow also syncs admin portal runtime config into Pages. Set these
@@ -49,19 +56,26 @@ Cloudflare credentials locally:
 5. Keep `pages_project_name` as `beacon` and `pages_environment` as `production`,
    unless you are protecting another Pages project/environment.
 6. Enter `slack_client_id`, or set the repository variable `SLACK_CLIENT_ID`.
-7. Keep `d1_binding` as `DB`, `d1_database_name` as `scintel`, and
-   `d1_database_id` as `27722a79-10d9-4bfc-aa53-1d65a80c8f79`, unless you
-   created a different D1 database.
+7. Keep `d1_binding` as `DB` and `d1_database_name` as `scintel`, unless you
+   created a different D1 database. The workflow reads the database id from
+   Terraform output.
 8. Keep `github_app_slug`, `pipeline_dispatch_repo`, and
    `pipeline_dispatch_event` unless those resources have different names.
 9. Enter either `allowed_emails`, `allowed_domains`, or both.
+10. Check `confirm_imported_state` only after the existing Cloudflare resources
+    have been imported into Terraform state.
 
 The workflow writes the generated `ADMIN_CF_ACCESS_*` runtime vars directly to
 the Pages project, syncs the Slack/session admin runtime config from workflow
-inputs and GitHub Actions secrets, applies the admin D1 tenant migrations,
-binds the `DB` D1 database, then deploys the Pages site so the Functions
-runtime receives those bindings. No manual copy/paste or separate redeploy step
-is needed.
+inputs and GitHub Actions secrets, applies the admin D1 tenant migrations, binds
+the `DB` D1 database, then deploys the Pages site so the Functions runtime
+receives those bindings. Terraform owns the Access apps and policies; the Pages
+runtime sync only mirrors the Terraform issuer/audience outputs and secrets that
+cannot be cleanly imported into Terraform today.
+
+If `confirm_imported_state` is not checked, or if required resources are missing
+from Terraform state, the workflow exits before `terraform apply`. This protects
+the already-provisioned Cloudflare account from duplicate creation attempts.
 
 Example values:
 
@@ -74,7 +88,6 @@ pages_project_name: beacon
 pages_environment: production
 d1_binding: DB
 d1_database_name: scintel
-d1_database_id: 27722a79-10d9-4bfc-aa53-1d65a80c8f79
 slack_client_id: 1234567890.1234567890
 github_app_slug: scintel-indexer
 pipeline_dispatch_repo: KnightMode/beacon
@@ -85,20 +98,27 @@ session_duration: 24h
 
 ### Local command
 
-You can also run the same setup locally with an API token that has the required
-Access permissions:
+You can also run the same split locally with an API token that has the required
+permissions:
 
 ```bash
+cd terraform/environments/production
+
 CLOUDFLARE_ACCOUNT_ID=<account-id> \
 CLOUDFLARE_API_TOKEN=<api-token> \
-ACCESS_ALLOWED_EMAILS=differentialcircuit@gmail.com \
-ACCESS_SITE_HOSTNAME=askbeacon.dev \
-ACCESS_PROTECTED_PATHS='/admin*,/api/admin*,/oauth/slack/callback*,/oauth/github/callback*' \
-ACCESS_PAGES_PROJECT_NAME=beacon \
-ACCESS_PAGES_ENVIRONMENT=production \
-PAGES_D1_BINDING=DB \
-PAGES_D1_DATABASE_NAME=scintel \
-PAGES_D1_DATABASE_ID=27722a79-10d9-4bfc-aa53-1d65a80c8f79 \
+TF_VAR_cloudflare_account_id=<account-id> \
+TF_VAR_enable_admin_access=true \
+TF_VAR_access_allowed_emails_csv=differentialcircuit@gmail.com \
+terraform apply
+
+cd ../../..
+
+PAGES_ADMIN_ACCESS_ENABLED=true \
+PAGES_ADMIN_CF_ACCESS_ISSUER="$(cd terraform/environments/production && terraform output -raw admin_access_issuer)" \
+PAGES_ADMIN_CF_ACCESS_AUD="$(cd terraform/environments/production && terraform output -raw admin_access_audience_csv)" \
+PAGES_ADMIN_CF_ACCESS_ALLOWED_EMAILS="$(cd terraform/environments/production && terraform output -raw admin_access_allowed_emails_csv)" \
+PAGES_ADMIN_CF_ACCESS_ALLOWED_DOMAINS="$(cd terraform/environments/production && terraform output -raw admin_access_allowed_domains_csv)" \
+PAGES_D1_DATABASE_ID="$(cd terraform/environments/production && terraform output -raw d1_database_id)" \
 PAGES_SLACK_CLIENT_ID=1234567890.1234567890 \
 PAGES_ADMIN_SESSION_SECRET=<session-secret> \
 PAGES_SLACK_CLIENT_SECRET=<slack-client-secret> \
@@ -107,23 +127,20 @@ PAGES_GITHUB_APP_SLUG=scintel-indexer \
 PAGES_PIPELINE_DISPATCH_REPO=KnightMode/beacon \
 PAGES_PIPELINE_DISPATCH_EVENT=index-repo \
 PAGES_PIPELINE_DISPATCH_TOKEN=<github-token-with-repository-dispatch-access> \
-ACCESS_AUTH_DOMAIN=beacon-90k.cloudflareaccess.com \
-npm run configure:site-access
+node scripts/configure-pages-runtime.mjs
 ```
 
-The workflow creates or reuses the Zero Trust organization, creates or reuses a
-Cloudflare One-time PIN identity provider, creates or reuses path-scoped Access
-self-hosted applications for the admin paths, and creates or updates an allow
-policy named `Allow approved email OTP` on each application. It also applies the
-idempotent tenant migrations (`0004_tenants.sql` and
-`0005_tenant_ci_triage_runs.sql`) to the configured remote D1 database. It then
-updates the Pages project's `production` runtime variables with the Access
-issuer, audience, and optional in-app email/domain allow-list while preserving
-unrelated Pages environment variables, and it binds the Pages D1 `DB` binding to
-the configured database. Finally, it deploys the Pages site so the new runtime
-variables and bindings are available to the middleware. The workflow fails fast
-if the required admin runtime variables or D1 binding config are missing,
-instead of letting the deployed site redirect back with a missing-config error.
+The workflow applies Terraform for the One-time PIN identity provider,
+path-scoped Access applications, and `Allow approved email OTP` policies. It
+also applies the idempotent tenant migrations to the configured remote D1
+database. It then updates the Pages project's `production` runtime variables
+with the Access issuer, audience, and optional in-app email/domain allow-list
+while preserving unrelated Pages environment variables, and it binds the Pages
+D1 `DB` binding to the Terraform-managed database. Finally, it deploys the Pages
+site so the new runtime variables and bindings are available to the middleware.
+The workflow fails fast if the required admin runtime variables or D1 binding
+config are missing, instead of letting the deployed site redirect back with a
+missing-config error.
 
 The Pages app also verifies Cloudflare Access at runtime. For any non-local
 request to `/admin`, `/api/admin`, `/oauth/slack/callback`, or
@@ -154,15 +171,14 @@ ADMIN_CF_ACCESS_ALLOWED_DOMAINS=
 The workflow also writes this Pages binding:
 
 ```text
-DB=<D1 database id 27722a79-10d9-4bfc-aa53-1d65a80c8f79>
+DB=<D1 database id from terraform output d1_database_id>
 ```
 
 If `ADMIN_CF_ACCESS_ISSUER` or `ADMIN_CF_ACCESS_AUD` is missing in a deployed
 environment, admin routes fail closed with `403`.
 
-If the Access application already has an explicit identity-provider allow-list,
-the script adds the One-time PIN provider to that list. If the allow-list is
-empty, Cloudflare already allows all configured identity providers.
+If existing Access resources already exist, import them into Terraform before
+the first apply. Otherwise Terraform will attempt to create its declared state.
 
 Cloudflare only sends OTP email to users allowed by an Access policy. If the
 login page says a code was sent but no email arrives, verify the entered email
@@ -171,15 +187,17 @@ security scanner.
 
 ## Troubleshooting
 
-If the workflow fails at `/access/apps` with `Authentication error`, the token
-is missing `Access: Apps and Policies Write`. The first setup may still have
-created the Zero Trust organization and OTP identity provider; after updating
-the `CLOUDFLARE_API_TOKEN` secret, rerun the workflow and it will reuse those
-resources.
+If Terraform fails with an Access authentication error, the token is missing
+`Access: Apps and Policies Write` or `Access: Organizations, Identity Providers,
+and Groups Write`.
 
-If the workflow fails at `/pages/projects` with `Authentication error`, the token
-is missing `Cloudflare Pages: Edit`. Add that permission and rerun the workflow;
-it will reuse the existing Access applications and only update the Pages vars.
+If the Pages runtime sync fails at `/pages/projects` with `Authentication
+error`, the token is missing `Cloudflare Pages: Edit`. Add that permission and
+rerun the workflow; Terraform-managed resources will remain in state.
+
+If Terraform plans to replace `cloudflare_d1_database.scintel`, stop and import
+the existing D1 database first. Do not let Terraform create a second production
+control-plane database.
 
 If Slack OAuth redirects back with `Cannot read properties of undefined
 (reading 'batch')`, the deployed Pages environment is missing the `DB` D1
@@ -193,18 +211,28 @@ Access`; it applies the admin tenant migrations before redeploying Pages.
 ## Temporarily make the admin portal public
 
 Run the `Make site public` workflow. It deletes the Access applications for the
-configured admin paths and removes the `ADMIN_CF_ACCESS_*` runtime vars from the
-Pages project. It does not delete the Zero Trust organization or OTP identity
+configured admin paths by applying Terraform with `enable_admin_access=false`
+and removes the `ADMIN_CF_ACCESS_*` runtime vars from the Pages project. It does
+not delete the D1 database, queues, Pages custom domain, or OTP identity
 provider, so you can re-enable login later by running `Configure site Access`.
+This workflow has the same `confirm_imported_state` guard and will not run
+Terraform until the existing resources are present in state.
 
 Local equivalent:
 
 ```bash
+cd terraform/environments/production
+
 CLOUDFLARE_ACCOUNT_ID=<account-id> \
 CLOUDFLARE_API_TOKEN=<api-token> \
-ACCESS_SITE_HOSTNAME=askbeacon.dev \
-ACCESS_PROTECTED_PATHS='/admin*,/api/admin*,/oauth/slack/callback*,/oauth/github/callback*' \
-ACCESS_PAGES_PROJECT_NAME=beacon \
-ACCESS_PAGES_ENVIRONMENT=production \
-npm run remove:site-access
+TF_VAR_cloudflare_account_id=<account-id> \
+TF_VAR_enable_admin_access=false \
+terraform apply
+
+cd ../../..
+
+PAGES_ADMIN_ACCESS_ENABLED=false \
+PAGES_REQUIRE_ADMIN_RUNTIME_CONFIG=false \
+PAGES_D1_DATABASE_ID="$(cd terraform/environments/production && terraform output -raw d1_database_id)" \
+node scripts/configure-pages-runtime.mjs
 ```

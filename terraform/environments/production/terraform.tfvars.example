@@ -1,0 +1,12 @@
+cloudflare_account_id = "your-cloudflare-account-id"
+
+# Import existing resources before the first production apply. See:
+# docs/cloudflare-terraform.md
+pages_project_name   = "beacon"
+pages_custom_domain  = "askbeacon.dev"
+d1_database_name     = "scintel"
+access_auth_domain   = "beacon-90k.cloudflareaccess.com"
+enable_admin_access  = true
+
+access_allowed_emails_csv  = "differentialcircuit@gmail.com"
+access_allowed_domains_csv = ""

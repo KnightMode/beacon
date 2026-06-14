@@ -1,11 +1,9 @@
 name: Configure site Access
 
-# Manually configures Cloudflare Access for the Cloudflare Pages admin portal.
-# The CLOUDFLARE_API_TOKEN secret needs:
-# - Access: Apps and Policies Write
-# - Access: Organizations, Identity Providers, and Groups Write
-# - D1: Edit
-# - Cloudflare Pages: Edit
+# Applies Terraform-managed Cloudflare infrastructure for the Pages admin portal,
+# then deploys Pages with the Terraform Access outputs mirrored into runtime vars.
+# The CLOUDFLARE_API_TOKEN secret needs Cloudflare Pages, D1, Queues, and
+# Zero Trust Access edit permissions.
 
 on:
   workflow_dispatch:
@@ -52,11 +50,6 @@ on:
         required: true
         default: 'scintel'
         type: string
-      d1_database_id:
-        description: 'Cloudflare D1 database id for the admin portal'
-        required: false
-        default: '27722a79-10d9-4bfc-aa53-1d65a80c8f79'
-        type: string
       slack_client_id:
         description: 'Slack OAuth client id for the admin portal'
         required: false
@@ -95,13 +88,23 @@ on:
         required: true
         default: '24h'
         type: string
+      confirm_imported_state:
+        description: 'Required safety check: confirm existing Cloudflare resources have been imported into Terraform state'
+        required: true
+        default: false
+        type: boolean
 
 permissions:
   contents: read
 
+env:
+  TF_WORKING_DIR: terraform/environments/production
+  TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET || 'beacon-terraform-state' }}
+  TF_STATE_KEY: ${{ vars.TF_STATE_KEY || 'cloudflare/production.tfstate' }}
+
 jobs:
   configure:
-    name: Configure Cloudflare Access
+    name: Configure Cloudflare infrastructure
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -109,36 +112,109 @@ jobs:
         with:
           node-version: 22
           cache: npm
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
       - run: npm ci
-      - name: Attach custom domain
-        run: npm run attach:pages-domain
+      - name: Apply Terraform
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: |
+          terraform init \
+            -backend-config="bucket=${TF_STATE_BUCKET}" \
+            -backend-config="key=${TF_STATE_KEY}" \
+            -backend-config="region=auto" \
+            -backend-config="endpoint=https://${CLOUDFLARE_ACCOUNT_ID}.r2.cloudflarestorage.com" \
+            -backend-config="skip_credentials_validation=true" \
+            -backend-config="skip_region_validation=true" \
+            -backend-config="skip_metadata_api_check=true" \
+            -backend-config="force_path_style=true"
+
+          if [ "${CONFIRM_IMPORTED_STATE}" != "true" ]; then
+            echo "::error::Refusing to apply Terraform until existing Cloudflare resources have been imported into state."
+            exit 1
+          fi
+
+          required_state=(
+            'cloudflare_d1_database.scintel'
+            'cloudflare_pages_domain.site'
+            'cloudflare_zero_trust_access_identity_provider.otp'
+            'cloudflare_zero_trust_access_application.admin["/admin*"]'
+            'cloudflare_zero_trust_access_application.admin["/api/admin*"]'
+            'cloudflare_zero_trust_access_application.admin["/oauth/slack/callback*"]'
+            'cloudflare_zero_trust_access_application.admin["/oauth/github/callback*"]'
+            'cloudflare_queue.beacon["scintel-answer-jobs"]'
+            'cloudflare_queue.beacon["scintel-answer-jobs-dlq"]'
+            'cloudflare_queue.beacon["scintel-create-pr-jobs"]'
+            'cloudflare_queue.beacon["scintel-create-pr-jobs-dlq"]'
+            'cloudflare_queue.beacon["scintel-index-jobs"]'
+            'cloudflare_queue.beacon["scintel-index-jobs-dlq"]'
+            'cloudflare_queue.beacon["scintel-triage-jobs"]'
+            'cloudflare_queue.beacon["scintel-triage-jobs-dlq"]'
+          )
+          state_list="$(terraform state list)"
+          missing=()
+          for address in "${required_state[@]}"; do
+            if ! grep -Fxq "$address" <<<"$state_list"; then
+              missing+=("$address")
+            fi
+          done
+          if [ "${#missing[@]}" -gt 0 ]; then
+            printf '::error::Missing Terraform imports:\n'
+            printf '  %s\n' "${missing[@]}"
+            exit 1
+          fi
+
+          terraform apply -auto-approve
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          PAGES_CUSTOM_DOMAIN: askbeacon.dev
+          AWS_ACCESS_KEY_ID: ${{ secrets.TF_STATE_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.TF_STATE_SECRET_ACCESS_KEY }}
+          CONFIRM_IMPORTED_STATE: ${{ inputs.confirm_imported_state }}
+          TF_VAR_cloudflare_account_id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          TF_VAR_enable_admin_access: 'true'
+          TF_VAR_pages_project_name: ${{ inputs.pages_project_name }}
+          TF_VAR_pages_custom_domain: ${{ inputs.site_hostname }}
+          TF_VAR_d1_database_name: ${{ inputs.d1_database_name }}
+          TF_VAR_access_app_name: ${{ inputs.app_name }}
+          TF_VAR_access_auth_domain: ${{ inputs.auth_domain }}
+          TF_VAR_access_session_duration: ${{ inputs.session_duration }}
+          TF_VAR_access_allowed_emails_csv: ${{ inputs.allowed_emails }}
+          TF_VAR_access_allowed_domains_csv: ${{ inputs.allowed_domains }}
+          TF_VAR_protected_paths_csv: ${{ inputs.protected_paths }}
+      - name: Capture Terraform outputs
+        id: tf
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: |
+          echo "d1_database_id=$(terraform output -raw d1_database_id)" >> "$GITHUB_OUTPUT"
+          echo "access_issuer=$(terraform output -raw admin_access_issuer)" >> "$GITHUB_OUTPUT"
+          echo "access_audiences=$(terraform output -raw admin_access_audience_csv)" >> "$GITHUB_OUTPUT"
+          echo "access_allowed_emails=$(terraform output -raw admin_access_allowed_emails_csv)" >> "$GITHUB_OUTPUT"
+          echo "access_allowed_domains=$(terraform output -raw admin_access_allowed_domains_csv)" >> "$GITHUB_OUTPUT"
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.TF_STATE_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.TF_STATE_SECRET_ACCESS_KEY }}
       - name: Apply D1 admin schema
         run: node scripts/apply-admin-d1-migrations.mjs
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           PAGES_D1_DATABASE_NAME: ${{ inputs.d1_database_name }}
-      - name: Configure Access
-        run: node scripts/configure-cloudflare-access.mjs
+      - name: Sync Pages runtime config
+        run: node scripts/configure-pages-runtime.mjs
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          ACCESS_ALLOWED_EMAILS: ${{ inputs.allowed_emails }}
-          ACCESS_ALLOWED_DOMAINS: ${{ inputs.allowed_domains }}
-          ACCESS_SITE_HOSTNAME: ${{ inputs.site_hostname }}
-          ACCESS_PROTECTED_PATHS: ${{ inputs.protected_paths }}
-          ACCESS_PAGES_PROJECT_NAME: ${{ inputs.pages_project_name }}
-          ACCESS_PAGES_ENVIRONMENT: ${{ inputs.pages_environment }}
-          ACCESS_APP_NAME: ${{ inputs.app_name }}
-          ACCESS_AUTH_DOMAIN: ${{ inputs.auth_domain }}
-          ACCESS_SESSION_DURATION: ${{ inputs.session_duration }}
+          PAGES_ADMIN_ACCESS_ENABLED: 'true'
+          PAGES_ADMIN_CF_ACCESS_ISSUER: ${{ steps.tf.outputs.access_issuer }}
+          PAGES_ADMIN_CF_ACCESS_AUD: ${{ steps.tf.outputs.access_audiences }}
+          PAGES_ADMIN_CF_ACCESS_ALLOWED_EMAILS: ${{ steps.tf.outputs.access_allowed_emails }}
+          PAGES_ADMIN_CF_ACCESS_ALLOWED_DOMAINS: ${{ steps.tf.outputs.access_allowed_domains }}
+          PAGES_PROJECT_NAME: ${{ inputs.pages_project_name }}
+          PAGES_ENVIRONMENT: ${{ inputs.pages_environment }}
           PAGES_D1_BINDING: ${{ inputs.d1_binding }}
           PAGES_D1_DATABASE_NAME: ${{ inputs.d1_database_name }}
-          PAGES_D1_DATABASE_ID: ${{ inputs.d1_database_id || vars.CLOUDFLARE_D1_DATABASE_ID }}
+          PAGES_D1_DATABASE_ID: ${{ steps.tf.outputs.d1_database_id }}
           PAGES_SLACK_CLIENT_ID: ${{ inputs.slack_client_id || vars.SLACK_CLIENT_ID }}
           PAGES_GITHUB_APP_SLUG: ${{ inputs.github_app_slug || vars.BEACON_GITHUB_APP_SLUG }}
           PAGES_GITHUB_APP_ID: ${{ inputs.github_app_id || vars.BEACON_GITHUB_APP_ID }}

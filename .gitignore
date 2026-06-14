@@ -9,6 +9,8 @@ dist/
 # Cloudflare
 .wrangler/
 .dev.vars
+.terraform/
+!.terraform.lock.hcl
 
 # Env / secrets
 .env
