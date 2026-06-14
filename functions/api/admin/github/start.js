@@ -1,4 +1,10 @@
-import { githubLinkCookie, redirect, requireSession } from '../../../_lib/admin.js';
+import {
+  githubLinkCookie,
+  HttpError,
+  logInternalError,
+  redirect,
+  requireSession,
+} from '../../../_lib/admin.js';
 
 export async function onRequestGet(context) {
   const url = new URL(context.request.url);
@@ -6,16 +12,32 @@ export async function onRequestGet(context) {
     return redirect('/oauth/github/callback?mock=1&installation_id=12345');
   }
 
-  const session = await requireSession(context);
+  if (!context.env.ADMIN_SESSION_SECRET?.trim()) {
+    return redirect(
+      '/admin/onboarding/?error=GitHub%20connection%20is%20not%20configured.%20Contact%20an%20administrator.',
+    );
+  }
+
   const githubApp = context.env.GITHUB_APP_SLUG?.trim() || context.env.GITHUB_APP_NAME?.trim() || '';
   if (!githubApp) {
     return redirect(
       '/admin/onboarding/?error=GitHub%20App%20is%20not%20configured.%20Contact%20an%20administrator.',
     );
   }
-  const state = encodeURIComponent(session.tenantId);
-  const installUrl = `https://github.com/apps/${githubApp}/installations/new?state=${state}`;
-  return redirect(installUrl, {
-    'set-cookie': await githubLinkCookie(context, session.tenantId),
-  });
+
+  try {
+    const session = await requireSession(context);
+    const state = encodeURIComponent(session.tenantId);
+    const installUrl = `https://github.com/apps/${githubApp}/installations/new?state=${state}`;
+    return redirect(installUrl, {
+      'set-cookie': await githubLinkCookie(context, session.tenantId),
+    });
+  } catch (err) {
+    logInternalError('GitHub connect start failed', err);
+    const message =
+      err instanceof HttpError && err.status < 500
+        ? err.message
+        : 'GitHub connection failed. Try again or contact support.';
+    return redirect(`/admin/onboarding/?error=${encodeURIComponent(message)}`);
+  }
 }
