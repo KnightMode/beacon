@@ -11,6 +11,28 @@
   };
   const stepOrder = Object.keys(stepLabels);
   const isOnboarding = document.body.dataset.adminPage === "onboarding";
+  const repoPageLimit = 100;
+
+  const state = {
+    summary: null,
+    repoLoading: false,
+    repoLoadedOnce: false,
+    repoQuery: "",
+    repoFilter: "all",
+    repoPage: 1,
+    repoHasMore: false,
+    repoSource: "empty",
+    repoMessage: "",
+    repoInstallation: null,
+    availableRepos: new Map(),
+    selectedRepos: new Map(),
+    searchTimer: null,
+    eventSource: null,
+    fallbackTimer: null,
+    lastSnapshotAt: 0,
+    activeJourneyStep: null,
+    journeyStatuses: new Map(),
+  };
 
   const $ = (selector) => document.querySelector(selector);
   const $$ = (selector) => Array.from(document.querySelectorAll(selector));
@@ -26,101 +48,126 @@
     return data;
   }
 
-  async function load() {
+  async function load(options = {}) {
     const data = await fetchJson("/api/admin/session");
     if (!data.authenticated) {
       renderSignedOut();
       return;
     }
+    applySnapshot(data);
+    if (isOnboarding && options.loadPicker !== false) {
+      await ensureRepoPicker(data);
+    }
+  }
+
+  function applySnapshot(data) {
+    state.summary = data;
+    syncSelectedRepos(data.repos || []);
     renderTenant(data);
     renderSteps(data.steps || {});
     renderRepos(data.repos || []);
-    if (isOnboarding) {
-      await loadRepoPicker(data);
-    }
+    if (isOnboarding) renderRepoBrowser();
   }
 
   function renderSignedOut() {
-    renderTenant({ integrations: {}, repos: [], completed: false });
+    state.summary = { integrations: {}, repos: [], completed: false };
+    state.availableRepos.clear();
+    state.selectedRepos.clear();
+    renderTenant(state.summary);
     renderSteps({});
     renderRepos([]);
+    renderRepoBrowser();
     setText("[data-onboarding-state]", "Needs Slack");
     setText("[data-repo-picker-status]", "Connect Slack to load repositories.");
     setText("[data-repo-form-status]", "Connect Slack first.");
+    setLiveState("Admin access required", "offline");
     const submit = $("[data-repo-submit]");
     if (submit) submit.disabled = true;
-    $("[data-repo-picker]")?.querySelectorAll("[data-repo-select]").forEach((node) => node.remove());
   }
 
-  async function loadRepoPicker(onboarding) {
-    const picker = $("[data-repo-picker]");
-    const status = $("[data-repo-picker-status]");
-    const submit = $("[data-repo-submit]");
-    if (!picker || !status) return;
-
+  async function ensureRepoPicker(onboarding) {
+    if (!isOnboarding) return;
     if (!onboarding.integrations?.github) {
-      status.textContent = "Connect GitHub to load repositories.";
-      picker.querySelectorAll("[data-repo-select]").forEach((node) => node.remove());
-      if (submit) submit.disabled = true;
+      state.availableRepos.clear();
+      state.repoLoadedOnce = false;
+      state.repoMessage = "Connect GitHub to load repositories.";
+      renderRepoBrowser();
       return;
     }
+    if (!state.repoLoadedOnce && !state.repoLoading) {
+      await loadRepoPage({ reset: true });
+    }
+  }
 
-    status.textContent = "Loading repositories...";
-    if (submit) submit.disabled = true;
+  async function loadRepoPage({ reset = false } = {}) {
+    if (!state.summary?.integrations?.github) return;
+
+    if (reset) {
+      state.repoPage = 1;
+      state.repoHasMore = false;
+      state.availableRepos.clear();
+    } else if (state.repoLoading || !state.repoHasMore || state.repoQuery) {
+      return;
+    } else {
+      state.repoPage += 1;
+    }
+
+    state.repoLoading = true;
+    state.repoMessage = state.repoQuery ? "Searching GitHub repositories..." : "Loading repositories...";
+    renderRepoBrowser();
+
+    const params = new URLSearchParams({
+      q: state.repoQuery,
+      page: String(state.repoPage),
+      limit: String(repoPageLimit),
+    });
 
     try {
-      const data = await fetchJson("/api/admin/github/repos");
-      renderRepoPicker(data);
-      if (submit) submit.disabled = (data.repos || []).length === 0;
-      if (data.message && (data.repos || []).length === 0) {
-        setText("[data-repo-form-status]", data.message);
-        status.classList.add("repo-picker__empty");
-      }
+      const data = await fetchJson(`/api/admin/github/repos?${params.toString()}`);
+      state.repoLoadedOnce = true;
+      state.repoSource = data.source || "github-api";
+      state.repoHasMore = Boolean(data.hasMore) && !state.repoQuery;
+      state.repoInstallation = data.installation || null;
+      state.repoMessage = data.message || "";
+      mergeAvailableRepos(data.repos || []);
+      mergeSelectedRepoSummaries(data.selectedRepos || []);
+      renderRepoBrowser(data);
     } catch (err) {
-      status.textContent = err.message;
-      if (submit) submit.disabled = true;
+      state.repoMessage = safeSetupError(err, "Could not load repositories right now.");
+      state.repoHasMore = false;
+      renderRepoBrowser();
+    } finally {
+      state.repoLoading = false;
+      renderRepoBrowser();
     }
   }
 
-  function renderRepoPicker(data) {
-    const picker = $("[data-repo-picker]");
-    const status = $("[data-repo-picker-status]");
-    if (!picker || !status) return;
-
-    const repos = data.repos || [];
-    if (repos.length === 0) {
-      picker.innerHTML = "";
-      picker.appendChild(status);
-      status.textContent = data.message || "No repositories available on this installation.";
-      status.classList.add("repo-picker__empty");
-      return;
+  function mergeAvailableRepos(repos) {
+    for (const repo of repos) {
+      const fullName = repo.fullName;
+      if (!fullName) continue;
+      const existing = state.availableRepos.get(fullName) || {};
+      state.availableRepos.set(fullName, { ...existing, ...repo });
+      if (repo.selected) {
+        state.selectedRepos.set(fullName, { ...existing, ...repo, selected: true });
+      }
     }
-
-    status.classList.remove("repo-picker__empty");
-    const selectedCount = repos.filter((repo) => repo.selected).length;
-    status.textContent = `${repos.length} repo${repos.length === 1 ? "" : "s"} available${
-      data.installation?.accountLogin ? ` for ${data.installation.accountLogin}` : ""
-    }${selectedCount ? ` · ${selectedCount} already selected` : ""}.`;
-
-    const list = document.createElement("select");
-    list.className = "repo-picker__select";
-    list.multiple = true;
-    list.size = Math.min(Math.max(repos.length, 4), 10);
-    list.setAttribute("data-repo-select", "");
-    list.setAttribute("aria-label", "Repositories to index");
-    list.innerHTML = repos.map((repo) => `<option value="${escapeHtml(repo.fullName)}"${repo.selected ? " selected" : ""}>
-      ${escapeHtml(repo.fullName)} (${repo.private ? "private" : "public"}, ${escapeHtml(repo.defaultBranch || "main")})
-    </option>`).join("");
-
-    picker.innerHTML = "";
-    picker.appendChild(status);
-    picker.appendChild(list);
   }
 
-  function selectedRepoNames() {
-    const select = $("[data-repo-select]");
-    if (!select) return [];
-    return Array.from(select.selectedOptions).map((option) => option.value);
+  function mergeSelectedRepoSummaries(repos) {
+    for (const repo of repos) {
+      if (!repo.fullName) continue;
+      const existing = state.availableRepos.get(repo.fullName) || {};
+      state.selectedRepos.set(repo.fullName, { ...existing, ...repo, selected: true });
+    }
+  }
+
+  function syncSelectedRepos(repos) {
+    for (const repo of repos) {
+      if (!repo.fullName) continue;
+      const existing = state.availableRepos.get(repo.fullName) || {};
+      state.selectedRepos.set(repo.fullName, { ...existing, ...repo, selected: true });
+    }
   }
 
   function renderTenant(data) {
@@ -137,28 +184,123 @@
       .map((key, index) => {
         const status = steps[key] || "PENDING";
         return `<li data-state="${escapeHtml(status.toLowerCase())}">
-          <span>${String(index + 1).padStart(2, "0")}</span>
-          <strong>${escapeHtml(stepLabels[key])}</strong>
-          <em>${escapeHtml(status)}</em>
+          <a href="${isOnboarding ? `#step-${escapeHtml(key)}` : "/admin/onboarding/"}">
+            <span>${String(index + 1).padStart(2, "0")}</span>
+            <strong>${escapeHtml(stepLabels[key])}</strong>
+            <em>${escapeHtml(status)}</em>
+          </a>
         </li>`;
       })
       .join("");
     $$("[data-step-list]").forEach((node) => {
       node.innerHTML = html;
     });
+    if (isOnboarding) renderJourneyCards(steps);
+  }
+
+  function renderJourneyCards(steps) {
+    for (const key of stepOrder) {
+      const status = steps[key] || "PENDING";
+      const normalized = status.toLowerCase();
+      const previousStatus = state.journeyStatuses.get(key);
+      const button = $(`[data-journey-card="${key}"]`);
+      if (button) {
+        button.dataset.state = normalized;
+        if (previousStatus && previousStatus !== "complete" && normalized === "complete") {
+          flashClass(button, "just-completed", 900);
+        }
+      }
+      state.journeyStatuses.set(key, normalized);
+      setText(`[data-journey-status="${key}"]`, status);
+    }
+    if (!state.activeJourneyStep) {
+      setActiveJourneyStep(initialJourneyStep(steps));
+    }
+  }
+
+  function initialJourneyStep(steps) {
+    const hashStep = journeyStepFromHash();
+    if (hashStep) return hashStep;
+    return stepOrder.find((key) => (steps[key] || "PENDING").toUpperCase() !== "COMPLETE") || stepOrder.at(-1);
+  }
+
+  function journeyStepFromHash() {
+    const key = window.location.hash.replace(/^#step-/, "");
+    return stepOrder.includes(key) ? key : null;
+  }
+
+  function setActiveJourneyStep(key, { updateHash = false } = {}) {
+    if (!isOnboarding || !stepOrder.includes(key)) return;
+    const previousStep = state.activeJourneyStep;
+    state.activeJourneyStep = key;
+
+    $$("[data-journey-card]").forEach((button) => {
+      const active = button.dataset.journeyCard === key;
+      button.classList.toggle("is-active", active);
+      button.setAttribute("aria-selected", active ? "true" : "false");
+      button.tabIndex = active ? 0 : -1;
+      if (active) {
+        button.setAttribute("aria-current", "step");
+        if (previousStep && previousStep !== key) flashClass(button, "just-activated", 620);
+      } else {
+        button.removeAttribute("aria-current");
+      }
+    });
+
+    $$("[data-journey-panel]").forEach((panel) => {
+      const active = panel.dataset.journeyPanel === key;
+      panel.classList.toggle("is-active", active);
+      panel.hidden = !active;
+    });
+
+    if (updateHash) {
+      window.history.replaceState(null, "", `#step-${key}`);
+    }
+  }
+
+  function flashClass(node, className, duration) {
+    node.classList.remove(className);
+    window.requestAnimationFrame(() => {
+      node.classList.add(className);
+      window.setTimeout(() => node.classList.remove(className), duration);
+    });
   }
 
   function renderRepos(repos) {
-    const html = repos.length
+    const safeRepos = repos || [];
+    const ready = safeRepos.filter((repo) => (repo.status || "").toUpperCase() === "READY").length;
+    const failed = safeRepos.filter((repo) => (repo.status || "").toUpperCase() === "FAILED").length;
+    const active = safeRepos.filter((repo) => !["READY", "FAILED"].includes((repo.status || "").toUpperCase())).length;
+    const chunks = safeRepos.reduce((sum, repo) => sum + Number(repo.totalChunks || 0), 0);
+
+    setText("[data-index-ready]", String(ready));
+    setText("[data-index-active]", String(active));
+    setText("[data-index-failed]", String(failed));
+    setText("[data-index-chunks]", formatNumber(chunks));
+
+    const html = safeRepos.length
       ? `<table>
-          <thead><tr><th>Repo</th><th>Status</th><th>Files</th><th>Chunks</th></tr></thead>
+          <thead><tr><th>Repo</th><th>Status</th><th>Progress</th><th>Chunks</th></tr></thead>
           <tbody>
-            ${repos.map((repo) => `<tr>
-              <td>${escapeHtml(repo.fullName)}</td>
-              <td><span class="status-pill" data-state="${escapeHtml((repo.status || "PENDING").toLowerCase())}">${escapeHtml(repo.status || "PENDING")}</span></td>
-              <td>${escapeHtml(String(repo.indexedFiles ?? 0))}/${escapeHtml(String(repo.totalFiles ?? "?"))}</td>
-              <td>${escapeHtml(String(repo.totalChunks ?? 0))}</td>
-            </tr>`).join("")}
+            ${safeRepos.map((repo) => {
+              const status = repo.status || "PENDING";
+              const pct = progressPercent(repo);
+              const fileText = `${repo.indexedFiles ?? 0}/${repo.totalFiles ?? "?"}`;
+              return `<tr>
+                <td>
+                  <strong>${escapeHtml(repo.fullName)}</strong>
+                  ${repo.error ? `<small>${escapeHtml(repo.error)}</small>` : ""}
+                </td>
+                <td><span class="status-pill" data-state="${escapeHtml(status.toLowerCase())}">${escapeHtml(status)}</span></td>
+                <td>
+                  <div class="progress-cell">
+                    <span class="progress-bar" style="--progress:${pct}%"><i></i></span>
+                    <em>${escapeHtml(fileText)} files</em>
+                  </div>
+                </td>
+                <td>${escapeHtml(formatNumber(repo.totalChunks ?? 0))}</td>
+              </tr>`;
+            }).join("")}
           </tbody>
         </table>`
       : `<p class="admin-empty">No repos selected yet. Continue setup to add the first pilot repo.</p>`;
@@ -167,9 +309,150 @@
     });
   }
 
+  function renderRepoBrowser() {
+    const picker = $("[data-repo-picker]");
+    if (!picker) return;
+
+    const status = $("[data-repo-picker-status]");
+    const selectedCount = state.selectedRepos.size;
+    const loadedRepos = sortedRepos(Array.from(state.availableRepos.values()));
+    const visibleRepos = visibleRepoRows(loadedRepos);
+    const submit = $("[data-repo-submit]");
+    const loadMore = $("[data-repo-load-more]");
+
+    if (status) {
+      status.textContent = repoStatusText(loadedRepos.length, visibleRepos.length);
+      status.classList.toggle("repo-picker__empty", !state.summary?.integrations?.github || Boolean(state.repoMessage));
+    }
+
+    setText("[data-repo-visible-count]", String(visibleRepos.length));
+    setText("[data-repo-selected-count]", String(selectedCount));
+    setText("[data-repo-total-scanned]", String(loadedRepos.length));
+    setText("[data-repo-selected-total]", formatNumber(selectedCount));
+    const selectedRows = Array.from(state.selectedRepos.values());
+    setText("[data-repo-private-count]", formatNumber(selectedRows.filter((repo) => repo.private !== false).length));
+    setText("[data-repo-public-count]", formatNumber(selectedRows.filter((repo) => repo.private === false).length));
+    const denominator = Math.max(loadedRepos.length, selectedCount, 1);
+    setText("[data-repo-selected-percent]", `${Math.round((selectedCount / denominator) * 1000) / 10}%`);
+
+    if (submit) submit.disabled = selectedCount === 0 || state.repoLoading;
+    if (loadMore) {
+      loadMore.disabled = state.repoLoading || !state.repoHasMore || Boolean(state.repoQuery);
+      loadMore.textContent = state.repoLoading ? "Loading..." : "Load more";
+    }
+
+    $$("[data-repo-filter]").forEach((button) => {
+      const active = button.dataset.repoFilter === state.repoFilter;
+      button.classList.toggle("is-active", active);
+      button.setAttribute("aria-pressed", active ? "true" : "false");
+    });
+
+    renderRepoRows(visibleRepos);
+    renderSelectedRepos();
+  }
+
+  function repoStatusText(loadedCount, visibleCount) {
+    if (!state.summary?.integrations?.github) return state.repoMessage || "Connect GitHub to load repositories.";
+    if (state.repoLoading) return state.repoMessage || "Loading repositories...";
+    if (state.repoMessage) return state.repoMessage;
+    const account = state.repoInstallation?.accountLogin ? ` for ${state.repoInstallation.accountLogin}` : "";
+    const source = state.repoSource === "database" ? " from cached install data" : "";
+    if (loadedCount === 0) return `No repositories loaded${account}.`;
+    return `${formatNumber(loadedCount)} repos loaded${account}${source}. ${formatNumber(visibleCount)} visible in the current view.`;
+  }
+
+  function visibleRepoRows(loadedRepos) {
+    if (state.repoFilter === "selected") {
+      return sortedRepos(Array.from(state.selectedRepos.values()));
+    }
+    return loadedRepos.filter((repo) => {
+      if (state.repoFilter === "private") return repo.private !== false;
+      if (state.repoFilter === "public") return repo.private === false;
+      return true;
+    });
+  }
+
+  function renderRepoRows(repos) {
+    const list = $("[data-repo-list]");
+    if (!list) return;
+    if (!state.summary?.integrations?.github) {
+      list.innerHTML = `<p class="admin-empty">Connect GitHub to load repositories.</p>`;
+      return;
+    }
+    if (state.repoLoading && repos.length === 0) {
+      list.innerHTML = `<p class="admin-empty">Loading repositories...</p>`;
+      return;
+    }
+    if (repos.length === 0) {
+      list.innerHTML = `<p class="admin-empty">No repositories match this view.</p>`;
+      return;
+    }
+    list.innerHTML = `<div class="repo-row repo-row--head" aria-hidden="true">
+        <span></span>
+        <span>Owner</span>
+        <span>Repository</span>
+        <span>Privacy</span>
+        <span>Branch</span>
+        <span>Selected</span>
+      </div>${repos.map((repo) => {
+      const selected = state.selectedRepos.has(repo.fullName);
+      const persisted = persistedRepoSet().has(repo.fullName);
+      const repoParts = splitRepo(repo.fullName);
+      const stateText = persisted ? (repo.status || "Selected") : selected ? "Draft" : "Available";
+      return `<label class="repo-row${selected ? " is-selected" : ""}${persisted ? " is-locked" : ""}" data-repo-row>
+        <input type="checkbox" data-repo-checkbox value="${escapeHtml(repo.fullName)}" ${selected ? "checked" : ""} ${persisted ? "disabled" : ""} />
+        <span class="repo-row__owner">${escapeHtml(repoParts.owner)}</span>
+        <span class="repo-row__main">
+          <strong>${escapeHtml(repoParts.name)}</strong>
+          <em>${escapeHtml(repo.fullName)}</em>
+        </span>
+        <span class="repo-row__privacy">${repo.private === false ? "Public" : "Private"}</span>
+        <span class="repo-row__branch">${escapeHtml(repo.defaultBranch || "main")}</span>
+        <span class="repo-row__state">${escapeHtml(stateText)}</span>
+      </label>`;
+    }).join("")}`;
+  }
+
+  function renderSelectedRepos() {
+    const list = $("[data-repo-selected-list]");
+    if (!list) return;
+    const repos = sortedRepos(Array.from(state.selectedRepos.values()));
+    if (repos.length === 0) {
+      list.innerHTML = `<p class="admin-empty">No repos selected yet.</p>`;
+      return;
+    }
+    list.innerHTML = repos.map((repo) => {
+      const status = repo.status || (repo.selected ? "SELECTED" : "DRAFT");
+      return `<div class="repo-selected-item">
+        <span>${escapeHtml(repo.fullName)}</span>
+        <em>${escapeHtml(status)}</em>
+      </div>`;
+    }).join("");
+  }
+
+  function selectedRepoNames() {
+    return Array.from(state.selectedRepos.keys());
+  }
+
   function bindForms() {
+    $$("[data-journey-card]").forEach((button) => {
+      button.addEventListener("click", () => {
+        setActiveJourneyStep(button.dataset.journeyCard, { updateHash: true });
+      });
+    });
+
+    window.addEventListener("hashchange", () => {
+      const hashStep = journeyStepFromHash();
+      if (hashStep) setActiveJourneyStep(hashStep);
+    });
+
     $$("[data-refresh]").forEach((button) => {
-      button.addEventListener("click", () => load().catch(showError));
+      button.addEventListener("click", () => {
+        const shouldReloadPicker = isOnboarding && Boolean(state.summary?.integrations?.github);
+        load({ loadPicker: false })
+          .then(() => (shouldReloadPicker ? loadRepoPage({ reset: true }) : null))
+          .catch(showError);
+      });
     });
 
     $("[data-repo-form]")?.addEventListener("submit", async (event) => {
@@ -180,39 +463,73 @@
         return;
       }
       try {
-        setText("[data-repo-form-status]", "Starting indexing...");
+        setText("[data-repo-form-status]", "Saving repos and starting indexing...");
         const result = await fetchJson("/api/admin/repos", {
           method: "POST",
           body: JSON.stringify({ repos }),
         });
         if (result.dispatchErrors?.length) {
-          const detail = result.dispatchErrors
-            .map((entry) => `${entry.repo}: ${entry.error}`)
-            .join(" ");
-          setText("[data-repo-form-status]", `Saved repos, but dispatch failed — ${detail}`);
+          const failedRepos = result.dispatchErrors.map((entry) => entry.repo).filter(Boolean);
+          const failedText = failedRepos.length > 2
+            ? `${failedRepos.length} repositories`
+            : failedRepos.join(", ") || "the selected repositories";
+          setText("[data-repo-form-status]", `Saved repos, but indexing did not start for ${failedText}. Contact an administrator.`);
         } else {
           setText("[data-repo-form-status]", `Indexing started for ${repos.length} repo${repos.length === 1 ? "" : "s"}.`);
         }
-        await load();
+        applySnapshot({ ...state.summary, repos: result.repos || state.summary?.repos || [] });
+        await load({ loadPicker: false });
+        setActiveJourneyStep("indexing", { updateHash: true });
       } catch (err) {
-        setText("[data-repo-form-status]", err.message);
+        setText("[data-repo-form-status]", safeSetupError(err, "Could not save repositories right now."));
       }
     });
 
-    $("[data-repo-select-all]")?.addEventListener("click", () => {
-      const select = $("[data-repo-select]");
-      if (!select) return;
-      Array.from(select.options).forEach((option) => {
-        option.selected = true;
+    $("[data-repo-search]")?.addEventListener("input", (event) => {
+      window.clearTimeout(state.searchTimer);
+      const value = event.currentTarget.value.trim();
+      state.searchTimer = window.setTimeout(() => {
+        state.repoQuery = value;
+        loadRepoPage({ reset: true }).catch(showError);
+      }, 260);
+    });
+
+    $("[data-repo-list]")?.addEventListener("change", (event) => {
+      const checkbox = event.target.closest("[data-repo-checkbox]");
+      if (!checkbox) return;
+      const fullName = checkbox.value;
+      const repo = state.availableRepos.get(fullName) || state.selectedRepos.get(fullName) || { fullName };
+      if (checkbox.checked) {
+        state.selectedRepos.set(fullName, { ...repo, selected: true });
+      } else {
+        state.selectedRepos.delete(fullName);
+      }
+      renderRepoBrowser();
+    });
+
+    $$("[data-repo-filter]").forEach((button) => {
+      button.addEventListener("click", () => {
+        state.repoFilter = button.dataset.repoFilter || "all";
+        renderRepoBrowser();
       });
     });
 
+    $("[data-repo-load-more]")?.addEventListener("click", () => {
+      loadRepoPage({ reset: false }).catch(showError);
+    });
+
+    $("[data-repo-select-all]")?.addEventListener("click", () => {
+      const visible = visibleRepoRows(sortedRepos(Array.from(state.availableRepos.values())));
+      for (const repo of visible) {
+        state.selectedRepos.set(repo.fullName, { ...repo, selected: true });
+      }
+      renderRepoBrowser();
+    });
+
     $("[data-repo-clear-all]")?.addEventListener("click", () => {
-      const select = $("[data-repo-select]");
-      if (!select) return;
-      Array.from(select.options).forEach((option) => {
-        option.selected = false;
-      });
+      state.selectedRepos.clear();
+      syncSelectedRepos(state.summary?.repos || []);
+      renderRepoBrowser();
     });
 
     $("[data-github-complete]")?.addEventListener("submit", async (event) => {
@@ -228,8 +545,9 @@
         setText("[data-github-complete-status]", "GitHub connected.");
         setText("[data-github-status]", "Connected");
         await load();
+        setActiveJourneyStep("repos", { updateHash: true });
       } catch (err) {
-        setText("[data-github-complete-status]", err.message);
+        setText("[data-github-complete-status]", safeSetupError(err, "Could not link the GitHub installation."));
       }
     });
 
@@ -246,10 +564,66 @@
           }),
         });
         setText("[data-channel-form-status]", "Channel saved.");
-        await load();
+        await load({ loadPicker: false });
+        setActiveJourneyStep("first_answer", { updateHash: true });
       } catch (err) {
-        setText("[data-channel-form-status]", err.message);
+        setText("[data-channel-form-status]", safeSetupError(err, "Could not save the channel right now."));
       }
+    });
+  }
+
+  function startLiveUpdates() {
+    if (!window.EventSource) {
+      startFallbackPolling("Polling status");
+      return;
+    }
+
+    setLiveState("Checking setup", "connecting");
+    const source = new EventSource("/api/admin/events");
+    state.eventSource = source;
+
+    source.onopen = () => {
+      setLiveState("All systems operational", "online");
+    };
+
+    source.addEventListener("snapshot", (event) => {
+      state.lastSnapshotAt = Date.now();
+      setLiveState("All systems operational", "online");
+      try {
+        applySnapshot(JSON.parse(event.data));
+      } catch {
+        setLiveState("Status unavailable", "offline");
+      }
+    });
+
+    source.addEventListener("error", () => {
+      setLiveState("Reconnecting", "connecting");
+      if (!state.lastSnapshotAt) {
+        window.setTimeout(() => {
+          if (!state.lastSnapshotAt) startFallbackPolling("Polling status");
+        }, 6000);
+        return;
+      }
+      if (Date.now() - state.lastSnapshotAt > 15000) {
+        startFallbackPolling("Polling status");
+      }
+    });
+  }
+
+  function startFallbackPolling(label) {
+    if (state.fallbackTimer) return;
+    state.eventSource?.close();
+    setLiveState(label, "connecting");
+    state.fallbackTimer = window.setInterval(() => {
+      if (document.hidden) return;
+      load({ loadPicker: false }).catch(() => setLiveState("Status unavailable", "offline"));
+    }, 5000);
+  }
+
+  function setLiveState(text, stateName = "connecting") {
+    $$("[data-live-state]").forEach((node) => {
+      node.textContent = text;
+      node.dataset.state = stateName;
     });
   }
 
@@ -257,9 +631,22 @@
     renderSteps({});
     setText("[data-tenant-name]", "Not connected");
     setText("[data-onboarding-state]", "Needs Slack");
-    const message = err?.message || "Could not load onboarding status.";
-    setText("[data-slack-status]", message);
-    setText("[data-repo-form-status]", message);
+    setText("[data-slack-status]", "Disconnected");
+    setText("[data-github-status]", "Disconnected");
+    setText("[data-repo-form-status]", "Could not load setup status.");
+    setText("[data-github-complete-status]", "");
+    setLiveState("Status unavailable", "offline");
+  }
+
+  function safeSetupError(err, fallback) {
+    const message = String(err?.message || err || "").trim();
+    if (!message) return fallback;
+    if (/access|sign.?in|authenticated|permission/i.test(message) && message.length <= 96) return message;
+    if (/not configured|secret|private key|d1_error|sqlite|cannot read properties|undefined|stack|token|binding/i.test(message)) {
+      return fallback;
+    }
+    if (message.length > 120) return fallback;
+    return message;
   }
 
   function setText(selector, text) {
@@ -272,8 +659,38 @@
     setText("[data-github-callback-url]", `${window.location.origin}/oauth/github/callback`);
   }
 
+  function progressPercent(repo) {
+    const status = (repo.status || "").toUpperCase();
+    if (status === "READY") return 100;
+    if (status === "FAILED") return 100;
+    const indexed = Number(repo.indexedFiles || 0);
+    const total = Number(repo.totalFiles || 0);
+    if (total > 0) return Math.max(3, Math.min(99, Math.round((indexed / total) * 100)));
+    if (Number(repo.totalChunks || 0) > 0) return 70;
+    return 4;
+  }
+
+  function sortedRepos(repos) {
+    return repos
+      .filter((repo) => repo?.fullName)
+      .sort((a, b) => a.fullName.localeCompare(b.fullName, undefined, { sensitivity: "base" }));
+  }
+
+  function persistedRepoSet() {
+    return new Set((state.summary?.repos || []).map((repo) => repo.fullName).filter(Boolean));
+  }
+
+  function splitRepo(fullName) {
+    const [owner, name] = String(fullName).split("/");
+    return { owner: owner || "", name: name || fullName };
+  }
+
+  function formatNumber(value) {
+    return new Intl.NumberFormat().format(Number(value || 0));
+  }
+
   function escapeHtml(value) {
-    return value.replace(/[&<>"']/g, (char) => ({
+    return String(value).replace(/[&<>"']/g, (char) => ({
       "&": "&amp;",
       "<": "&lt;",
       ">": "&gt;",
@@ -283,17 +700,26 @@
   }
 
   bindForms();
+  {
+    const hashStep = journeyStepFromHash();
+    if (hashStep) setActiveJourneyStep(hashStep);
+  }
   renderGithubCallbackUrl();
+
   const params = new URLSearchParams(window.location.search);
   const urlError = params.get("error");
   if (urlError) {
-    setText("[data-slack-status]", urlError);
-    setText("[data-github-status]", urlError);
-    setText("[data-repo-form-status]", urlError);
+    const safeError = safeSetupError(urlError, "Setup could not continue. Try again from this step.");
+    setText("[data-slack-status]", safeError);
+    setText("[data-github-status]", safeError);
+    setText("[data-repo-form-status]", safeError);
   }
   if (params.get("github") === "connected") {
     setText("[data-github-status]", "Connected");
     setText("[data-github-complete-status]", "GitHub install linked to this workspace.");
   }
-  load().catch(showError);
+
+  load()
+    .then(startLiveUpdates)
+    .catch(showError);
 })();
