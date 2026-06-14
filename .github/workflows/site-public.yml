@@ -34,9 +34,9 @@ on:
           - production
           - preview
       app_name:
-        description: 'Cloudflare Access application name'
+        description: 'Cloudflare Access app name prefix (matches Configure site Access)'
         required: true
-        default: 'Beacon admin portal'
+        default: 'Beacon'
         type: string
 
 permissions:
