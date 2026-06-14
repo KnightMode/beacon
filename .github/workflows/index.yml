@@ -1,8 +1,9 @@
 name: Index Repository
 
-# Legacy/dev indexer CLI pipeline. Tenant/customer repos are indexed by the
-# Beacon-hosted indexer with GitHub App installation tokens, not by this
-# PAT-backed workflow. Keep this for internal compatibility and manual dev runs.
+# Indexer CLI runner. Tenant/customer repo jobs arrive through
+# repository_dispatch with tenantId + installationId; the CLI then mints a
+# GitHub App installation token. GITHUB_PAT is kept only for manual/internal
+# non-tenant runs.
 
 on:
   repository_dispatch:
@@ -32,6 +33,14 @@ on:
         description: 'optional commit sha'
         required: false
         default: ''
+      tenant_id:
+        description: 'optional tenant id for vector metadata'
+        required: false
+        default: ''
+      installation_id:
+        description: 'optional GitHub App installation id for App auth'
+        required: false
+        default: ''
 
 # Serialize indexings of the same repo so two runs never overlap.
 concurrency:
@@ -58,16 +67,22 @@ jobs:
           PAYLOAD_REPO: ${{ github.event.client_payload.repo }}
           PAYLOAD_JOBTYPE: ${{ github.event.client_payload.jobType }}
           PAYLOAD_SHA: ${{ github.event.client_payload.commitSha }}
+          PAYLOAD_TENANT_ID: ${{ github.event.client_payload.tenantId }}
+          PAYLOAD_INSTALLATION_ID: ${{ github.event.client_payload.installationId }}
           PAYLOAD_FILES_JSON: ${{ toJSON(github.event.client_payload.changedFiles) }}
           PAYLOAD_REMOVED_JSON: ${{ toJSON(github.event.client_payload.removedFiles) }}
           PAYLOAD_FORCE: ${{ github.event.client_payload.force }}
           INPUT_REPO: ${{ github.event.inputs.repo }}
           INPUT_JOBTYPE: ${{ github.event.inputs.job_type }}
           INPUT_SHA: ${{ github.event.inputs.commit_sha }}
+          INPUT_TENANT_ID: ${{ github.event.inputs.tenant_id }}
+          INPUT_INSTALLATION_ID: ${{ github.event.inputs.installation_id }}
           INPUT_FILES: ${{ github.event.inputs.files }}
           INPUT_REMOVED: ${{ github.event.inputs.removed_files }}
           INPUT_FORCE: ${{ github.event.inputs.force }}
           # indexer runtime config:
+          GITHUB_APP_ID: ${{ vars.BEACON_GITHUB_APP_ID }}
+          GITHUB_APP_PRIVATE_KEY: ${{ secrets.BEACON_GITHUB_APP_PRIVATE_KEY }}
           GITHUB_PAT: ${{ secrets.INDEXER_GITHUB_PAT }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
