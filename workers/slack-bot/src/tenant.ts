@@ -1,6 +1,9 @@
+import {
+  decryptSecretValue,
+  isEncryptedSecretValue,
+} from '@scintel/shared';
 import type { Env } from './env.js';
 
-const TOKEN_PREFIX = 'v1:';
 const CACHE_TTL_MS = 45_000;
 
 let cachedTokens = new Map<string, { token: string; expiresAt: number }>();
@@ -182,35 +185,9 @@ export async function markFirstCitedAnswer(
 }
 
 export async function decryptToken(env: Env, value: string): Promise<string> {
-  if (!value.startsWith(TOKEN_PREFIX)) return value;
+  if (!isEncryptedSecretValue(value)) return value;
   if (!env.SLACK_TOKEN_ENCRYPTION_SECRET) {
     throw new Error('SLACK_TOKEN_ENCRYPTION_SECRET is required for tenant Slack tokens');
   }
-
-  const [, ivB64, dataB64] = value.split(':');
-  if (!ivB64 || !dataB64) throw new Error('invalid encrypted Slack token');
-
-  const key = await crypto.subtle.importKey(
-    'raw',
-    await crypto.subtle.digest(
-      'SHA-256',
-      new TextEncoder().encode(env.SLACK_TOKEN_ENCRYPTION_SECRET),
-    ),
-    'AES-GCM',
-    false,
-    ['decrypt'],
-  );
-  const plain = await crypto.subtle.decrypt(
-    { name: 'AES-GCM', iv: fromBase64(ivB64) },
-    key,
-    fromBase64(dataB64),
-  );
-  return new TextDecoder().decode(plain);
-}
-
-function fromBase64(value: string): ArrayBuffer {
-  const bin = atob(value);
-  const out = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i += 1) out[i] = bin.charCodeAt(i);
-  return out.buffer;
+  return decryptSecretValue(value, env.SLACK_TOKEN_ENCRYPTION_SECRET);
 }

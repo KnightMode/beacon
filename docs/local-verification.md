@@ -61,8 +61,8 @@ npm run dev:bot
 
 The bot uses the **same** `.wrangler/state` local D1 as the portal. After mock
 OAuth, `getSlackBotToken(env, 'T_BEACON_DEMO')` decrypts the token stored by the
-portal (requires matching `SLACK_TOKEN_ENCRYPTION_SECRET` in `.dev.vars` and
-`workers/slack-bot/.dev.vars`).
+portal (requires matching `SLACK_TOKEN_ENCRYPTION_SECRET` in repo-root
+`.dev.vars` and `workers/slack-bot/.dev.vars`).
 
 Create `workers/slack-bot/.dev.vars` with at least:
 

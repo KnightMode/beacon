@@ -1,5 +1,9 @@
 # SSO and authentication (multi-tenant design)
 
+Status: partially implemented. Slack OAuth currently powers the admin
+onboarding session and tenant Slack install records. Strict per-user GitHub
+permission mirroring is still future work.
+
 Who is allowed to talk to Beacon, and how we know who they are. The short
 version: **Slack is our SSO**. We never run our own passwords, signup forms,
 or user database logins.
@@ -20,8 +24,8 @@ Every request involves up to three identities, each verified differently:
   is an authorized member of that workspace — we inherit Slack's own SSO,
   2FA, and admin approval policies for free.
 - The bot token we receive is scoped to exactly one workspace. We encrypt it
-  (AES-GCM, key held as a Worker secret) before storing it in the control
-  database. Decryption only happens in-memory while handling a request.
+  (AES-GCM, key held as a Worker/Pages secret) before storing it in D1.
+  Decryption only happens in-memory while handling a request.
 - Every incoming Slack request is verified with the signing secret (HMAC,
   already implemented in `workers/slack-bot/src/signature.ts`). A request
   that doesn't carry a valid signature never reaches any logic.
@@ -50,9 +54,11 @@ Two levels, depending on how strict the tenant wants to be:
 
 - The tenant installs our GitHub App and picks repos. Everyone in the Slack
   workspace can query everything the tenant has indexed.
-- All GitHub API calls use short-lived installation tokens minted from the
-  App's private key. Tokens live ~1 hour, are cached, and are never stored
-  long-term. No PATs.
+- Current implementation: the admin repo picker uses short-lived installation
+  tokens minted from the App's private key; indexing and Slack-side PR actions
+  still use configured PATs.
+- Target implementation: all tenant GitHub reads should move to installation
+  tokens so long-lived PATs are not required for customer repo access.
 
 ### Level 2 — per-user mirroring (opt-in, "strict mode")
 
@@ -73,13 +79,15 @@ Two levels, depending on how strict the tenant wants to be:
   the tenant context so the indexer can only write to that tenant's database
   and namespace.
 - Stripe webhooks: Stripe signature verification.
-- Admin/eval endpoints: bearer tokens, as today.
+- Admin portal: Cloudflare Access protects deployed admin paths; the Pages app
+  also uses a signed short-lived `beacon_admin_session` cookie after Slack
+  OAuth.
+- Eval endpoints: bearer token.
 
 ## What we deliberately do NOT build
 
-- No email/password accounts, no password resets, no session cookies for the
-  core product. Slack and GitHub are the only login screens a customer ever
-  sees, and both are screens they already trust.
-- If we later ship a web dashboard, it signs in with **"Sign in with Slack"**
-  (OpenID Connect) so the identity model stays exactly the same — one
-  identity, defined by Slack membership.
+- No email/password accounts and no password resets. Slack and GitHub are the
+  only login screens a customer sees, and both are screens they already trust.
+- The current web admin onboarding surface already signs in through Slack OAuth
+  and stores only a signed session cookie. Broader dashboard pages should keep
+  that same identity model.

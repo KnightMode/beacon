@@ -1,6 +1,5 @@
 import { getTenantSlackBotToken, HttpError } from './admin.js';
-
-const SLACK_API = 'https://slack.com/api';
+import { slackPostForm } from './slackClient.js';
 
 export async function queryWorkspaceChannels(env, tenantId, options = {}) {
   const token = await getTenantSlackBotToken(env, tenantId);
@@ -54,17 +53,5 @@ export async function queryWorkspaceChannels(env, tenantId, options = {}) {
 }
 
 async function slackApi(token, method, params) {
-  const res = await fetch(`${SLACK_API}/${method}`, {
-    method: 'POST',
-    headers: {
-      authorization: `Bearer ${token}`,
-      'content-type': 'application/x-www-form-urlencoded',
-    },
-    body: new URLSearchParams(params),
-  });
-  const body = await res.json();
-  if (!body.ok) {
-    throw new HttpError(400, `Slack ${method} failed: ${body.error || 'unknown'}`);
-  }
-  return body;
+  return slackPostForm(method, params, { token });
 }

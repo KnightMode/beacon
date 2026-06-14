@@ -1,5 +1,10 @@
 # Automated resource provisioning (multi-tenant design)
 
+Status: future design. The current implementation does not create one D1
+database per tenant. It uses tenant-scoped rows in the shared `scintel` D1
+database, with the admin portal and Slack bot filtering by Slack team/tenant.
+This document describes the intended next isolation model.
+
 How Beacon creates real, isolated infrastructure for every new customer —
 automatically, in seconds, with zero deploys and zero human steps. This is
 the engineering heart of the "database per tenant" decision.
@@ -30,10 +35,10 @@ The same API also **creates** databases. That is what makes provisioning
 fully dynamic: onboarding a customer is a couple of API calls, not an
 infrastructure change.
 
-The indexer already uses this exact pattern today
-(`services/indexer/src/cloudflare/d1.ts` queries D1 over REST with no
-binding). The plan promotes that client into `packages/shared` so the
-Workers use it too.
+The indexer already uses this exact pattern today through the REST clients under
+`services/indexer/src/cloudflare/`. The future plan is to expose a tenant-safe
+D1 HTTP client to Workers as well, once Workers need dynamic tenant database
+access.
 
 Only **one** database is statically bound: the control plane (`CONTROL_DB`),
 which holds the directory of tenants — including each tenant's

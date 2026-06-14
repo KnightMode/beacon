@@ -10,7 +10,7 @@
  * through the existing reaction → createPrFromThread path.
  */
 
-import type { Citation, TriageJob } from '@scintel/shared';
+import { parseRepoRef, type Citation, type TriageJob } from '@scintel/shared';
 import type { Env } from '../env.js';
 import { GitHubClient, type CommitDiff } from '../github.js';
 import { retrieveSmart } from '../retrieval/pipeline.js';
@@ -152,9 +152,17 @@ async function buildMessage(
   gh: GitHubClient,
   job: TriageJob,
 ): Promise<TriageMessage> {
-  const [owner, repo] = job.repoFullName.split('/') as [string, string];
+  const repo = parseRepoRef(job.repoFullName);
+  if (!repo) {
+    throw new Error(`invalid repo full name: ${job.repoFullName}`);
+  }
 
-  const runJobs = await gh.getWorkflowRunJobs(owner, repo, job.runId, job.runAttempt);
+  const runJobs = await gh.getWorkflowRunJobs(
+    repo.owner,
+    repo.name,
+    job.runId,
+    job.runAttempt,
+  );
   const failedJobs = runJobs.filter((j) => j.conclusion === 'failure');
 
   const failedSteps: string[] = [];
@@ -166,7 +174,7 @@ async function buildMessage(
         .filter((s) => s.conclusion === 'failure')
         .map((s) => `${fj.name} › ${s.name}`);
       try {
-        const log = await gh.getJobLogs(owner, repo, fj.id);
+        const log = await gh.getJobLogs(repo.owner, repo.name, fj.id);
         return {
           steps: steps.length > 0 ? steps : [fj.name],
           excerpt: extractErrorExcerpt(log, EXCERPT_BUDGET),
@@ -215,7 +223,7 @@ async function buildMessage(
   const searchText = [question, ...harvestPaths(excerpt)].join(' ');
 
   const commitDiffPromise = gh
-    .getCommitDiff(owner, repo, job.headSha)
+    .getCommitDiff(repo.owner, repo.name, job.headSha)
     .then((diff) => formatCommitDiff(diff))
     .catch((err) => {
       console.warn('ci triage: commit diff fetch failed', {

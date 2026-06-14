@@ -18,6 +18,7 @@ import {
   scanForSecrets,
   redactSecrets,
   buildEmbeddingText,
+  parseRepoRef,
   sha256Hex,
 } from '@scintel/shared';
 
@@ -45,7 +46,6 @@ import {
   insertChunks,
   insertEdges,
   countChunksForRepo,
-  repoIdFor,
   fileIdFor,
 } from './store.js';
 import { log } from '../logger.js';
@@ -73,16 +73,16 @@ export async function indexRepo(
   const vectorize = new VectorizeClient(config);
   const ai = new WorkersAIClient(config);
 
-  const [owner, name] = job.repoFullName.split('/');
-  if (!owner || !name) {
+  const repo = parseRepoRef(job.repoFullName);
+  if (!repo) {
     throw new Error(`invalid repo full name: ${job.repoFullName}`);
   }
-  const repoId = repoIdFor(job.repoFullName);
+  const repoId = repo.id;
 
-  const repoInfo = await github.getRepo(owner, name);
+  const repoInfo = await github.getRepo(repo.owner, repo.name);
   const commitSha =
     job.commitSha ??
-    (await github.getBranchHeadSha(owner, name, repoInfo.default_branch));
+    (await github.getBranchHeadSha(repo.owner, repo.name, repoInfo.default_branch));
 
   await ensureRepoRow(
     d1,
@@ -153,7 +153,7 @@ export async function indexRepo(
     prior.lastIndexedSha !== commitSha
   ) {
     const diff = await github
-      .compareCommits(owner, name, prior.lastIndexedSha, commitSha)
+      .compareCommits(repo.owner, repo.name, prior.lastIndexedSha, commitSha)
       .catch(() => null);
     if (diff) {
       effectiveJob = {
@@ -184,7 +184,7 @@ export async function indexRepo(
   });
 
   try {
-    const tree = await github.getTree(owner, name, commitSha);
+    const tree = await github.getTree(repo.owner, repo.name, commitSha);
     const byPath = new Map<string, TreeEntry>();
     for (const entry of tree) byPath.set(entry.path, entry);
 
@@ -207,7 +207,7 @@ export async function indexRepo(
 
     const tarball =
       targets.length > 0
-        ? await github.downloadTarball(owner, name, commitSha)
+        ? await github.downloadTarball(repo.owner, repo.name, commitSha)
         : new Map<string, string>();
     const priorHashes = await getFileContentHashes(
       d1,
@@ -222,8 +222,8 @@ export async function indexRepo(
         vectorize,
         ai,
         github,
-        owner,
-        name,
+        owner: repo.owner,
+        name: repo.name,
         repoId,
         repoFullName: job.repoFullName,
         commitSha,

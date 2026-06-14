@@ -5,8 +5,7 @@
  */
 
 import type { IndexerConfig } from '../config.js';
-
-const BASE = 'https://api.cloudflare.com/client/v4';
+import { CloudflareApiClient } from './api.js';
 
 interface D1QueryResult<T> {
   results: T[];
@@ -15,43 +14,30 @@ interface D1QueryResult<T> {
 }
 
 export class D1Client {
-  private readonly accountId: string;
   private readonly databaseId: string;
-  private readonly apiToken: string;
+  private readonly api: CloudflareApiClient;
 
   constructor(config: IndexerConfig) {
-    this.accountId = config.cloudflare.accountId;
     this.databaseId = config.cloudflare.d1DatabaseId;
-    this.apiToken = config.cloudflare.apiToken;
+    this.api = new CloudflareApiClient(
+      config.cloudflare.accountId,
+      config.cloudflare.apiToken,
+    );
   }
 
   async query<T = Record<string, unknown>>(
     sql: string,
     params: unknown[] = [],
   ): Promise<T[]> {
-    const url = `${BASE}/accounts/${this.accountId}/d1/database/${this.databaseId}/query`;
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: {
-        authorization: `Bearer ${this.apiToken}`,
-        'content-type': 'application/json',
+    const result = await this.api.accountRequest<D1QueryResult<T>[]>(
+      `/d1/database/${this.databaseId}/query`,
+      {
+        method: 'POST',
+        body: { sql, params },
+        label: 'D1 query',
       },
-      body: JSON.stringify({ sql, params }),
-    });
-    if (!res.ok) {
-      const text = await res.text().catch(() => '');
-      throw new Error(`D1 query failed: ${res.status} ${text.slice(0, 500)}`);
-    }
-    const body = (await res.json()) as {
-      success: boolean;
-      errors?: Array<{ message: string }>;
-      result: D1QueryResult<T>[];
-    };
-    if (!body.success) {
-      const msg = body.errors?.map((e) => e.message).join('; ') ?? 'unknown';
-      throw new Error(`D1 query error: ${msg}`);
-    }
-    return body.result[0]?.results ?? [];
+    );
+    return result[0]?.results ?? [];
   }
 
   /** Convenience for statements with no result rows. */

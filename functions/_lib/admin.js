@@ -1,3 +1,15 @@
+import {
+  base64UrlToBytes,
+  bytesToBase64Url,
+  bytesToUtf8,
+  decryptSecretValue,
+  encryptSecretValue,
+  isEncryptedSecretValue,
+  parseRepoRef,
+  utf8ToBytes,
+} from '@scintel/shared';
+import { syncRemoteIndexStatus } from './remoteD1.js';
+
 const COOKIE = 'beacon_admin_session';
 const GITHUB_LINK_COOKIE = 'beacon_github_link';
 const SESSION_TTL = 60 * 60 * 24 * 14;
@@ -32,14 +44,14 @@ export async function readSession(context) {
   if (!payloadB64 || !sig) return null;
   const expected = await hmac(context.env.ADMIN_SESSION_SECRET, payloadB64);
   if (!timingSafeEqual(sig, expected)) return null;
-  const payload = JSON.parse(new TextDecoder().decode(base64urlDecode(payloadB64)));
+  const payload = JSON.parse(bytesToUtf8(base64UrlToBytes(payloadB64)));
   if (!payload.exp || payload.exp < Math.floor(Date.now() / 1000)) return null;
   return payload;
 }
 
 export async function sessionCookie(context, payload) {
   const exp = Math.floor(Date.now() / 1000) + SESSION_TTL;
-  const body = base64urlEncode(JSON.stringify({ ...payload, exp }));
+  const body = bytesToBase64Url(utf8ToBytes(JSON.stringify({ ...payload, exp })));
   const sig = await hmac(context.env.ADMIN_SESSION_SECRET, body);
   return `${COOKIE}=${body}.${sig}; Path=/; Max-Age=${SESSION_TTL}; HttpOnly${secureCookieSuffix(context.request)}; SameSite=Lax`;
 }
@@ -50,7 +62,7 @@ export function oauthStateCookie(request, state) {
 
 export async function githubLinkCookie(context, tenantId) {
   const exp = Math.floor(Date.now() / 1000) + GITHUB_LINK_TTL;
-  const body = base64urlEncode(JSON.stringify({ tenantId, exp }));
+  const body = bytesToBase64Url(utf8ToBytes(JSON.stringify({ tenantId, exp })));
   const sig = await hmac(context.env.ADMIN_SESSION_SECRET, body);
   return `${GITHUB_LINK_COOKIE}=${body}.${sig}; Path=/; Max-Age=${GITHUB_LINK_TTL}; HttpOnly${secureCookieSuffix(context.request)}; SameSite=Lax`;
 }
@@ -70,7 +82,7 @@ export async function readGithubLinkTenant(context) {
   if (!payloadB64 || !sig) return null;
   const expected = await hmac(context.env.ADMIN_SESSION_SECRET, payloadB64);
   if (!timingSafeEqual(sig, expected)) return null;
-  const payload = JSON.parse(new TextDecoder().decode(base64urlDecode(payloadB64)));
+  const payload = JSON.parse(bytesToUtf8(base64UrlToBytes(payloadB64)));
   if (!payload.exp || payload.exp < Math.floor(Date.now() / 1000)) return null;
   return payload.tenantId || null;
 }
@@ -205,8 +217,6 @@ export async function tenantSummary(env, tenantId) {
   };
 }
 
-import { syncRemoteIndexStatus } from './remoteD1.js';
-
 export async function listTenantRepos(env, tenantId) {
   const { results } = await env.DB.prepare(
     `SELECT tr.full_name, tr.repo_id, tr.installation_id, gi.account_login,
@@ -239,10 +249,8 @@ export async function listTenantRepos(env, tenantId) {
 }
 
 export async function upsertRepo(env, repo) {
-  const fullName = repo.fullName.trim();
-  const [owner, name] = fullName.split('/');
-  if (!owner || !name) throw new HttpError(400, `Invalid repo: ${fullName}`);
-  const repoId = fullName.toLowerCase();
+  const parsed = parseRepoRef(repo.fullName || '');
+  if (!parsed) throw new HttpError(400, `Invalid repo: ${repo.fullName || ''}`);
   await env.DB.prepare(
     `INSERT INTO repos (id, github_id, full_name, owner, name, default_branch, private, indexing_status, updated_at)
      VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 'PENDING', datetime('now'))
@@ -254,16 +262,16 @@ export async function upsertRepo(env, repo) {
        updated_at = datetime('now')`,
   )
     .bind(
-      repoId,
+      parsed.id,
       repo.githubId || null,
-      fullName,
-      owner,
-      name,
+      parsed.fullName,
+      parsed.owner,
+      parsed.name,
       repo.defaultBranch || 'main',
       repo.private === false ? 0 : 1,
     )
     .run();
-  return { repoId, fullName };
+  return { repoId: parsed.id, fullName: parsed.fullName };
 }
 
 export async function markStep(env, tenantId, step, status, metadata) {
@@ -284,43 +292,20 @@ export async function encryptSecret(env, value) {
   if (!env.SLACK_TOKEN_ENCRYPTION_SECRET) {
     throw new HttpError(500, 'SLACK_TOKEN_ENCRYPTION_SECRET is not configured.');
   }
-  const iv = crypto.getRandomValues(new Uint8Array(12));
-  const key = await crypto.subtle.importKey(
-    'raw',
-    await crypto.subtle.digest('SHA-256', new TextEncoder().encode(env.SLACK_TOKEN_ENCRYPTION_SECRET)),
-    'AES-GCM',
-    false,
-    ['encrypt'],
-  );
-  const encrypted = await crypto.subtle.encrypt(
-    { name: 'AES-GCM', iv },
-    key,
-    new TextEncoder().encode(value),
-  );
-  return `v1:${base64(iv)}:${base64(new Uint8Array(encrypted))}`;
+  return encryptSecretValue(value, env.SLACK_TOKEN_ENCRYPTION_SECRET);
 }
 
 export async function decryptSecret(env, value) {
   if (!value) return null;
-  if (!value.startsWith('v1:')) return value;
+  if (!isEncryptedSecretValue(value)) return value;
   if (!env.SLACK_TOKEN_ENCRYPTION_SECRET) {
     throw new HttpError(500, 'SLACK_TOKEN_ENCRYPTION_SECRET is not configured.');
   }
-  const [, ivB64, dataB64] = value.split(':');
-  if (!ivB64 || !dataB64) throw new HttpError(500, 'Invalid encrypted secret format.');
-  const key = await crypto.subtle.importKey(
-    'raw',
-    await crypto.subtle.digest('SHA-256', new TextEncoder().encode(env.SLACK_TOKEN_ENCRYPTION_SECRET)),
-    'AES-GCM',
-    false,
-    ['decrypt'],
-  );
-  const plain = await crypto.subtle.decrypt(
-    { name: 'AES-GCM', iv: base64Decode(ivB64) },
-    key,
-    base64Decode(dataB64),
-  );
-  return new TextDecoder().decode(plain);
+  try {
+    return await decryptSecretValue(value, env.SLACK_TOKEN_ENCRYPTION_SECRET);
+  } catch (err) {
+    throw new HttpError(500, err.message);
+  }
 }
 
 export async function getTenantSlackBotToken(env, tenantId) {
@@ -424,13 +409,13 @@ async function hmac(secret, value) {
   if (!secret) throw new HttpError(500, 'ADMIN_SESSION_SECRET is not configured.');
   const key = await crypto.subtle.importKey(
     'raw',
-    new TextEncoder().encode(secret),
+    utf8ToBytes(secret),
     { name: 'HMAC', hash: 'SHA-256' },
     false,
     ['sign'],
   );
-  const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(value));
-  return base64urlEncode(new Uint8Array(sig));
+  const sig = await crypto.subtle.sign('HMAC', key, utf8ToBytes(value));
+  return bytesToBase64Url(sig);
 }
 
 function timingSafeEqual(a, b) {
@@ -438,30 +423,4 @@ function timingSafeEqual(a, b) {
   let diff = 0;
   for (let i = 0; i < a.length; i += 1) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
   return diff === 0;
-}
-
-function base64(bytes) {
-  let bin = '';
-  for (const byte of bytes) bin += String.fromCharCode(byte);
-  return btoa(bin);
-}
-
-function base64Decode(value) {
-  const bin = atob(value);
-  const out = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i += 1) out[i] = bin.charCodeAt(i);
-  return out;
-}
-
-function base64urlEncode(value) {
-  const bytes = typeof value === 'string' ? new TextEncoder().encode(value) : value;
-  return base64(bytes).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-}
-
-function base64urlDecode(value) {
-  const padded = value.replace(/-/g, '+').replace(/_/g, '/').padEnd(Math.ceil(value.length / 4) * 4, '=');
-  const bin = atob(padded);
-  const out = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i += 1) out[i] = bin.charCodeAt(i);
-  return out;
 }

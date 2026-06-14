@@ -6,6 +6,9 @@
   untrusted data in prompts, never as instructions.
 - **Secret redaction** — chunks with obvious credentials are redacted before
   embedding.
+- **Encrypted tenant Slack tokens** — Slack OAuth bot tokens are stored with
+  AES-GCM encryption using `SLACK_TOKEN_ENCRYPTION_SECRET`. Decryption happens
+  only in-memory when handling tenant-scoped Slack API calls.
 - **Admin portal Access** — deployed `/admin`, `/api/admin`, and OAuth callback
   routes require a valid Cloudflare Access JWT. The Pages middleware verifies
   the `Cf-Access-Jwt-Assertion` signature, issuer, audience, expiry, and optional
@@ -15,9 +18,10 @@
 ## Tenant auth
 
 Multi-tenant onboarding stores Slack installs, GitHub App installations,
-installation repo grants, selected GitHub repos, and optional notification
-channels per tenant. Slack bot retrieval is restricted to repos selected for the
-requesting Slack team.
+installation repo grants, selected GitHub repos, onboarding steps, and optional
+notification channels per tenant. The current production model is tenant-scoped
+rows in the shared `scintel` D1 database plus a shared Vectorize index; Slack
+bot retrieval is restricted to repos selected for the requesting Slack team.
 
 Tenant GitHub access uses short-lived GitHub App installation tokens resolved
 from the selected repo's installation. Legacy PAT paths are for local/internal
