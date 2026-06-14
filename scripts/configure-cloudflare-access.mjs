@@ -163,24 +163,30 @@ async function ensureAccessApplication(identityProviderId, domain) {
 
 async function ensureApplicationAllowsIdentityProvider(app, identityProviderId, domain) {
   const allowedIdps = normalizeAllowedIdps(app.allowed_idps);
+  const desiredName = appDisplayName(domain);
+  const hasIdp = allowedIdps.length === 0 || allowedIdps.includes(identityProviderId);
+  const nameMatches = app.name === desiredName;
 
-  if (allowedIdps.length === 0 || allowedIdps.includes(identityProviderId)) {
+  // Nothing to reconcile — identity provider already allowed and the name is current.
+  if (hasIdp && nameMatches) {
     return app;
   }
+
+  const mergedIdps = hasIdp ? allowedIdps : [...allowedIdps, identityProviderId];
 
   const response = await cfFetch(`/access/apps/${app.id}`, {
     method: 'PUT',
     body: {
-      name: app.name || appDisplayName(domain),
+      name: desiredName,
       type: app.type || 'self_hosted',
       domain: app.domain || domain,
-      allowed_idps: [...allowedIdps, identityProviderId],
+      allowed_idps: mergedIdps,
       policies: policyReferences(app),
       session_duration: app.session_duration || sessionDuration,
     },
   });
 
-  console.log(`Added One-time PIN identity provider to Access application: ${response.result.id}`);
+  console.log(`Reconciled Access application ${response.result.id} (name: "${desiredName}")`);
   return response.result;
 }
 
