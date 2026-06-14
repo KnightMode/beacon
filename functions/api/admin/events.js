@@ -1,4 +1,4 @@
-import { handleError, json, readSession, tenantSummary } from '../../_lib/admin.js';
+import { handleError, readSession, tenantSummary } from '../../_lib/admin.js';
 
 const encoder = new TextEncoder();
 const POLL_INTERVAL_MS = 2500;
@@ -7,7 +7,7 @@ const STREAM_TTL_MS = 60_000;
 export async function onRequestGet(context) {
   try {
     const session = await readSession(context);
-    if (!session?.tenantId) return json({ authenticated: false }, 401);
+    if (!session?.tenantId) return signedOutStream();
 
     let cleanup = () => {};
     const stream = new ReadableStream({
@@ -72,4 +72,22 @@ export async function onRequestGet(context) {
   } catch (err) {
     return handleError(err);
   }
+}
+
+function signedOutStream() {
+  const stream = new ReadableStream({
+    start(controller) {
+      controller.enqueue(
+        encoder.encode('event: signed-out\ndata: {"authenticated":false}\n\n'),
+      );
+      controller.close();
+    },
+  });
+
+  return new Response(stream, {
+    headers: {
+      'content-type': 'text/event-stream; charset=utf-8',
+      'cache-control': 'no-store, no-transform',
+    },
+  });
 }
