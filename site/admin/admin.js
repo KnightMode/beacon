@@ -184,10 +184,18 @@
   function renderTenant(data) {
     const tenantName = data.tenant?.name || data.tenant?.slackTeamId || "Not connected";
     setText("[data-tenant-name]", tenantName);
-    setText("[data-slack-status]", data.integrations?.slack ? "Connected" : "Disconnected");
-    setText("[data-github-status]", data.integrations?.github ? "Connected" : "Disconnected");
+    setConnState("[data-slack-status]", Boolean(data.integrations?.slack));
+    setConnState("[data-github-status]", Boolean(data.integrations?.github));
     setText("[data-repo-count]", String((data.repos || []).length));
     setText("[data-onboarding-state]", data.completed ? "Complete" : "In progress");
+  }
+
+  function setConnState(selector, on) {
+    $$(selector).forEach((node) => {
+      node.textContent = on ? "Connected" : "Disconnected";
+      node.dataset.state = on ? "on" : "off";
+      node.closest(".stat-tile")?.setAttribute("data-state", on ? "on" : "off");
+    });
   }
 
   function renderSteps(steps) {
@@ -206,15 +214,15 @@
     $$("[data-step-list]").forEach((node) => {
       node.innerHTML = html;
     });
+    const completeCount = stepOrder.filter((key) => (steps[key] || "PENDING").toLowerCase() === "complete").length;
+    renderJourneyProgress(completeCount);
     if (isOnboarding) renderJourneyCards(steps);
   }
 
   function renderJourneyCards(steps) {
-    let completeCount = 0;
     for (const key of stepOrder) {
       const status = steps[key] || "PENDING";
       const normalized = status.toLowerCase();
-      if (normalized === "complete") completeCount += 1;
       const previousStatus = state.journeyStatuses.get(key);
       const button = $(`[data-journey-card="${key}"]`);
       if (button) {
@@ -226,7 +234,6 @@
       state.journeyStatuses.set(key, normalized);
       setText(`[data-journey-status="${key}"]`, status);
     }
-    renderJourneyProgress(completeCount);
     if (!state.activeJourneyStep) {
       setActiveJourneyStep(initialJourneyStep(steps));
     }

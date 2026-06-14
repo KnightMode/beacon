@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&family=Newsreader:opsz,wght@6..72,500;6..72,650;6..72,750&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="../styles.css?v=16" />
+  <link rel="stylesheet" href="../styles.css?v=18" />
 </head>
 <body class="admin-shell" data-admin-page="status">
   <a class="skip-link" href="#main">Skip to content</a>
@@ -31,39 +31,49 @@
 
   <main id="main" class="admin-main">
     <section class="admin-hero" aria-labelledby="admin-title">
-      <div>
+      <div class="admin-hero__lead">
         <p class="kicker">Admin control plane</p>
-        <h1 id="admin-title">Setup status with receipts.</h1>
+        <h1 id="admin-title">Setup status, with receipts.</h1>
         <p>Connect Slack, connect GitHub, choose repos, and watch the first indexed answers become available to the workspace.</p>
+        <div class="admin-hero__actions">
+          <a class="button button--primary" href="/admin/onboarding/">Continue setup</a>
+          <button class="button button--quiet" type="button" data-refresh>Refresh</button>
+        </div>
       </div>
-      <div class="admin-hero__actions">
-        <a class="button button--primary" href="/admin/onboarding/">Continue setup</a>
-        <button class="button button--quiet" type="button" data-refresh>Refresh</button>
-      </div>
+      <aside class="admin-hero__card" aria-label="Workspace overview">
+        <span class="admin-hero__card-label">Workspace</span>
+        <strong data-tenant-name>Not connected</strong>
+        <div class="admin-hero__progress">
+          <div class="admin-hero__progress-head">
+            <span>Setup progress</span>
+            <em><b data-journey-progress-count>0</b> / <span data-journey-progress-total>6</span> · <span data-journey-progress-pct>0%</span></em>
+          </div>
+          <div class="journey-meter"><i data-journey-progress-bar style="--p: 0%"></i></div>
+        </div>
+        <em class="admin-hero__card-state" data-onboarding-state>Pending</em>
+      </aside>
     </section>
 
-    <section class="admin-grid" aria-label="Workspace status">
-      <article class="admin-panel admin-panel--dark">
-        <div class="admin-panel__topline">
-          <span>Workspace</span>
-          <strong data-tenant-name>Not connected</strong>
-        </div>
-        <dl class="admin-metrics">
-          <div>
-            <dt>Slack</dt>
-            <dd data-slack-status>Disconnected</dd>
-          </div>
-          <div>
-            <dt>GitHub</dt>
-            <dd data-github-status>Disconnected</dd>
-          </div>
-          <div>
-            <dt>Repos</dt>
-            <dd data-repo-count>0</dd>
-          </div>
-        </dl>
+    <section class="admin-stats" aria-label="Workspace metrics">
+      <article class="stat-tile" data-tile="slack">
+        <span>Slack</span>
+        <strong data-slack-status>Disconnected</strong>
       </article>
+      <article class="stat-tile" data-tile="github">
+        <span>GitHub</span>
+        <strong data-github-status>Disconnected</strong>
+      </article>
+      <article class="stat-tile">
+        <span>Repos</span>
+        <strong data-repo-count>0</strong>
+      </article>
+      <article class="stat-tile">
+        <span>Onboarding</span>
+        <strong data-onboarding-state>Pending</strong>
+      </article>
+    </section>
 
+    <section class="admin-grid" aria-label="Setup and index health">
       <article class="admin-panel">
         <div class="admin-panel__topline">
           <span>Onboarding</span>
@@ -71,20 +81,47 @@
         </div>
         <ol class="setup-rail" data-step-list></ol>
       </article>
-    </section>
 
-    <section class="admin-panel admin-panel--wide" aria-labelledby="repos-title">
-      <div class="admin-panel__topline">
-        <span>Indexed repos</span>
-        <strong id="repos-title">Tenant-scoped evidence</strong>
-      </div>
-      <div class="repo-table" data-repo-table>
-        <p class="admin-empty">No repos selected yet. Continue setup to add the first pilot repo.</p>
+      <div class="admin-stack">
+        <article class="admin-panel">
+          <div class="admin-panel__topline">
+            <span>Index health</span>
+            <strong>Live indexing rollup</strong>
+          </div>
+          <div class="index-health">
+            <div class="index-stat" data-tone="ready">
+              <span>Ready</span>
+              <strong data-index-ready>0</strong>
+            </div>
+            <div class="index-stat" data-tone="active">
+              <span>Indexing</span>
+              <strong data-index-active>0</strong>
+            </div>
+            <div class="index-stat" data-tone="failed">
+              <span>Failed</span>
+              <strong data-index-failed>0</strong>
+            </div>
+            <div class="index-stat" data-tone="chunks">
+              <span>Chunks</span>
+              <strong data-index-chunks>0</strong>
+            </div>
+          </div>
+        </article>
+
+        <article class="admin-panel" aria-labelledby="repos-title">
+          <div class="admin-panel__topline">
+            <span>Indexed repos</span>
+            <strong id="repos-title">Tenant-scoped evidence</strong>
+          </div>
+          <div class="repo-table" data-repo-table>
+            <p class="admin-empty">No repos selected yet. Continue setup to add the first pilot repo.</p>
+          </div>
+        </article>
       </div>
     </section>
   </main>
 
   <script src="../main.js?v=7"></script>
-  <script src="./admin.js?v=10"></script>
+  <script src="./admin.js?v=11"></script>
 </body>
 </html>
