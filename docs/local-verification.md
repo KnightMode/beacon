@@ -92,7 +92,7 @@ npm run db:local:query -- "SELECT tenant_id, repo_id, installation_id, full_name
 | Admin UI + API routes | Cloudflare Pages deploy |
 | Mock Slack/GitHub OAuth | Real OAuth redirect URLs |
 | Multiple installation repo picker | Real GitHub App installation webhooks/API |
-| Local mock indexing status | Hosted indexer (`INDEXER_URL` + `INDEXER_SHARED_SECRET`) |
+| Local mock indexing status | GitHub Actions indexer workflow and Cloudflare API credentials |
 | Shared local D1 with slack-bot | Slack Events API (needs tunnel + app config) |
 
 ## Troubleshooting

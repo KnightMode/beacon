@@ -281,8 +281,8 @@ function assertAdminRuntimeConfigured(envVars) {
     'GITHUB_APP_SLUG',
     'GITHUB_APP_ID',
     'GITHUB_APP_PRIVATE_KEY',
-    'INDEXER_URL',
-    'INDEXER_SHARED_SECRET',
+    'PIPELINE_DISPATCH_REPO',
+    'PIPELINE_DISPATCH_TOKEN',
   ].filter((name) => !envVars[name]);
   if (missing.length === 0) return;
 

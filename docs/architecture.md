@@ -17,10 +17,11 @@ pipeline that runs in GitHub Actions. Nothing to operate, nothing to keep warm.
                                               │ writes (Cloudflare REST)
  GitHub App ──install/push──▶ workers/github-webhook (CF Worker)
                               │  HMAC verify → enqueue index job (CF Queue)
-                              │  consumer → hosted indexer for tenant jobs
+                              │  consumer → repository_dispatch
                               ▼
-                services/indexer (Node HTTP service)
-                              │  mints GitHub App installation token:
+                GitHub Actions: Index Repository workflow
+                              │  runs services/indexer CLI and mints
+                              │  GitHub App installation token:
                               │  fetch tree → tree-sitter chunking →
                               │  secret redaction → embed → upsert
 ```
@@ -46,16 +47,18 @@ pipeline that runs in GitHub Actions. Nothing to operate, nothing to keep warm.
 
 The webhook worker verifies GitHub HMAC signatures, stores the installation's
 live repo grants, and enqueues index jobs only for tenant-selected repos. Tenant
-jobs go to the hosted Node indexer, which mints a short-lived GitHub App
-installation token for the selected installation and then runs:
+jobs go to the `Index Repository` GitHub Actions workflow with `tenantId` and
+`installationId`. The workflow runs the Node indexer CLI, which mints a
+short-lived GitHub App installation token for the selected installation and then
+runs:
 
 ```
 fetch tree → tree-sitter chunking → secret redaction → embed → upsert
 ```
 
-Tree-sitter parsing is too heavy for a request-path Worker, so the indexer is a
-standalone Node service. The legacy GitHub Actions `repository_dispatch` path is
-kept for internal/dev fallback jobs that are not tenant-scoped.
+Tree-sitter parsing is too heavy for a request-path Worker, so the indexer runs
+as a Node process in GitHub Actions. The optional hosted HTTP indexer path is
+only a fallback for deployments that choose to operate one.
 
 ### Chunking by language
 

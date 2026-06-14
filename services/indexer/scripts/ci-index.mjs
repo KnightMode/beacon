@@ -27,7 +27,16 @@ const jobType = (
   'FULL_INDEX'
 ).trim();
 
-const sha = (process.env.PAYLOAD_SHA || process.env.INPUT_SHA || '').trim();
+const sha = optionalValue(process.env.PAYLOAD_SHA || process.env.INPUT_SHA);
+const tenantId = optionalValue(process.env.PAYLOAD_TENANT_ID || process.env.INPUT_TENANT_ID);
+const installationId = optionalValue(
+  process.env.PAYLOAD_INSTALLATION_ID || process.env.INPUT_INSTALLATION_ID,
+);
+
+function optionalValue(value) {
+  const trimmed = (value || '').trim();
+  return trimmed === 'null' || trimmed === 'undefined' ? '' : trimmed;
+}
 
 function fileList(payloadJson, inputText) {
   let files = [];
@@ -60,6 +69,12 @@ const force =
     .toLowerCase() === 'true';
 
 const args = ['tsx', 'src/cli.ts', repo];
+if (tenantId) {
+  args.push('--tenant-id', tenantId);
+}
+if (installationId) {
+  args.push('--installation-id', installationId);
+}
 if (jobType === 'INCREMENTAL_INDEX' && (files.length || removed.length)) {
   args.push('--incremental', ...files);
   if (removed.length) args.push('--removed', ...removed);
@@ -73,6 +88,8 @@ if (sha) {
 process.stdout.write(
   `ci-index: repo=${repo} jobType=${jobType} files=${files.length} removed=${removed.length}` +
     (sha ? ` commit=${sha}` : '') +
+    (tenantId ? ` tenant=${tenantId}` : '') +
+    (installationId ? ` installation=${installationId}` : '') +
     '\n',
 );
 
