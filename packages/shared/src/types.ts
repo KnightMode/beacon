@@ -20,6 +20,10 @@ export interface BaseIndexJob {
   jobType: JobType;
   repoId: string;
   repoFullName: string;
+  /** Slack workspace tenant id for tenant-scoped indexing. Omitted only by legacy dev/prototype jobs. */
+  tenantId?: string;
+  /** GitHub App installation that grants access to this repo. Required for tenant-scoped indexing. */
+  installationId?: number;
   /** Commit sha to index against; defaults to repo default branch HEAD. */
   commitSha?: string;
   enqueuedAt: string;
@@ -106,6 +110,7 @@ export interface CodeEdge {
 
 /** Metadata stored alongside each vector in Vectorize. */
 export interface VectorMetadata {
+  tenant_id?: string;
   repo_id: string;
   repo_full_name: string;
   path: string;
@@ -115,7 +120,7 @@ export interface VectorMetadata {
   start_line: number;
   end_line: number;
   commit_sha: string;
-  [key: string]: string | number | boolean;
+  [key: string]: string | number | boolean | undefined;
 }
 
 // ---------------------------------------------------------------------------

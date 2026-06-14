@@ -1,8 +1,8 @@
 name: Index Repository
 
-# Runs the indexer CLI as a CI pipeline. Triggered by the github-webhook worker
-# via repository_dispatch (event type: index-repo) on repo changes, or manually
-# via workflow_dispatch from the Actions tab.
+# Legacy/dev indexer CLI pipeline. Tenant/customer repos are indexed by the
+# Beacon-hosted indexer with GitHub App installation tokens, not by this
+# PAT-backed workflow. Keep this for internal compatibility and manual dev runs.
 
 on:
   repository_dispatch:

@@ -84,8 +84,9 @@ one source of truth, so the portal and the invoice always agree.
 
 - Strict mode toggle (per-user repo permissions).
 - Who may create fix-PRs (everyone vs admins).
-- CI alert channel defaults.
-- GitHub connection: which installation, which repos granted, reconnect.
+- Optional CI alert channel defaults.
+- GitHub connections: connected accounts/orgs, repos granted by each
+  installation, selected repos, reconnect, and add another account/org.
 
 ### 7. Audit log
 

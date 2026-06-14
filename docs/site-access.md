@@ -26,7 +26,8 @@ GitHub Actions secrets before running it:
 Optional secrets used by later onboarding steps:
 
 - `BEACON_GITHUB_APP_PRIVATE_KEY` (written to Pages as `GITHUB_APP_PRIVATE_KEY`)
-- `PIPELINE_DISPATCH_TOKEN`
+- `INDEXER_SHARED_SECRET`
+- `PIPELINE_DISPATCH_TOKEN` (legacy/dev indexing path only)
 
 Optional repository variables used by later onboarding steps:
 

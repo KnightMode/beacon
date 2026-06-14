@@ -90,12 +90,13 @@ action grounded **only in retrieved evidence**.
                                               ▼
                        D1 (FTS5 + graph) · Vectorize (768d vectors)
                                               ▲
- GitHub App ──push──▶ github-webhook (CF Worker) ──▶ GitHub Actions indexer
-                       (tree-sitter chunking → secret redaction → embed → upsert)
+ GitHub App ──push──▶ github-webhook (CF Worker) ──▶ Queue ──▶ hosted indexer
+                       (GitHub App token → tree-sitter → redaction → embed → upsert)
 ```
 
 **Stack:** npm-workspaces TypeScript monorepo · Cloudflare Workers, D1
-(SQLite + FTS5), Vectorize, Queues, Workers AI · GitHub Actions for indexing.
+(SQLite + FTS5), Vectorize, Queues, Workers AI · GitHub App installation auth
+for tenant GitHub access. GitHub Actions indexing is kept for legacy/dev paths.
 Full walkthrough in [docs/architecture.md](docs/architecture.md).
 
 ## Licensing

@@ -68,7 +68,7 @@ export async function indexRepo(
   config: IndexerConfig,
   job: IndexJob,
 ): Promise<IndexResult> {
-  const github = new GitHubClient(config);
+  const github = await GitHubClient.fromConfig(config, job.installationId);
   const d1 = new D1Client(config);
   const vectorize = new VectorizeClient(config);
   const ai = new WorkersAIClient(config);
@@ -231,6 +231,7 @@ export async function indexRepo(
         entry,
         tarball,
         priorHashes,
+        tenantId: job.tenantId,
       });
       if (stat.indexed) progress.filesIndexed++;
       progress.chunksWritten += stat.chunksWritten;
@@ -340,6 +341,7 @@ interface IndexOneFileInput {
   entry: TreeEntry;
   tarball: Map<string, string>;
   priorHashes: Map<string, string>;
+  tenantId?: string;
 }
 
 async function indexOneFile(input: IndexOneFileInput): Promise<FileIndexStat> {
@@ -398,7 +400,7 @@ async function indexOneFile(input: IndexOneFileInput): Promise<FileIndexStat> {
     const oldIds = await chunkIdsForFile(d1, fileId);
     if (oldIds.length) await vectorize.deleteByIds(oldIds);
     await deleteFileData(d1, fileId);
-    await embedAndUpsert(ai, vectorize, repoFullName, chunks);
+        await embedAndUpsert(ai, vectorize, repoFullName, chunks, input.tenantId);
     await insertChunks(d1, chunks);
     await insertEdges(d1, edges);
     chunksWritten = chunks.length;
@@ -415,7 +417,7 @@ async function indexOneFile(input: IndexOneFileInput): Promise<FileIndexStat> {
     await deleteEdgesForFile(d1, fileId);
     await insertEdges(d1, edges);
 
-    await embedAndUpsert(ai, vectorize, repoFullName, dirty);
+    await embedAndUpsert(ai, vectorize, repoFullName, dirty, input.tenantId);
     await insertChunks(d1, dirty);
     chunksWritten = dirty.length;
   }
@@ -485,6 +487,7 @@ async function embedAndUpsert(
   vectorize: VectorizeClient,
   repoFullName: string,
   chunks: CodeChunk[],
+  tenantId?: string,
 ): Promise<void> {
   const batches: CodeChunk[][] = [];
   for (let i = 0; i < chunks.length; i += EMBED_BATCH) {
@@ -516,7 +519,7 @@ async function embedAndUpsert(
         const upserts: UpsertVector[] = batch.map((c, idx) => ({
           id: c.id,
           values: vectors[idx] ?? [],
-          metadata: toMetadata(repoFullName, c),
+          metadata: toMetadata(repoFullName, c, tenantId),
         }));
         await vectorize.upsert(upserts.filter((v) => v.values.length > 0));
       }
@@ -525,8 +528,9 @@ async function embedAndUpsert(
   await Promise.all(workers);
 }
 
-function toMetadata(repoFullName: string, c: CodeChunk): VectorMetadata {
+function toMetadata(repoFullName: string, c: CodeChunk, tenantId?: string): VectorMetadata {
   return {
+    ...(tenantId ? { tenant_id: tenantId } : {}),
     repo_id: c.repoId,
     repo_full_name: repoFullName,
     path: c.path,
