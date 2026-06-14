@@ -81,9 +81,9 @@ on:
         required: false
         type: string
       app_name:
-        description: 'Cloudflare Access application name'
+        description: 'Cloudflare Access app name prefix (paths add a label, e.g. "onboarding portal")'
         required: true
-        default: 'Beacon admin portal'
+        default: 'Beacon'
         type: string
       auth_domain:
         description: 'Zero Trust team domain for Access login'
