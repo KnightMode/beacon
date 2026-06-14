@@ -142,6 +142,75 @@ export async function revokeRepoFromInstallationTenants(
   ]);
 }
 
+/** Disable an allowlist entry that was seeded from a GitHub App installation. */
+export async function disableInstallationAllowlist(
+  env: Env,
+  repoId: string,
+): Promise<void> {
+  await env.DB.prepare(
+    `UPDATE prototype_repo_allowlist SET enabled = 0
+     WHERE repo_id = ?1 AND added_by = 'installation'`,
+  )
+    .bind(repoId)
+    .run();
+}
+
+/** True when any tenant or allowlist entry still actively references the repo. */
+export async function isRepoInUse(env: Env, repoId: string): Promise<boolean> {
+  const row = await env.DB.prepare(
+    `SELECT 1 AS x FROM tenant_repos WHERE repo_id = ?1 AND enabled = 1
+     UNION ALL
+     SELECT 1 AS x FROM prototype_repo_allowlist WHERE repo_id = ?1 AND enabled = 1
+     LIMIT 1`,
+  )
+    .bind(repoId)
+    .first();
+  return row !== null;
+}
+
+const VECTORIZE_DELETE_BATCH = 1000;
+
+/**
+ * Remove every trace of a repo's index from Cloudflare once it's orphaned
+ * (no tenant or allowlist still references it). Chunk ids double as Vectorize
+ * vector ids, so delete those vectors first, then drop the repo's D1 rows.
+ * Chunks are deleted explicitly so the FTS5 sync triggers fire.
+ */
+export async function purgeRepoIndex(
+  env: Env,
+  repoId: string,
+): Promise<{ vectors: number }> {
+  const { results } = await env.DB.prepare(
+    `SELECT id FROM chunks WHERE repo_id = ?1`,
+  )
+    .bind(repoId)
+    .all<{ id: string }>();
+  const ids = results.map((row) => row.id);
+
+  for (let i = 0; i < ids.length; i += VECTORIZE_DELETE_BATCH) {
+    const batch = ids.slice(i, i + VECTORIZE_DELETE_BATCH);
+    if (batch.length) await env.VECTORIZE.deleteByIds(batch);
+  }
+
+  await env.DB.batch([
+    env.DB.prepare(`DELETE FROM chunks WHERE repo_id = ?1`).bind(repoId),
+    env.DB.prepare(`DELETE FROM code_edges WHERE repo_id = ?1`).bind(repoId),
+    env.DB.prepare(`DELETE FROM files WHERE repo_id = ?1`).bind(repoId),
+    env.DB.prepare(`DELETE FROM repo_index_status WHERE repo_id = ?1`).bind(repoId),
+  ]);
+
+  await env.DB.batch([
+    env.DB.prepare(`DELETE FROM tenant_repos WHERE repo_id = ?1`).bind(repoId),
+    env.DB.prepare(`DELETE FROM tenant_ci_notify_channels WHERE repo_id = ?1`).bind(repoId),
+    env.DB.prepare(`DELETE FROM ci_notify_channels WHERE repo_id = ?1`).bind(repoId),
+    env.DB.prepare(`DELETE FROM prototype_repo_allowlist WHERE repo_id = ?1`).bind(repoId),
+    env.DB.prepare(`DELETE FROM pending_installation_repos WHERE repo_id = ?1`).bind(repoId),
+    env.DB.prepare(`DELETE FROM repos WHERE id = ?1`).bind(repoId),
+  ]);
+
+  return { vectors: ids.length };
+}
+
 /** Backfill tenant repos after the GitHub App install OAuth callback. */
 export async function linkPendingInstallationRepos(
   env: Env,

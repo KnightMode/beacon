@@ -18,6 +18,9 @@ import {
   hasLinkedTenants,
   queuePendingInstallationRepo,
   revokeRepoFromInstallationTenants,
+  disableInstallationAllowlist,
+  isRepoInUse,
+  purgeRepoIndex,
   isAllowlisted,
   repoIdFor,
 } from './db.js';
@@ -77,13 +80,14 @@ export async function handleWebhookEvent(
   env: Env,
   event: string,
   payload: unknown,
+  ctx?: ExecutionContext,
 ): Promise<Response> {
   switch (event) {
     case 'ping':
       return json({ ok: true, pong: true });
     case 'installation':
     case 'installation_repositories':
-      return handleInstallation(env, payload as InstallationPayload);
+      return handleInstallation(env, payload as InstallationPayload, ctx);
     case 'push':
       return handlePush(env, payload as PushPayload);
     case 'workflow_run':
@@ -96,15 +100,39 @@ export async function handleWebhookEvent(
 async function handleInstallation(
   env: Env,
   payload: InstallationPayload,
+  ctx?: ExecutionContext,
 ): Promise<Response> {
   const installationId = payload.installation?.id;
   const removedRepos = payload.action === 'deleted'
     ? (payload.repositories ?? [])
     : (payload.repositories_removed ?? []);
   const revoked: string[] = [];
+  const purged: string[] = [];
   for (const r of removedRepos) {
-    await revokeRepoFromInstallationTenants(env, installationId, repoIdFor(r.full_name));
+    const repoId = repoIdFor(r.full_name);
+    await revokeRepoFromInstallationTenants(env, installationId, repoId);
+    await disableInstallationAllowlist(env, repoId);
     revoked.push(r.full_name);
+
+    // When nothing references the repo anymore, drop its indexed data from
+    // Cloudflare (D1 rows + Vectorize vectors) so removed repos don't linger.
+    if (!(await isRepoInUse(env, repoId))) {
+      const cleanup = (async () => {
+        // Re-check at execution time: a quick remove→re-add re-enables the
+        // repo and re-indexes it, so a stale background purge must back off.
+        if (await isRepoInUse(env, repoId)) return;
+        const res = await purgeRepoIndex(env, repoId);
+        console.log('purged repo index', { repo: r.full_name, vectors: res.vectors });
+      })().catch((err) =>
+        console.error('repo index purge failed', {
+          repo: r.full_name,
+          error: (err as Error).message,
+        }),
+      );
+      if (ctx?.waitUntil) ctx.waitUntil(cleanup);
+      else await cleanup;
+      purged.push(r.full_name);
+    }
   }
 
   const repos = [
@@ -129,7 +157,7 @@ async function handleInstallation(
     await enqueueFullIndex(env, repoId, r.full_name);
     enqueued.push(r.full_name);
   }
-  return json({ ok: true, action: payload.action, enqueued, revoked });
+  return json({ ok: true, action: payload.action, enqueued, revoked, purged });
 }
 
 async function handlePush(env: Env, payload: PushPayload): Promise<Response> {

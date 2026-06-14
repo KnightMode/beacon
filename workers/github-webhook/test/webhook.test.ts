@@ -143,37 +143,88 @@ describe('handleWebhookEvent(workflow_run)', () => {
 });
 
 describe('handleWebhookEvent(installation_repositories)', () => {
-  it('revokes tenant and pending repo grants when repos are removed from an installation', async () => {
-    const batches: Array<{ sql: string; args: unknown[] }> = [];
+  /** Records every prepared statement (run/first/all/batch) for assertions. */
+  function installationEnv(opts: { inUse: boolean; chunkIds?: string[] }): {
+    env: Env;
+    batched: Array<{ sql: string; args: unknown[] }>;
+    runs: Array<{ sql: string; args: unknown[] }>;
+    deletedVectors: string[][];
+  } {
+    const batched: Array<{ sql: string; args: unknown[] }> = [];
+    const runs: Array<{ sql: string; args: unknown[] }> = [];
+    const deletedVectors: string[][] = [];
     const env = {
+      VECTORIZE: {
+        deleteByIds: async (ids: string[]) => {
+          deletedVectors.push(ids);
+        },
+      },
       DB: {
         prepare: (sql: string) => ({
           bind: (...args: unknown[]) => ({
             sql,
             args,
-            run: async () => undefined,
+            run: async () => {
+              runs.push({ sql, args });
+              return undefined;
+            },
+            first: async () => (opts.inUse ? { x: 1 } : null),
+            all: async () => ({
+              results: (opts.chunkIds ?? []).map((id) => ({ id })),
+            }),
           }),
         }),
         batch: async (statements: Array<{ sql: string; args: unknown[] }>) => {
-          batches.push(...statements);
+          batched.push(...statements);
           return [];
         },
       },
     } as unknown as Env;
+    return { env, batched, runs, deletedVectors };
+  }
+
+  it('revokes grants and purges the index when an orphaned repo is removed', async () => {
+    const { env, batched, runs, deletedVectors } = installationEnv({
+      inUse: false,
+      chunkIds: ['c1', 'c2'],
+    });
 
     const res = await handleWebhookEvent(env, 'installation_repositories', {
       action: 'removed',
       installation: { id: 98765 },
       repositories_removed: [{ full_name: 'KnightMode/viper' }],
     });
-    const body = (await res.json()) as { revoked?: string[]; enqueued?: string[] };
+    const body = (await res.json()) as {
+      revoked?: string[];
+      purged?: string[];
+      enqueued?: string[];
+    };
 
     expect(body.revoked).toEqual(['KnightMode/viper']);
+    expect(body.purged).toEqual(['KnightMode/viper']);
     expect(body.enqueued).toEqual([]);
-    expect(batches).toHaveLength(2);
-    expect(batches[0].sql).toContain('UPDATE tenant_repos');
-    expect(batches[0].args).toEqual(['knightmode/viper', 98765]);
-    expect(batches[1].sql).toContain('DELETE FROM pending_installation_repos');
-    expect(batches[1].args).toEqual([98765, 'knightmode/viper']);
+
+    const sqls = batched.map((s) => s.sql);
+    expect(sqls.some((s) => s.includes('UPDATE tenant_repos'))).toBe(true);
+    expect(sqls.some((s) => s.includes('DELETE FROM chunks WHERE repo_id'))).toBe(true);
+    expect(sqls.some((s) => s.includes('DELETE FROM repos WHERE id'))).toBe(true);
+    expect(runs.some((r) => r.sql.includes('UPDATE prototype_repo_allowlist'))).toBe(true);
+    expect(deletedVectors).toEqual([['c1', 'c2']]);
+  });
+
+  it('does not purge a repo that is still in use by another tenant', async () => {
+    const { env, batched, deletedVectors } = installationEnv({ inUse: true });
+
+    const res = await handleWebhookEvent(env, 'installation_repositories', {
+      action: 'removed',
+      installation: { id: 98765 },
+      repositories_removed: [{ full_name: 'KnightMode/viper' }],
+    });
+    const body = (await res.json()) as { revoked?: string[]; purged?: string[] };
+
+    expect(body.revoked).toEqual(['KnightMode/viper']);
+    expect(body.purged).toEqual([]);
+    expect(deletedVectors).toEqual([]);
+    expect(batched.some((s) => s.sql.includes('DELETE FROM repos WHERE id'))).toBe(false);
   });
 });

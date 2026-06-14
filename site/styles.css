@@ -1787,6 +1787,17 @@ code {
   color: var(--signal);
 }
 
+.admin-topbar__logout {
+  padding: 0.32rem 0.62rem;
+  border: 1px solid var(--white-line);
+  color: color-mix(in oklch, var(--paper) 70%, transparent);
+}
+
+.admin-topbar__logout:hover {
+  border-color: var(--signal);
+  color: var(--signal);
+}
+
 .admin-main {
   width: min(var(--max), calc(100% - 2rem));
   margin: 0 auto;
