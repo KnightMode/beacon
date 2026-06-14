@@ -14,13 +14,17 @@
 
 ## Tenant auth
 
-Multi-tenant onboarding stores Slack installs, selected GitHub repos, and
-notification channels per tenant. Slack bot retrieval is restricted to repos
-selected for the requesting Slack team.
+Multi-tenant onboarding stores Slack installs, GitHub App installations,
+installation repo grants, selected GitHub repos, and optional notification
+channels per tenant. Slack bot retrieval is restricted to repos selected for the
+requesting Slack team.
 
-One PAT still does the indexing, and user-level GitHub permissions are not
-enforced yet. The extension points for per-user access control are already in
-place:
+Tenant GitHub access uses short-lived GitHub App installation tokens resolved
+from the selected repo's installation. Legacy PAT paths are for local/internal
+prototype traffic only and must not be used when a Slack `team_id` is present.
+
+User-level GitHub permissions are not enforced yet. The extension points for
+per-user access control are already in place:
 
 - the `users` and `github_user_repo_permissions` tables, and
 - the per-repo retrieval filter.

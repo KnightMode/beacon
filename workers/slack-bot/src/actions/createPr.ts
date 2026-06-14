@@ -30,10 +30,8 @@ const MAX_FILE_BYTES = 30_000;
 
 export function createPrMissingPatMessage(): string {
   return (
-    'Creating pull requests needs a GitHub token with write access. Run:\n' +
-    '`cd workers/slack-bot && npx wrangler secret put GITHUB_PAT`\n' +
-    'Use a fine-grained PAT with *Contents: Write* and *Pull requests: Write* ' +
-    'on the target repos.'
+    'Creating pull requests needs GitHub App write access for this repo. ' +
+    'Reconnect the workspace GitHub App with *Contents: Write* and *Pull requests: Write*.'
   );
 }
 
@@ -91,12 +89,6 @@ async function runCreatePr(env: Env, target: CreatePrTarget): Promise<void> {
   };
 
   try {
-    const gh = GitHubClient.fromEnv(env);
-    if (!gh) {
-      await postPlain(env, target.channel, target.threadTs, createPrMissingPatMessage(), target.teamId);
-      return;
-    }
-
     await call(env, 'assistant.threads.setStatus', {
       channel_id: target.channel,
       thread_ts: target.threadTs,
@@ -140,6 +132,12 @@ async function runCreatePr(env: Env, target: CreatePrTarget): Promise<void> {
     }
 
     log('repo-resolved', { repo: repo.fullName });
+
+    const gh = await GitHubClient.forTenantRepo(env, target.teamId, repo.fullName);
+    if (!gh) {
+      await postPlain(env, target.channel, target.threadTs, createPrMissingPatMessage(), target.teamId);
+      return;
+    }
 
     const indexedContextPromise = fetchIndexedContext(env, issue, repo.fullName, target.teamId);
     const branchPromise = gh.getDefaultBranchSha(repo.owner, repo.repo);

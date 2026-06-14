@@ -16,10 +16,9 @@ export interface IndexerConfig {
   indexerSharedSecret: string;
 
   github: {
-    pat: string;
+    pat?: string;
     appId?: string;
     appPrivateKey?: string;
-    appInstallationId?: string;
   };
 
   cloudflare: {
@@ -55,10 +54,9 @@ export function loadConfig(): IndexerConfig {
     port: Number(process.env.PORT ?? 8787),
     indexerSharedSecret: required('INDEXER_SHARED_SECRET'),
     github: {
-      pat: required('GITHUB_PAT'),
+      pat: optional('GITHUB_PAT'),
       appId: optional('GITHUB_APP_ID'),
       appPrivateKey: optional('GITHUB_APP_PRIVATE_KEY'),
-      appInstallationId: optional('GITHUB_APP_INSTALLATION_ID'),
     },
     cloudflare: {
       accountId: required('CLOUDFLARE_ACCOUNT_ID'),

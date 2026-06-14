@@ -15,6 +15,7 @@ describe('resolveTenantInstallationRepo', () => {
 
     await expect(resolveTenantInstallationRepo(env, 'T_BEACON', 'KnightMode/beacon')).resolves.toEqual({
       fullName: 'KnightMode/beacon',
+      installationId: 12345,
       githubId: 42,
       defaultBranch: 'main',
       private: true,
@@ -63,11 +64,14 @@ function repoValidationEnv({ installationId, localGrant }) {
         return {
           bind() {
             return {
-              first: async () => {
+              all: async () => {
                 if (sql.includes('FROM tenant_github_installations')) {
-                  return { installation_id: installationId };
+                  return { results: [{ installation_id: installationId }] };
                 }
-                if (sql.includes('FROM pending_installation_repos')) {
+                return { results: [] };
+              },
+              first: async () => {
+                if (sql.includes('FROM github_installation_repos')) {
                   return localGrant;
                 }
                 return null;

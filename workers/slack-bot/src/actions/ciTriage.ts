@@ -57,10 +57,11 @@ export async function processTriageJob(env: Env, job: TriageJob): Promise<void> 
       return;
     }
 
-    const gh = GitHubClient.fromEnv(env);
+    const gh = await GitHubClient.forTenantRepo(env, job.slackTeamId, job.repoFullName);
     if (!gh) {
-      console.warn('ci triage: GITHUB_PAT not configured, skipping', {
+      console.warn('ci triage: GitHub App access not configured, skipping', {
         repo: job.repoFullName,
+        slackTeamId: job.slackTeamId,
       });
       return;
     }

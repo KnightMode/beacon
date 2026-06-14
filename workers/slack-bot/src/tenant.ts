@@ -61,6 +61,11 @@ export async function tenantHasGithubInstallationRepo(
   const row = await env.DB.prepare(
     `SELECT 1 AS ok
      FROM tenant_github_installations gi
+     JOIN github_installation_repos p ON p.installation_id = gi.installation_id
+     WHERE gi.tenant_id = ?1 AND p.repo_id = ?2
+     UNION ALL
+     SELECT 1 AS ok
+     FROM tenant_github_installations gi
      JOIN pending_installation_repos p ON p.installation_id = gi.installation_id
      WHERE gi.tenant_id = ?1 AND p.repo_id = ?2
      UNION ALL
@@ -72,6 +77,43 @@ export async function tenantHasGithubInstallationRepo(
     .bind(tenantId, repoId)
     .first<{ ok: number }>();
   return row !== null;
+}
+
+export async function getTenantRepoGrant(
+  env: Env,
+  tenantId: string,
+  repoId: string,
+): Promise<{ repoId: string; fullName: string; installationId: number } | null> {
+  const row = await env.DB.prepare(
+    `SELECT COALESCE(gir.full_name, tr.full_name) AS full_name,
+            COALESCE(tr.installation_id, gir.installation_id) AS installation_id
+     FROM tenant_repos tr
+     LEFT JOIN github_installation_repos gir
+       ON gir.installation_id = tr.installation_id AND gir.repo_id = tr.repo_id
+     WHERE tr.tenant_id = ?1 AND tr.repo_id = ?2 AND tr.enabled = 1
+     UNION ALL
+     SELECT gir.full_name, gir.installation_id
+     FROM tenant_github_installations gi
+     JOIN github_installation_repos gir ON gir.installation_id = gi.installation_id
+     WHERE gi.tenant_id = ?1 AND gir.repo_id = ?2
+     LIMIT 1`,
+  )
+    .bind(tenantId, repoId)
+    .first<{ full_name: string; installation_id: number | null }>();
+  if (!row?.full_name || !row.installation_id) return null;
+  return { repoId, fullName: row.full_name, installationId: row.installation_id };
+}
+
+export async function getTenantRepoGrantForSlackTeam(
+  env: Env,
+  teamId: string | undefined,
+  repoFullName: string,
+): Promise<{ tenantId: string; repoId: string; fullName: string; installationId: number } | null> {
+  const tenantId = await getTenantIdForSlackTeam(env, teamId);
+  if (!tenantId) return null;
+  const repoId = repoFullName.toLowerCase();
+  const grant = await getTenantRepoGrant(env, tenantId, repoId);
+  return grant ? { tenantId, ...grant } : null;
 }
 
 export async function getSlackBotToken(

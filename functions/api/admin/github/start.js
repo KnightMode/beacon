@@ -9,7 +9,14 @@ import {
 export async function onRequestGet(context) {
   const url = new URL(context.request.url);
   if (url.searchParams.get('mock') === '1') {
-    return redirect('/oauth/github/callback?mock=1&installation_id=12345');
+    const installationId = url.searchParams.get('installation_id') || '12345';
+    const accountLogin = url.searchParams.get('account_login') || (
+      installationId === '67890' ? 'acme-corp' : 'KnightMode'
+    );
+    return redirect(
+      `/oauth/github/callback?mock=1&installation_id=${encodeURIComponent(installationId)}` +
+        `&account_login=${encodeURIComponent(accountLogin)}`,
+    );
   }
 
   if (!context.env.ADMIN_SESSION_SECRET?.trim()) {
