@@ -1,60 +1,57 @@
 # Local verification (multi-tenant onboarding)
 
-Verify Phase 1 onboarding on your machine before deploying. Uses **local D1**
-(no remote writes) and **mock OAuth** (no real Slack/GitHub apps required for
-the portal smoke test).
+Verify multi-tenant onboarding on your machine before deploying. The default
+path uses isolated local D1 state, mock Slack/GitHub OAuth, two mock GitHub App
+installations, and local mock indexing. No real Slack, GitHub, Cloudflare, or
+PAT credentials are required.
 
-## One-time setup
+## One-command E2E
 
 ```bash
 npm install
-cp site/.dev.vars.example .dev.vars
+npm run e2e:local
+```
+
+The runner:
+
+- creates fresh local D1 state under `.wrangler/e2e-state`
+- starts `wrangler pages dev site` on a free localhost port
+- completes mock Slack OAuth
+- connects two mock GitHub installations to the same tenant
+- lists repos from both installations
+- selects repos from both installations
+- marks local mock indexing `READY`
+- verifies channel setup is not required for onboarding
+- runs with `GITHUB_PAT` unset
+
+`npm run verify:local` is kept as a compatibility alias for the same E2E runner.
+
+## Manual portal dev
+
+Use this only when you want to inspect the UI manually while keeping state
+between runs.
+
+```bash
 npm run db:local:init
+npm run dev:portal
 ```
 
 Wrangler loads secrets from `.dev.vars` at the repo root for `dev:portal`.
 The same encryption secret must appear in `workers/slack-bot/.dev.vars` when
 testing the bot against the shared local D1.
 
-`db:local:init` applies `schema.sql`, `0004_tenants.sql`, and
-`0005_tenant_ci_triage_runs.sql` to the local D1 database under
-`.wrangler/state/`. Re-run safely on a fresh machine; if you already have local
-data, use `npm run db:local:migrate` instead.
-
 Cloudflare Access verification is skipped for localhost by default. To exercise
 the deployed fail-closed behavior locally, set `ADMIN_CF_ACCESS_ENFORCE_LOCAL=true`
 and provide the Access issuer/audience vars in `.dev.vars`.
-
-## Terminal 1 — admin portal
-
-```bash
-npm run dev:portal
-```
-
-Serves the marketing site + Pages Functions at **http://127.0.0.1:8788** with:
-
-- Static files from `site/`
-- API routes from `functions/` at the repo root
-- D1 binding `DB` → local `scintel` database
 
 Open http://127.0.0.1:8788/admin/onboarding/ in a browser. Use the **Connect
 Slack** link, or go directly to mock OAuth:
 
 - http://127.0.0.1:8788/api/admin/slack/start?mock=1
 - http://127.0.0.1:8788/api/admin/github/start?mock=1 (after Slack mock)
+- http://127.0.0.1:8788/api/admin/github/start?mock=1&installation_id=67890&account_login=acme-corp
 
-## Terminal 2 — automated smoke test
-
-With the portal running:
-
-```bash
-npm run verify:local
-```
-
-This walks through mock Slack OAuth → mock GitHub install → repo selection and
-asserts tenant rows and onboarding steps in local D1.
-
-## Terminal 3 — slack-bot (optional)
+## Slack bot dev (optional)
 
 To verify the worker reads the same tenant data and per-team tokens:
 
@@ -64,8 +61,8 @@ npm run dev:bot
 
 The bot uses the **same** `.wrangler/state` local D1 as the portal. After mock
 OAuth, `getSlackBotToken(env, 'T_BEACON_DEMO')` decrypts the token stored by the
-portal (requires matching `SLACK_TOKEN_ENCRYPTION_SECRET` in `site/.dev.vars`
-and `workers/slack-bot/.dev.vars`).
+portal (requires matching `SLACK_TOKEN_ENCRYPTION_SECRET` in `.dev.vars` and
+`workers/slack-bot/.dev.vars`).
 
 Create `workers/slack-bot/.dev.vars` with at least:
 
@@ -73,7 +70,8 @@ Create `workers/slack-bot/.dev.vars` with at least:
 SLACK_SIGNING_SECRET=local-dev-signing-secret
 SLACK_BOT_TOKEN=xoxb-fallback-token
 SLACK_TOKEN_ENCRYPTION_SECRET=local-dev-slack-encryption-secret
-GITHUB_PAT=your-pat-if-testing-index
+GITHUB_APP_ID=your-app-id-if-testing-real-github
+GITHUB_APP_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----"
 ```
 
 Point Slack event URLs at the `wrangler dev` tunnel URL only when you want to
@@ -83,7 +81,7 @@ test real Slack events; the portal flow does not require it.
 
 ```bash
 npm run db:local:query -- "SELECT id, slack_team_id, status FROM tenants"
-npm run db:local:query -- "SELECT tenant_id, repo_id, full_name FROM tenant_repos"
+npm run db:local:query -- "SELECT tenant_id, repo_id, installation_id, full_name FROM tenant_repos"
 ```
 
 ## What mock mode covers vs. what it does not
@@ -93,16 +91,19 @@ npm run db:local:query -- "SELECT tenant_id, repo_id, full_name FROM tenant_repo
 | Tenant schema + migrations | Production D1 (`--remote`) |
 | Admin UI + API routes | Cloudflare Pages deploy |
 | Mock Slack/GitHub OAuth | Real OAuth redirect URLs |
-| Repo rows in `tenant_repos` | GitHub `repository_dispatch` (set `PIPELINE_DISPATCH_*` in `.dev.vars`) |
-| Indexing status in admin UI | `CLOUDFLARE_ACCOUNT_ID` + `CLOUDFLARE_API_TOKEN` (syncs remote D1 → local on refresh) |
+| Multiple installation repo picker | Real GitHub App installation webhooks/API |
+| Local mock indexing status | Hosted indexer (`INDEXER_URL` + `INDEXER_SHARED_SECRET`) |
 | Shared local D1 with slack-bot | Slack Events API (needs tunnel + app config) |
 
 ## Troubleshooting
 
-**`verify:local` cannot reach portal** — start `npm run dev:portal` first.
+**`e2e:local` cannot start Wrangler** — make sure no local security policy is
+blocking localhost listeners. In Codex sandboxed sessions, this command may need
+escalated permissions because Wrangler writes logs under the user Library and
+binds localhost.
 
-**`SLACK_TOKEN_ENCRYPTION_SECRET is required`** — copy `site/.dev.vars.example`
-to `.dev.vars` at the repo root.
+**`SLACK_TOKEN_ENCRYPTION_SECRET is required`** — copy `.dev.vars` from the
+examples or use `npm run e2e:local`, which injects its own local bindings.
 
 **Schema errors on `db:local:init`** — wipe local state and retry:
 
@@ -111,5 +112,5 @@ rm -rf .wrangler/state/v3/d1
 npm run db:local:init
 ```
 
-**Different port** — `BASE_URL=http://127.0.0.1:8790 npm run verify:local` if
-you started the portal with `--port 8790`.
+**Manual different port** — `npm run dev:portal -- --port 8790` if port 8788 is
+already in use.

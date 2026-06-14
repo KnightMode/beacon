@@ -1,15 +1,18 @@
 /**
- * Self-serve repo onboarding from Slack: "index owner/repo" validates the repo
- * with the GitHub API, allowlists it in D1, and fires the index.yml GitHub
- * Actions workflow (repository_dispatch) that runs the indexer CLI. "index
- * status" reports per-repo indexing progress from repo_index_status.
+ * Self-serve repo indexing from Slack. Tenant workspaces validate the repo
+ * against their GitHub App installation grants and enqueue a hosted index job
+ * with tenant + installation context. The repository_dispatch path below is
+ * retained only for legacy non-tenant/dev usage.
  */
 
 import type { Env } from '../env.js';
 import {
+  getTenantRepoGrant,
   getTenantIdForSlackTeam,
   tenantHasGithubInstallationRepo,
 } from '../tenant.js';
+import { GitHubClient } from '../github.js';
+import { JOB_TYPES, type FullIndexJob } from '@scintel/shared';
 
 const GITHUB_API = 'https://api.github.com';
 const DISPATCH_EVENT = 'index-repo';
@@ -24,51 +27,78 @@ interface GithubRepo {
   private: boolean;
 }
 
-/** Validates, allowlists, and kicks off indexing. Returns the Slack reply. */
+/** Validates repo access, records the selection, and kicks off indexing. */
 export async function indexRepoAction(
   env: Env,
   repoRef: string,
   teamId?: string,
 ): Promise<string> {
-  if (!env.GITHUB_PAT) {
-    return ':warning: `GITHUB_PAT` is not configured on the bot, so I cannot index repos.';
-  }
-  const dispatchRepo = env.INDEX_DISPATCH_REPO || env.DEFAULT_PR_REPO;
-  if (!dispatchRepo) {
-    return ':warning: `INDEX_DISPATCH_REPO` is not configured, so I cannot trigger the indexing pipeline.';
-  }
-
-  // 1. Validate the repo and get its canonical name + default branch.
-  const res = await fetch(`${GITHUB_API}/repos/${repoRef}`, {
-    headers: githubHeaders(env),
-  });
-  if (res.status === 404 || res.status === 403) {
-    return (
-      `:no_entry: I can't access \`${repoRef}\` on GitHub. Either it doesn't ` +
-      'exist, or my GitHub token has not been granted access to it — add the ' +
-      'repo to the fine-grained PAT (Contents: Read) and to the ' +
-      '`INDEXER_GITHUB_PAT` Actions secret, then try again.'
-    );
-  }
-  if (!res.ok) {
-    return `:warning: GitHub returned ${res.status} while checking \`${repoRef}\`.`;
-  }
-  const repo = (await res.json()) as GithubRepo;
-  const repoId = repo.full_name.toLowerCase();
-  const [owner, name] = repo.full_name.split('/');
-
   const tenantId = await getTenantIdForSlackTeam(env, teamId);
   if (teamId && !tenantId) {
     return ONBOARDING_REQUIRED;
   }
-  if (tenantId && !(await tenantHasGithubInstallationRepo(env, tenantId, repoId))) {
+
+  const repoIdFromInput = repoRef.toLowerCase();
+  let repo: GithubRepo;
+  let installationId: number | undefined;
+
+  if (tenantId) {
+    const grant = await getTenantRepoGrant(env, tenantId, repoIdFromInput);
+    if (!grant || !(await tenantHasGithubInstallationRepo(env, tenantId, repoIdFromInput))) {
+      return (
+        `:no_entry: \`${repoRef}\` is not available on this workspace's ` +
+        'GitHub App installation. Add it in the admin portal first, then try indexing again.'
+      );
+    }
+    installationId = grant.installationId;
+    const gh = await GitHubClient.forTenantRepo(env, teamId, grant.fullName);
+    if (!gh) {
+      return ':warning: GitHub App access is not configured for this workspace.';
+    }
+    const [grantOwner, grantName] = grant.fullName.split('/');
+    if (!grantOwner || !grantName) return `:warning: Invalid repository: \`${grant.fullName}\`.`;
+    const info = await gh.getRepo(grantOwner, grantName);
+    repo = {
+      id: info.id,
+      full_name: info.fullName,
+      default_branch: info.defaultBranch,
+      private: info.private,
+    };
+  } else {
+    if (!env.GITHUB_PAT) {
+      return ':warning: `GITHUB_PAT` is not configured on the bot, so I cannot index repos.';
+    }
+    const dispatchRepo = env.INDEX_DISPATCH_REPO || env.DEFAULT_PR_REPO;
+    if (!dispatchRepo) {
+      return ':warning: `INDEX_DISPATCH_REPO` is not configured, so I cannot trigger the indexing pipeline.';
+    }
+
+    const res = await fetch(`${GITHUB_API}/repos/${repoRef}`, {
+      headers: githubHeaders(env),
+    });
+    if (res.status === 404 || res.status === 403) {
+      return (
+        `:no_entry: I can't access \`${repoRef}\` on GitHub. Either it doesn't ` +
+        'exist, or my legacy GitHub token has not been granted access to it.'
+      );
+    }
+    if (!res.ok) {
+      return `:warning: GitHub returned ${res.status} while checking \`${repoRef}\`.`;
+    }
+    repo = (await res.json()) as GithubRepo;
+  }
+
+  const repoId = repo.full_name.toLowerCase();
+  const [owner, name] = repo.full_name.split('/');
+
+  if (tenantId && !installationId) {
     return (
       `:no_entry: \`${repo.full_name}\` is not available on this workspace's ` +
       'GitHub App installation. Add it in the admin portal first, then try indexing again.'
     );
   }
 
-  // 2. Upsert the repo row, allowlist it, and mark indexing PENDING.
+  // 2. Upsert the repo row and mark indexing PENDING.
   await env.DB.prepare(
     `INSERT INTO repos (id, github_id, full_name, owner, name, default_branch, private, indexing_status, updated_at)
      VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 'PENDING', datetime('now'))
@@ -83,14 +113,15 @@ export async function indexRepoAction(
 
   if (tenantId) {
     await env.DB.prepare(
-      `INSERT INTO tenant_repos (tenant_id, repo_id, full_name, enabled, selected_by, updated_at)
-       VALUES (?1, ?2, ?3, 1, 'slack-index-intent', datetime('now'))
+      `INSERT INTO tenant_repos (tenant_id, repo_id, installation_id, full_name, enabled, selected_by, updated_at)
+       VALUES (?1, ?2, ?3, ?4, 1, 'slack-index-intent', datetime('now'))
        ON CONFLICT(tenant_id, repo_id) DO UPDATE SET
          enabled = 1,
+         installation_id = excluded.installation_id,
          full_name = excluded.full_name,
          updated_at = datetime('now')`,
     )
-      .bind(tenantId, repoId, repo.full_name)
+      .bind(tenantId, repoId, installationId, repo.full_name)
       .run();
 
     await markStep(env, tenantId, 'repos', 'COMPLETE');
@@ -114,7 +145,28 @@ export async function indexRepoAction(
     .bind(repoId)
     .run();
 
-  // 3. Fire the GitHub Actions indexing pipeline.
+  if (tenantId) {
+    if (!env.INDEX_QUEUE) {
+      return ':warning: Indexing is not configured on the bot worker. Contact an administrator.';
+    }
+    const job: FullIndexJob = {
+      jobType: JOB_TYPES.FULL_INDEX,
+      tenantId,
+      installationId,
+      repoId,
+      repoFullName: repo.full_name,
+      enqueuedAt: new Date().toISOString(),
+    };
+    await env.INDEX_QUEUE.send(job);
+    return (
+      `:hammer_and_wrench: Indexing *${repo.full_name}* (default branch ` +
+      `\`${repo.default_branch}\`) — a full index is running. Say ` +
+      '`index status` to check progress; once it shows READY you can ask questions about the repo.'
+    );
+  }
+
+  // 3. Fire the legacy GitHub Actions indexing pipeline for non-tenant/dev usage.
+  const dispatchRepo = env.INDEX_DISPATCH_REPO || env.DEFAULT_PR_REPO;
   const dispatch = await fetch(`${GITHUB_API}/repos/${dispatchRepo}/dispatches`, {
     method: 'POST',
     headers: githubHeaders(env),
@@ -126,7 +178,7 @@ export async function indexRepoAction(
   if (!dispatch.ok) {
     const text = await dispatch.text().catch(() => '');
     return (
-      `:warning: \`${repo.full_name}\` is allowlisted, but triggering the ` +
+      `:warning: \`${repo.full_name}\` was recorded, but triggering the ` +
       `indexing pipeline failed (${dispatch.status}): ${text.slice(0, 200)}`
     );
   }

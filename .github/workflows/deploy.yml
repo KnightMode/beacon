@@ -10,6 +10,7 @@ on:
     paths:
       - 'workers/**'
       - 'packages/**'
+      - 'scripts/apply-admin-d1-migrations.mjs'
       - 'package.json'
       - 'package-lock.json'
       - '.github/workflows/deploy.yml'
@@ -49,19 +50,38 @@ jobs:
             slack:
               - 'workers/slack-bot/**'
               - 'packages/**'
+              - 'scripts/apply-admin-d1-migrations.mjs'
               - 'package.json'
               - 'package-lock.json'
               - '.github/workflows/deploy.yml'
             webhook:
               - 'workers/github-webhook/**'
               - 'packages/**'
+              - 'scripts/apply-admin-d1-migrations.mjs'
               - 'package.json'
               - 'package-lock.json'
               - '.github/workflows/deploy.yml'
 
+  migrate-admin-d1:
+    name: Apply D1 admin schema
+    needs: verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: node scripts/apply-admin-d1-migrations.mjs
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          PAGES_D1_DATABASE_NAME: ${{ vars.PAGES_D1_DATABASE_NAME || 'scintel' }}
+
   deploy-slack-bot:
     name: Deploy slack-bot
-    needs: changes
+    needs: [changes, migrate-admin-d1]
     if: needs.changes.outputs.slack == 'true'
     runs-on: ubuntu-latest
     steps:
@@ -88,12 +108,16 @@ jobs:
 
           put_secret SLACK_TOKEN_ENCRYPTION_SECRET "$SLACK_TOKEN_ENCRYPTION_SECRET"
           put_secret GITHUB_PAT "$GITHUB_PAT"
+          put_secret GITHUB_APP_ID "$GITHUB_APP_ID"
+          put_secret GITHUB_APP_PRIVATE_KEY "$GITHUB_APP_PRIVATE_KEY"
           put_secret EVAL_TOKEN "$EVAL_TOKEN"
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           SLACK_TOKEN_ENCRYPTION_SECRET: ${{ secrets.SLACK_TOKEN_ENCRYPTION_SECRET }}
           GITHUB_PAT: ${{ secrets.INDEXER_GITHUB_PAT }}
+          GITHUB_APP_ID: ${{ vars.BEACON_GITHUB_APP_ID }}
+          GITHUB_APP_PRIVATE_KEY: ${{ secrets.BEACON_GITHUB_APP_PRIVATE_KEY }}
           EVAL_TOKEN: ${{ secrets.EVAL_TOKEN }}
       - name: Deploy
         working-directory: workers/slack-bot
@@ -104,7 +128,7 @@ jobs:
 
   deploy-github-webhook:
     name: Deploy github-webhook
-    needs: changes
+    needs: [changes, migrate-admin-d1]
     if: needs.changes.outputs.webhook == 'true'
     runs-on: ubuntu-latest
     steps:
@@ -114,9 +138,36 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - name: Deploy
+      - name: Sync deploy-managed secrets
         working-directory: workers/github-webhook
-        run: npx wrangler deploy
+        run: |
+          set -euo pipefail
+
+          put_secret() {
+            local name="$1"
+            local value="$2"
+            if [ -z "$value" ]; then
+              echo "::error::$name is not configured in GitHub Actions secrets/vars"
+              exit 1
+            fi
+            printf '%s' "$value" | npx wrangler secret put "$name"
+          }
+
+          put_secret INDEXER_SHARED_SECRET "$INDEXER_SHARED_SECRET"
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          INDEXER_SHARED_SECRET: ${{ secrets.INDEXER_SHARED_SECRET }}
+      - name: Deploy
+        working-directory: workers/github-webhook
+        run: |
+          set -euo pipefail
+          if [ -z "$INDEXER_URL" ]; then
+            echo "::error::INDEXER_URL is not configured in GitHub Actions vars"
+            exit 1
+          fi
+          npx wrangler deploy --keep-vars --var "INDEXER_URL:${INDEXER_URL}"
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          INDEXER_URL: ${{ vars.INDEXER_URL }}

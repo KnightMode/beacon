@@ -3,6 +3,8 @@
  */
 
 import type { Env } from './env.js';
+import { getGitHubInstallationToken } from '@scintel/shared';
+import { getTenantRepoGrantForSlackTeam } from './tenant.js';
 
 const API = 'https://api.github.com';
 
@@ -17,6 +19,13 @@ export interface PullRequest {
   changedFiles: number;
   additions: number;
   deletions: number;
+}
+
+export interface GithubRepoInfo {
+  id: number;
+  fullName: string;
+  defaultBranch: string;
+  private: boolean;
 }
 
 export interface PullRequestFile {
@@ -63,12 +72,50 @@ export class GitHubClient {
     return token ? new GitHubClient(token) : null;
   }
 
+  static async forTenantRepo(
+    env: Env,
+    teamId: string | undefined,
+    repoFullName: string,
+  ): Promise<GitHubClient | null> {
+    if (!teamId) return GitHubClient.fromEnv(env);
+    const grant = await getTenantRepoGrantForSlackTeam(env, teamId, repoFullName);
+    if (!grant) return null;
+    if (env.BEACON_LOCAL_E2E === '1') return new GitHubClient('local-e2e-token');
+    const token = await getGitHubInstallationToken(
+      {
+        appId: env.GITHUB_APP_ID,
+        privateKey: env.GITHUB_APP_PRIVATE_KEY,
+      },
+      grant.installationId,
+    );
+    return new GitHubClient(token);
+  }
+
   private headers(): Record<string, string> {
     return {
       authorization: `Bearer ${this.token}`,
       accept: 'application/vnd.github+json',
       'x-github-api-version': '2022-11-28',
       'user-agent': 'scintel-slack-bot',
+    };
+  }
+
+  async getRepo(owner: string, repo: string): Promise<GithubRepoInfo> {
+    const res = await this.request(`${API}/repos/${owner}/${repo}`, {
+      headers: this.headers(),
+    });
+    await assertOk(res, `getRepo ${owner}/${repo}`);
+    const body = (await res.json()) as {
+      id: number;
+      full_name: string;
+      default_branch: string;
+      private: boolean;
+    };
+    return {
+      id: body.id,
+      fullName: body.full_name,
+      defaultBranch: body.default_branch,
+      private: body.private,
     };
   }
 

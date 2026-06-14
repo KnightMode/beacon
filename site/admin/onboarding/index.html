@@ -47,7 +47,7 @@
           <div class="journey-console__progress">
             <div class="journey-console__progress-head">
               <span>Setup progress</span>
-              <em><b data-journey-progress-count>0</b> / <span data-journey-progress-total>6</span> · <span data-journey-progress-pct>0%</span></em>
+              <em><b data-journey-progress-count>0</b> / <span data-journey-progress-total>5</span> · <span data-journey-progress-pct>0%</span></em>
             </div>
             <div class="journey-meter"><i data-journey-progress-bar style="--p: 0%"></i></div>
           </div>
@@ -79,14 +79,8 @@
           <em data-journey-status="indexing">Pending</em>
         </button>
         <span class="journey-connector" aria-hidden="true"></span>
-        <button id="journey-card-channel" class="journey-card" type="button" role="tab" aria-selected="false" aria-controls="journey-panel-channel" data-journey-card="channel">
-          <span>05</span>
-          <strong>Channel</strong>
-          <em data-journey-status="channel">Pending</em>
-        </button>
-        <span class="journey-connector" aria-hidden="true"></span>
         <button id="journey-card-first_answer" class="journey-card" type="button" role="tab" aria-selected="false" aria-controls="journey-panel-first_answer" data-journey-card="first_answer">
-          <span>06</span>
+          <span>05</span>
           <strong>First answer</strong>
           <em data-journey-status="first_answer">Pending</em>
         </button>
@@ -187,7 +181,7 @@
               <ul>
                 <li>Repository access scoped to the repos you approve</li>
                 <li>Only approved repositories appear in the next step</li>
-                <li>Indexing runs inside your own GitHub Actions</li>
+                <li>Indexing runs through Beacon using this GitHub App grant</li>
               </ul>
             </aside>
           </div>
@@ -302,25 +296,9 @@
           </div>
         </section>
 
-        <section id="journey-panel-channel" class="journey-panel" data-step-card="channel" data-journey-panel="channel" role="tabpanel" aria-labelledby="journey-card-channel" hidden>
-          <div class="journey-panel__header">
-            <p class="setup-card__index">05 / Channel</p>
-            <div>
-              <h2>Map the first Slack channel.</h2>
-              <p>Pick the Slack channel where your team will try Beacon first, and connect it to the repo they ask about there.</p>
-            </div>
-          </div>
-          <form class="channel-form channel-form--stage" data-channel-form>
-            <input name="repo" placeholder="owner/repo" />
-            <input name="channelId" placeholder="Channel ID (C0123ABC)" />
-            <button class="button button--primary" type="submit">Save channel</button>
-          </form>
-          <p class="setup-card__status" data-channel-form-status></p>
-        </section>
-
         <section id="journey-panel-first_answer" class="journey-panel" data-step-card="first_answer" data-journey-panel="first_answer" role="tabpanel" aria-labelledby="journey-card-first_answer" hidden>
           <div class="journey-panel__header">
-            <p class="setup-card__index">06 / First answer</p>
+            <p class="setup-card__index">05 / First answer</p>
             <div>
               <h2>Ask a real question in Slack.</h2>
               <p>Use a real question from your codebase. Beacon should answer with file and line citations from an indexed repository.</p>

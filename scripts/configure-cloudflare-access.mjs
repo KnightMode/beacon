@@ -32,6 +32,7 @@ const pagePlainVars = compactVars({
   SLACK_CLIENT_ID: firstValue(process.env.PAGES_SLACK_CLIENT_ID, process.env.SLACK_CLIENT_ID),
   GITHUB_APP_SLUG: firstValue(process.env.PAGES_GITHUB_APP_SLUG, process.env.GITHUB_APP_SLUG),
   GITHUB_APP_ID: firstValue(process.env.PAGES_GITHUB_APP_ID, process.env.GITHUB_APP_ID),
+  INDEXER_URL: firstValue(process.env.PAGES_INDEXER_URL, process.env.INDEXER_URL),
   PIPELINE_DISPATCH_REPO: firstValue(process.env.PAGES_PIPELINE_DISPATCH_REPO, process.env.PIPELINE_DISPATCH_REPO),
   PIPELINE_DISPATCH_EVENT: firstValue(process.env.PAGES_PIPELINE_DISPATCH_EVENT, process.env.PIPELINE_DISPATCH_EVENT),
 });
@@ -43,6 +44,7 @@ const pageSecretVars = compactVars({
     process.env.SLACK_TOKEN_ENCRYPTION_SECRET,
   ),
   GITHUB_APP_PRIVATE_KEY: firstValue(process.env.PAGES_GITHUB_APP_PRIVATE_KEY, process.env.GITHUB_APP_PRIVATE_KEY),
+  INDEXER_SHARED_SECRET: firstValue(process.env.PAGES_INDEXER_SHARED_SECRET, process.env.INDEXER_SHARED_SECRET),
   PIPELINE_DISPATCH_TOKEN: firstValue(process.env.PAGES_PIPELINE_DISPATCH_TOKEN, process.env.PIPELINE_DISPATCH_TOKEN),
 });
 const pagesD1Binding = String(firstValue(process.env.PAGES_D1_BINDING, 'DB')).trim();
@@ -279,8 +281,8 @@ function assertAdminRuntimeConfigured(envVars) {
     'GITHUB_APP_SLUG',
     'GITHUB_APP_ID',
     'GITHUB_APP_PRIVATE_KEY',
-    'PIPELINE_DISPATCH_REPO',
-    'PIPELINE_DISPATCH_TOKEN',
+    'INDEXER_URL',
+    'INDEXER_SHARED_SECRET',
   ].filter((name) => !envVars[name]);
   if (missing.length === 0) return;
 

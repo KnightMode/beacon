@@ -2,7 +2,7 @@ const COOKIE = 'beacon_admin_session';
 const GITHUB_LINK_COOKIE = 'beacon_github_link';
 const SESSION_TTL = 60 * 60 * 24 * 14;
 const GITHUB_LINK_TTL = 60 * 30;
-const STEP_KEYS = ['slack', 'github', 'repos', 'indexing', 'channel', 'first_answer'];
+const STEP_KEYS = ['slack', 'github', 'repos', 'indexing', 'first_answer'];
 export const GENERIC_ERROR_MESSAGE = 'Something went wrong. Try again or contact support.';
 
 export function json(body, status = 200, headers = {}) {
@@ -95,28 +95,50 @@ export async function resolveGithubTenantId(context, stateParam) {
 }
 
 export async function recordGithubInstallation(env, input) {
-  const { tenantId, installationId, accountLogin, userId } = input;
+  const { tenantId, installationId, accountLogin, accountType, userId, repos = [] } = input;
   await env.DB.prepare(
     `INSERT INTO tenant_github_installations
        (tenant_id, installation_id, account_login, account_type, updated_at)
-     VALUES (?1, ?2, ?3, 'Organization', datetime('now'))
+     VALUES (?1, ?2, ?3, ?4, datetime('now'))
      ON CONFLICT(tenant_id, installation_id) DO UPDATE SET
        account_login = excluded.account_login,
+       account_type = excluded.account_type,
        updated_at = datetime('now')`,
   )
-    .bind(tenantId, installationId, accountLogin)
+    .bind(tenantId, installationId, accountLogin, accountType || 'Organization')
     .run();
 
-  const linkedRepos = await linkPendingInstallationRepos(env, tenantId, installationId);
-  await markStep(env, tenantId, 'github', 'COMPLETE', { installationId, linkedRepos });
-  if (linkedRepos > 0) {
-    await markStep(env, tenantId, 'repos', 'COMPLETE', { linkedRepos });
-    await markStep(env, tenantId, 'indexing', 'PENDING');
+  for (const repo of repos) {
+    const row = await upsertRepo(env, repo);
+    await env.DB.prepare(
+      `INSERT INTO github_installation_repos
+         (installation_id, repo_id, full_name, github_id, default_branch, private, updated_at)
+       VALUES (?1, ?2, ?3, ?4, ?5, ?6, datetime('now'))
+       ON CONFLICT(installation_id, repo_id) DO UPDATE SET
+         full_name = excluded.full_name,
+         github_id = COALESCE(excluded.github_id, github_installation_repos.github_id),
+         default_branch = excluded.default_branch,
+         private = excluded.private,
+         updated_at = datetime('now')`,
+    )
+      .bind(
+        installationId,
+        row.repoId,
+        row.fullName,
+        repo.githubId || repo.github_id || null,
+        repo.defaultBranch || repo.default_branch || 'main',
+        repo.private === false ? 0 : 1,
+      )
+      .run();
   }
+
+  const linkedRepos = 0;
+  await markStep(env, tenantId, 'github', 'COMPLETE', { installationId, linkedRepos });
   await audit(env, tenantId, userId, 'github.connected', 'installation', String(installationId), {
     linkedRepos,
+    reposCached: repos.length,
   });
-  return { linkedRepos };
+  return { linkedRepos, reposCached: repos.length };
 }
 
 function secureCookieSuffix(request) {
@@ -139,12 +161,13 @@ export async function tenantSummary(env, tenantId) {
   )
     .bind(tenantId)
     .first();
-  const github = await env.DB.prepare(
-    `SELECT installation_id, account_login FROM tenant_github_installations
-     WHERE tenant_id = ?1 LIMIT 1`,
+  const { results: githubInstallations } = await env.DB.prepare(
+    `SELECT installation_id, account_login, account_type FROM tenant_github_installations
+     WHERE tenant_id = ?1
+     ORDER BY account_login, installation_id`,
   )
     .bind(tenantId)
-    .first();
+    .all();
   const { results: stepRows } = await env.DB.prepare(
     `SELECT step, status FROM tenant_onboarding_steps WHERE tenant_id = ?1`,
   )
@@ -156,7 +179,7 @@ export async function tenantSummary(env, tenantId) {
   const repos = await listTenantRepos(env, tenantId);
   if (repos.some((repo) => repo.status === 'READY')) steps.indexing = 'COMPLETE';
   if (slack) steps.slack = 'COMPLETE';
-  if (github) steps.github = 'COMPLETE';
+  if (githubInstallations.length > 0) steps.github = 'COMPLETE';
   if (repos.length > 0) steps.repos = 'COMPLETE';
   if (tenant.onboarding_completed_at) steps.first_answer = 'COMPLETE';
 
@@ -169,7 +192,12 @@ export async function tenantSummary(env, tenantId) {
     },
     integrations: {
       slack: Boolean(slack),
-      github: Boolean(github),
+      github: githubInstallations.length > 0,
+      githubInstallations: githubInstallations.map((row) => ({
+        installationId: row.installation_id,
+        accountLogin: row.account_login,
+        accountType: row.account_type,
+      })),
     },
     steps,
     completed: Boolean(tenant.onboarding_completed_at),
@@ -181,9 +209,11 @@ import { syncRemoteIndexStatus } from './remoteD1.js';
 
 export async function listTenantRepos(env, tenantId) {
   const { results } = await env.DB.prepare(
-    `SELECT tr.full_name, tr.repo_id, s.status, s.indexed_files, s.total_files,
-            s.total_chunks, s.error
+    `SELECT tr.full_name, tr.repo_id, tr.installation_id, gi.account_login,
+            s.status, s.indexed_files, s.total_files, s.total_chunks, s.error
      FROM tenant_repos tr
+     LEFT JOIN tenant_github_installations gi
+       ON gi.tenant_id = tr.tenant_id AND gi.installation_id = tr.installation_id
      LEFT JOIN repo_index_status s ON s.repo_id = tr.repo_id
      WHERE tr.tenant_id = ?1 AND tr.enabled = 1
      ORDER BY tr.full_name`,
@@ -193,6 +223,8 @@ export async function listTenantRepos(env, tenantId) {
   const repos = results.map((row) => ({
     repoId: row.repo_id,
     fullName: row.full_name,
+    installationId: row.installation_id,
+    accountLogin: row.account_login,
     status: row.status || 'PENDING',
     indexedFiles: row.indexed_files,
     totalFiles: row.total_files,
@@ -338,21 +370,30 @@ export function validateOAuthState(request, expectedState) {
 
 export async function linkPendingInstallationRepos(env, tenantId, installationId) {
   const { results } = await env.DB.prepare(
-    `SELECT repo_id, full_name FROM pending_installation_repos
+    `SELECT repo_id, full_name FROM github_installation_repos
      WHERE installation_id = ?1`,
   )
     .bind(installationId)
     .all();
-  for (const row of results) {
+  const rows = results.length > 0
+    ? results
+    : (await env.DB.prepare(
+        `SELECT repo_id, full_name FROM pending_installation_repos
+         WHERE installation_id = ?1`,
+      )
+        .bind(installationId)
+        .all()).results;
+  for (const row of rows) {
     await env.DB.prepare(
-      `INSERT INTO tenant_repos (tenant_id, repo_id, full_name, enabled, selected_by, updated_at)
-       VALUES (?1, ?2, ?3, 1, 'github-installation', datetime('now'))
+      `INSERT INTO tenant_repos (tenant_id, repo_id, installation_id, full_name, enabled, selected_by, updated_at)
+       VALUES (?1, ?2, ?3, ?4, 1, 'github-installation', datetime('now'))
        ON CONFLICT(tenant_id, repo_id) DO UPDATE SET
          enabled = 1,
+         installation_id = excluded.installation_id,
          full_name = excluded.full_name,
          updated_at = datetime('now')`,
     )
-      .bind(tenantId, row.repo_id, row.full_name)
+      .bind(tenantId, row.repo_id, installationId, row.full_name)
       .run();
     await env.DB.prepare(
       `DELETE FROM pending_installation_repos
@@ -361,7 +402,7 @@ export async function linkPendingInstallationRepos(env, tenantId, installationId
       .bind(installationId, row.repo_id)
       .run();
   }
-  return results.length;
+  return rows.length;
 }
 
 export class HttpError extends Error {

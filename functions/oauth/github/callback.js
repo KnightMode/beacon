@@ -34,19 +34,21 @@ export async function onRequestGet(context) {
       );
     }
 
-    if (url.searchParams.get('mock') === '1') {
-      await seedMockInstallationRepos(context.env, installationId);
-    }
-
     const session = await readSession(context);
     const accountLogin = url.searchParams.get('account_login')
       || url.searchParams.get('account')
       || `installation-${installationId}`;
+    const accountType = url.searchParams.get('account_type') || 'Organization';
+    const repos = url.searchParams.get('mock') === '1'
+      ? await seedMockInstallationRepos(context.env, installationId)
+      : [];
 
     await recordGithubInstallation(context.env, {
       tenantId,
       installationId,
       accountLogin,
+      accountType,
+      repos,
       userId: session?.userId,
     });
 
@@ -61,23 +63,38 @@ export async function onRequestGet(context) {
 }
 
 async function seedMockInstallationRepos(env, installationId) {
-  const samples = ['KnightMode/beacon', 'acme-corp/api'];
+  const samples = installationId === 67890
+    ? ['acme-corp/api', 'acme-corp/web']
+    : ['KnightMode/beacon', 'KnightMode/slack-code-intelligence'];
+  const repos = [];
   for (const fullName of samples) {
     const [owner, name] = fullName.split('/');
     const repoId = fullName.toLowerCase();
+    repos.push({
+      fullName,
+      githubId: installationId * 1000 + repos.length + 1,
+      defaultBranch: 'main',
+      private: true,
+    });
     await env.DB.batch([
       env.DB.prepare(
-        `INSERT INTO repos (id, full_name, owner, name, default_branch, private, updated_at)
-         VALUES (?1, ?2, ?3, ?4, 'main', 1, datetime('now'))
+        `INSERT INTO repos (id, github_id, full_name, owner, name, default_branch, private, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, 'main', 1, datetime('now'))
          ON CONFLICT(id) DO UPDATE SET
+           github_id = COALESCE(excluded.github_id, repos.github_id),
            full_name = excluded.full_name,
            updated_at = datetime('now')`,
-      ).bind(repoId, fullName, owner, name),
+      ).bind(repoId, installationId * 1000 + repos.length, fullName, owner, name),
       env.DB.prepare(
-        `INSERT INTO pending_installation_repos (installation_id, repo_id, full_name)
-         VALUES (?1, ?2, ?3)
-         ON CONFLICT(installation_id, repo_id) DO UPDATE SET full_name = excluded.full_name`,
-      ).bind(installationId, repoId, fullName),
+        `INSERT INTO github_installation_repos
+           (installation_id, repo_id, full_name, github_id, default_branch, private, updated_at)
+         VALUES (?1, ?2, ?3, ?4, 'main', 1, datetime('now'))
+         ON CONFLICT(installation_id, repo_id) DO UPDATE SET
+           full_name = excluded.full_name,
+           github_id = excluded.github_id,
+           updated_at = datetime('now')`,
+      ).bind(installationId, repoId, fullName, installationId * 1000 + repos.length),
     ]);
   }
+  return repos;
 }
