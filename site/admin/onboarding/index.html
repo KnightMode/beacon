@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&family=Newsreader:opsz,wght@6..72,500;6..72,650;6..72,750&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="../../styles.css?v=15" />
+  <link rel="stylesheet" href="../../styles.css?v=16" />
 </head>
 <body class="admin-shell" data-admin-page="onboarding">
   <a class="skip-link" href="#main">Skip to content</a>
@@ -18,7 +18,7 @@
       <img class="brand__mark" src="../../assets/beacon-logo.png" alt="" width="40" height="40" />
       <span>Beacon</span>
     </a>
-    <div class="admin-system-state" aria-live="polite">
+    <div class="admin-system-state" aria-live="polite" hidden>
       <span>Status</span>
       <strong data-live-state>Checking setup</strong>
     </div>
@@ -37,10 +37,19 @@
           <h1 id="journey-title">Get Beacon ready for your first Slack answer.</h1>
           <p>Connect Slack and GitHub, choose the repositories Beacon can use, then confirm the index is ready before asking your first cited question.</p>
         </div>
-        <aside class="journey-shell__tenant" aria-label="Current workspace">
-          <span>Workspace</span>
-          <strong data-tenant-name>Not connected</strong>
-          <em data-onboarding-state>Pending</em>
+        <aside class="journey-console" aria-label="Setup progress">
+          <div class="journey-console__id">
+            <span>Workspace</span>
+            <strong data-tenant-name>Not connected</strong>
+            <em class="journey-console__state" data-onboarding-state>Pending</em>
+          </div>
+          <div class="journey-console__progress">
+            <div class="journey-console__progress-head">
+              <span>Setup progress</span>
+              <em><b data-journey-progress-count>0</b> / <span data-journey-progress-total>6</span> · <span data-journey-progress-pct>0%</span></em>
+            </div>
+            <div class="journey-meter"><i data-journey-progress-bar style="--p: 0%"></i></div>
+          </div>
         </aside>
       </div>
 
@@ -124,15 +133,13 @@
               <p>Beacon will only show repositories approved through this installation, so the next step starts from the right source list.</p>
               <a class="button button--primary" href="/api/admin/github/start">Connect GitHub</a>
             </article>
-            <aside class="journey-proof journey-proof--callback">
-              <span>Setup URL</span>
-              <code data-github-callback-url>/oauth/github/callback</code>
-              <p>Enable Redirect on update. If GitHub returns here without finishing, paste the Installation ID.</p>
-              <form class="github-complete-form" data-github-complete>
-                <input id="github-installation-id" name="installationId" placeholder="Installation ID" />
-                <button class="button button--quiet button--small" type="submit">Finish</button>
-              </form>
-              <p class="setup-card__status" data-github-complete-status></p>
+            <aside class="journey-proof">
+              <span>What this unlocks</span>
+              <ul>
+                <li>Repository access scoped to the repos you approve</li>
+                <li>Only approved repositories appear in the next step</li>
+                <li>Indexing runs inside your own GitHub Actions</li>
+              </ul>
             </aside>
           </div>
         </section>
@@ -144,7 +151,6 @@
               <h2>Choose repositories.</h2>
               <p>Select the repositories your team wants available in Slack. Start with the repos people ask about most often.</p>
             </div>
-            <p class="setup-card__status" data-repo-form-status></p>
           </div>
 
           <form class="repo-form repo-form--browser" data-repo-form>
@@ -165,18 +171,19 @@
                   </div>
                   <div class="repo-browser__meta">
                     <p data-repo-picker-status>Connect GitHub to load repositories.</p>
-                    <span><strong data-repo-visible-count>0</strong> visible</span>
-                    <span><strong data-repo-selected-count>0</strong> selected</span>
-                    <span><strong data-repo-total-scanned>0</strong> scanned</span>
-                  </div>
-                  <div class="repo-picker__actions">
-                    <button class="button button--quiet" type="button" data-repo-select-all>Select visible</button>
-                    <button class="button button--quiet" type="button" data-repo-clear-all>Clear unsaved</button>
-                    <button class="button button--quiet" type="button" data-repo-load-more disabled>Load more</button>
-                    <button class="button button--primary" type="submit" data-repo-submit disabled>Start indexing</button>
+                    <div class="repo-browser__counts">
+                      <span><strong data-repo-visible-count>0</strong> visible</span>
+                      <span><strong data-repo-selected-count>0</strong> selected</span>
+                      <span><strong data-repo-total-scanned>0</strong> scanned</span>
+                    </div>
                   </div>
                   <div class="repo-list repo-list--table" data-repo-list aria-live="polite">
                     <p class="admin-empty">Connect GitHub to load repositories.</p>
+                  </div>
+                  <div class="repo-browser__footer">
+                    <button class="button button--quiet button--small" type="button" data-repo-select-all>Select visible</button>
+                    <button class="button button--quiet button--small" type="button" data-repo-clear-all>Clear unsaved</button>
+                    <button class="button button--quiet button--small" type="button" data-repo-load-more disabled>Load more</button>
                   </div>
                 </div>
               </div>
@@ -200,6 +207,10 @@
                 <div class="repo-selected-list" data-repo-selected-list>
                   <p class="admin-empty">No repos selected yet.</p>
                 </div>
+                <div class="repo-selected-panel__cta">
+                  <button class="button button--primary" type="submit" data-repo-submit disabled>Start indexing</button>
+                  <p class="setup-card__status" data-repo-form-status></p>
+                </div>
               </aside>
             </div>
           </form>
@@ -213,7 +224,7 @@
               <p>Track indexing as repositories become searchable. When jobs are ready, Beacon can use those files in Slack answers.</p>
             </div>
             <div class="live-toolbar">
-              <span class="live-badge" data-live-state>Checking setup</span>
+              <span class="live-badge" data-live-state hidden>Checking setup</span>
               <button class="button button--quiet button--small" type="button" data-refresh>Refresh</button>
             </div>
           </div>
@@ -258,7 +269,7 @@
           <p class="setup-card__status" data-channel-form-status></p>
         </section>
 
-        <section id="journey-panel-first_answer" class="journey-panel journey-panel--dark" data-step-card="first_answer" data-journey-panel="first_answer" role="tabpanel" aria-labelledby="journey-card-first_answer" hidden>
+        <section id="journey-panel-first_answer" class="journey-panel" data-step-card="first_answer" data-journey-panel="first_answer" role="tabpanel" aria-labelledby="journey-card-first_answer" hidden>
           <div class="journey-panel__header">
             <p class="setup-card__index">06 / First answer</p>
             <div>
@@ -266,13 +277,59 @@
               <p>Use a real question from your codebase. Beacon should answer with file and line citations from an indexed repository.</p>
             </div>
           </div>
-          <code class="prompt-strip">@beacon where is request signature verification implemented?</code>
+
+          <div class="slack-mock" aria-label="Example Slack conversation with Beacon">
+            <div class="slack-mock__bar">
+              <span class="slack-mock__channel"><b>#</b> eng-help</span>
+              <span class="slack-mock__topic">Ask Beacon anything about the codebase</span>
+            </div>
+
+            <div class="slack-mock__stream">
+              <div class="slack-msg">
+                <span class="slack-msg__avatar" style="--avatar: oklch(0.62 0.13 220)">DA</span>
+                <div class="slack-msg__body">
+                  <p class="slack-msg__head"><b>Dana</b> <time>10:24 AM</time></p>
+                  <p class="slack-msg__text"><span class="slack-mention">@beacon</span> where is request signature verification implemented?</p>
+                </div>
+              </div>
+
+              <div class="slack-msg slack-msg--beacon">
+                <span class="slack-msg__avatar slack-msg__avatar--bot">B</span>
+                <div class="slack-msg__body">
+                  <p class="slack-msg__head"><b>Beacon</b> <span class="slack-app-badge">APP</span> <time>10:24 AM</time></p>
+                  <p class="slack-msg__text">Request signatures are verified in <code>verifySlackSignature()</code> with a timing-safe compare before any handler runs. Stale timestamps are rejected first.</p>
+                  <div class="slack-cite" aria-label="Cited sources">
+                    <span>workers/slack-bot/src/signature.ts:21-44</span>
+                    <span>workers/slack-bot/src/router.ts:8-19</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="slack-composer">
+              <div class="slack-composer__toolbar" aria-hidden="true">
+                <b>B</b><i>i</i><s>S</s><span class="slack-composer__div"></span><span>code</span><span>link</span>
+              </div>
+              <div class="slack-composer__field">
+                <p class="slack-composer__text"><span class="slack-mention">@beacon</span> where is request signature verification implemented?<span class="slack-caret" aria-hidden="true"></span></p>
+                <button class="slack-send" type="button" aria-label="Send message">
+                  <svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true"><path d="M2 10 18 2 12 18 9 11z" fill="currentColor"/></svg>
+                </button>
+              </div>
+            </div>
+          </div>
         </section>
+      </div>
+
+      <div class="journey-nav" aria-label="Step navigation">
+        <button class="button button--quiet button--small" type="button" data-journey-prev>← Back</button>
+        <span class="journey-nav__hint" data-journey-hint>Step 1 of 6</span>
+        <button class="button button--ghost button--small" type="button" data-journey-next>Next →</button>
       </div>
     </section>
   </main>
 
   <script src="../../main.js?v=7"></script>
-  <script src="../admin.js?v=9"></script>
+  <script src="../admin.js?v=10"></script>
 </body>
 </html>

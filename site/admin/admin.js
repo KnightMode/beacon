@@ -66,7 +66,17 @@
     renderTenant(data);
     renderSteps(data.steps || {});
     renderRepos(data.repos || []);
+    updateLiveVisibility();
     if (isOnboarding) renderRepoBrowser();
+  }
+
+  // The connection / "live" indicators are only meaningful once setup is finished —
+  // keep them hidden until all steps complete so they aren't noise during onboarding.
+  function updateLiveVisibility() {
+    const complete = Boolean(state.summary?.completed);
+    $$(".admin-system-state, .live-badge").forEach((el) => {
+      el.hidden = !complete;
+    });
   }
 
   function renderSignedOut() {
@@ -77,6 +87,7 @@
     renderSteps({});
     renderRepos([]);
     renderRepoBrowser();
+    updateLiveVisibility();
     setText("[data-onboarding-state]", "Needs Slack");
     setText("[data-repo-picker-status]", "Connect Slack to load repositories.");
     setText("[data-repo-form-status]", "Connect Slack first.");
@@ -199,9 +210,11 @@
   }
 
   function renderJourneyCards(steps) {
+    let completeCount = 0;
     for (const key of stepOrder) {
       const status = steps[key] || "PENDING";
       const normalized = status.toLowerCase();
+      if (normalized === "complete") completeCount += 1;
       const previousStatus = state.journeyStatuses.get(key);
       const button = $(`[data-journey-card="${key}"]`);
       if (button) {
@@ -213,9 +226,20 @@
       state.journeyStatuses.set(key, normalized);
       setText(`[data-journey-status="${key}"]`, status);
     }
+    renderJourneyProgress(completeCount);
     if (!state.activeJourneyStep) {
       setActiveJourneyStep(initialJourneyStep(steps));
     }
+  }
+
+  function renderJourneyProgress(completeCount) {
+    const total = stepOrder.length;
+    setText("[data-journey-progress-count]", String(completeCount));
+    setText("[data-journey-progress-total]", String(total));
+    const bar = $("[data-journey-progress-bar]");
+    if (bar) bar.style.setProperty("--p", `${Math.round((completeCount / total) * 100)}%`);
+    const pct = $("[data-journey-progress-pct]");
+    if (pct) pct.textContent = `${Math.round((completeCount / total) * 100)}%`;
   }
 
   function initialJourneyStep(steps) {
@@ -256,6 +280,31 @@
     if (updateHash) {
       window.history.replaceState(null, "", `#step-${key}`);
     }
+
+    updateJourneyNav(key);
+  }
+
+  function updateJourneyNav(key) {
+    const index = stepOrder.indexOf(key);
+    if (index < 0) return;
+    const prev = $("[data-journey-prev]");
+    const next = $("[data-journey-next]");
+    const hint = $("[data-journey-hint]");
+    if (hint) hint.textContent = `Step ${index + 1} of ${stepOrder.length} · ${stepLabels[key]}`;
+    if (prev) prev.disabled = index === 0;
+    if (next) {
+      const isLast = index === stepOrder.length - 1;
+      next.disabled = isLast;
+      const nextKey = stepOrder[index + 1];
+      next.textContent = isLast ? "All steps" : `Next: ${stepLabels[nextKey]} →`;
+    }
+  }
+
+  function stepJourney(delta) {
+    const index = stepOrder.indexOf(state.activeJourneyStep);
+    if (index < 0) return;
+    const target = stepOrder[index + delta];
+    if (target) setActiveJourneyStep(target, { updateHash: true });
   }
 
   function flashClass(node, className, duration) {
@@ -321,8 +370,9 @@
     const loadMore = $("[data-repo-load-more]");
 
     if (status) {
-      status.textContent = repoStatusText(loadedRepos.length, visibleRepos.length);
-      status.classList.toggle("repo-picker__empty", !state.summary?.integrations?.github || Boolean(state.repoMessage));
+      const statusText = repoStatusText(loadedRepos.length, visibleRepos.length);
+      status.textContent = statusText;
+      status.classList.toggle("repo-picker__empty", Boolean(statusText) && Boolean(state.repoMessage));
     }
 
     setText("[data-repo-visible-count]", String(visibleRepos.length));
@@ -352,7 +402,7 @@
   }
 
   function repoStatusText(loadedCount, visibleCount) {
-    if (!state.summary?.integrations?.github) return state.repoMessage || "Connect GitHub to load repositories.";
+    if (!state.summary?.integrations?.github) return "";
     if (state.repoLoading) return state.repoMessage || "Loading repositories...";
     if (state.repoMessage) return state.repoMessage;
     const account = state.repoInstallation?.accountLogin ? ` for ${state.repoInstallation.accountLogin}` : "";
@@ -393,22 +443,24 @@
         <span>Repository</span>
         <span>Privacy</span>
         <span>Branch</span>
-        <span>Selected</span>
+        <span>State</span>
       </div>${repos.map((repo) => {
       const selected = state.selectedRepos.has(repo.fullName);
       const persisted = persistedRepoSet().has(repo.fullName);
       const repoParts = splitRepo(repo.fullName);
+      const isPublic = repo.private === false;
       const stateText = persisted ? (repo.status || "Selected") : selected ? "Draft" : "Available";
+      const stateToken = persisted ? "ready" : selected ? "draft" : "available";
       return `<label class="repo-row${selected ? " is-selected" : ""}${persisted ? " is-locked" : ""}" data-repo-row>
-        <input type="checkbox" data-repo-checkbox value="${escapeHtml(repo.fullName)}" ${selected ? "checked" : ""} ${persisted ? "disabled" : ""} />
+        <input type="checkbox" class="repo-check" data-repo-checkbox value="${escapeHtml(repo.fullName)}" ${selected ? "checked" : ""} ${persisted ? "disabled" : ""} />
         <span class="repo-row__owner">${escapeHtml(repoParts.owner)}</span>
         <span class="repo-row__main">
           <strong>${escapeHtml(repoParts.name)}</strong>
           <em>${escapeHtml(repo.fullName)}</em>
         </span>
-        <span class="repo-row__privacy">${repo.private === false ? "Public" : "Private"}</span>
+        <span class="repo-row__privacy"><span class="repo-badge ${isPublic ? "is-public" : "is-private"}">${isPublic ? "Public" : "Private"}</span></span>
         <span class="repo-row__branch">${escapeHtml(repo.defaultBranch || "main")}</span>
-        <span class="repo-row__state">${escapeHtml(stateText)}</span>
+        <span class="repo-row__state"><span class="repo-pill" data-state="${stateToken}">${escapeHtml(stateText)}</span></span>
       </label>`;
     }).join("")}`;
   }
@@ -423,9 +475,13 @@
     }
     list.innerHTML = repos.map((repo) => {
       const status = repo.status || (repo.selected ? "SELECTED" : "DRAFT");
-      return `<div class="repo-selected-item">
-        <span>${escapeHtml(repo.fullName)}</span>
+      const persisted = persistedRepoSet().has(repo.fullName);
+      const isPublic = repo.private === false;
+      return `<div class="repo-selected-item${persisted ? " is-locked" : ""}">
+        <span class="repo-selected-item__dot ${isPublic ? "is-public" : "is-private"}" aria-hidden="true"></span>
+        <span class="repo-selected-item__name">${escapeHtml(repo.fullName)}</span>
         <em>${escapeHtml(status)}</em>
+        ${persisted ? `<span class="repo-selected-item__lock" aria-label="Indexed" title="Already indexed">●</span>` : `<button type="button" class="repo-selected-item__remove" data-repo-remove="${escapeHtml(repo.fullName)}" aria-label="Remove ${escapeHtml(repo.fullName)}">×</button>`}
       </div>`;
     }).join("");
   }
@@ -445,6 +501,9 @@
       const hashStep = journeyStepFromHash();
       if (hashStep) setActiveJourneyStep(hashStep);
     });
+
+    $("[data-journey-prev]")?.addEventListener("click", () => stepJourney(-1));
+    $("[data-journey-next]")?.addEventListener("click", () => stepJourney(1));
 
     $$("[data-refresh]").forEach((button) => {
       button.addEventListener("click", () => {
@@ -504,6 +563,15 @@
       } else {
         state.selectedRepos.delete(fullName);
       }
+      renderRepoBrowser();
+    });
+
+    $("[data-repo-selected-list]")?.addEventListener("click", (event) => {
+      const remove = event.target.closest("[data-repo-remove]");
+      if (!remove) return;
+      const fullName = remove.dataset.repoRemove;
+      if (persistedRepoSet().has(fullName)) return;
+      state.selectedRepos.delete(fullName);
       renderRepoBrowser();
     });
 
@@ -583,12 +651,12 @@
     state.eventSource = source;
 
     source.onopen = () => {
-      setLiveState("All systems operational", "online");
+      setLiveState("Live", "online");
     };
 
     source.addEventListener("snapshot", (event) => {
       state.lastSnapshotAt = Date.now();
-      setLiveState("All systems operational", "online");
+      setLiveState("Live", "online");
       try {
         applySnapshot(JSON.parse(event.data));
       } catch {
