@@ -52,12 +52,13 @@
     const data = await fetchJson("/api/admin/session");
     if (!data.authenticated) {
       renderSignedOut();
-      return;
+      return false;
     }
     applySnapshot(data);
     if (isOnboarding && options.loadPicker !== false) {
       await ensureRepoPicker(data);
     }
+    return true;
   }
 
   function applySnapshot(data) {
@@ -661,6 +662,12 @@
       setLiveState("Live", "online");
     };
 
+    source.addEventListener("signed-out", () => {
+      source.close();
+      renderSignedOut();
+      setLiveState("Admin access required", "offline");
+    });
+
     source.addEventListener("snapshot", (event) => {
       state.lastSnapshotAt = Date.now();
       setLiveState("Live", "online");
@@ -795,6 +802,8 @@
   }
 
   load()
-    .then(startLiveUpdates)
+    .then((authenticated) => {
+      if (authenticated) startLiveUpdates();
+    })
     .catch(showError);
 })();
