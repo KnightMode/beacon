@@ -1787,13 +1787,15 @@ code {
   color: var(--signal);
 }
 
-.admin-topbar__logout {
+.admin-topbar__links a.admin-topbar__logout {
+  display: inline-flex;
+  align-items: center;
   padding: 0.32rem 0.62rem;
   border: 1px solid var(--white-line);
   color: color-mix(in oklch, var(--paper) 70%, transparent);
 }
 
-.admin-topbar__logout:hover {
+.admin-topbar__links a.admin-topbar__logout:hover {
   border-color: var(--signal);
   color: var(--signal);
 }
