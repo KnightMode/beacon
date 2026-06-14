@@ -28,14 +28,20 @@ npx wrangler d1 execute scintel --remote --file=packages/shared/migrations/0005_
 npx wrangler d1 execute scintel --remote --file=packages/shared/migrations/0006_installation_repo_grants.sql
 ```
 
-## 2. GitHub App credentials
+## 2. GitHub credentials
 
 Create a GitHub App and use its app id/private key for tenant repo access.
 Beacon mints short-lived installation tokens per selected repo installation;
 customer repos should not be indexed with PATs.
 
 Legacy fine-grained PAT support remains only for internal/dev fallback traffic
-that has no Slack tenant id.
+that has no Slack tenant id. If you use that path, create a fine-grained PAT
+with **Contents: Read** on every repo you want indexed, plus
+**Pull requests: Write** if you use PR creation.
+
+The admin portal and automatic indexing also use a GitHub App. Its private key
+is handled through Octokit GitHub App auth in the Pages Functions; repo
+selection is limited to repositories visible to the linked installation.
 
 ## 3. Slack app
 
@@ -99,9 +105,11 @@ If Slack OAuth redirects back with `D1_ERROR: no such table: tenants`, the
 remote database is missing the admin tenant migrations. `Configure site Access`
 now applies those migrations automatically before deploying Pages.
 
-Admin portal Pages Functions live at `functions/` (repo root). Wrangler reads
-that directory from the project root when you run `wrangler pages dev site` or
-`wrangler pages deploy site`. For local verification before deploy, see
+Admin portal Pages Functions live at `functions/` (repo root), and the admin UI
+lives inside the existing `site/` Pages project. There is no separate portal
+Worker in the current implementation. Wrangler reads `functions/` from the
+project root when you run `wrangler pages dev site` or `wrangler pages deploy
+site`. For local verification before deploy, see
 [local-verification.md](local-verification.md). Quick start:
 
 ```bash

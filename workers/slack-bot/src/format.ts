@@ -3,7 +3,7 @@
  * a citations section listing repo/path:start-end.
  */
 
-import type { Citation } from '@scintel/shared';
+import { parseRepoRef, type Citation } from '@scintel/shared';
 
 export interface SlackBlock {
   type: string;
@@ -92,16 +92,20 @@ export function buildCitationBlocks(
 
 function githubUrl(c: Citation): string {
   const path = c.path.split('/').map(encodeURIComponent).join('/');
+  const repo = parseRepoRef(c.repoFullName);
+  const repoPath = repo
+    ? `${encodeURIComponent(repo.owner)}/${encodeURIComponent(repo.name)}`
+    : c.repoFullName;
   // Permalink to the indexed commit; HEAD resolves to the default branch
   // (whatever its name) when the sha is unavailable.
   const ref = c.commitSha || 'HEAD';
-  return `https://github.com/${c.repoFullName}/blob/${ref}/${path}#L${c.startLine}-L${c.endLine}`;
+  return `https://github.com/${repoPath}/blob/${ref}/${path}#L${c.startLine}-L${c.endLine}`;
 }
 
 function formatCitations(entries: Array<{ c: Citation; n: number }>): string {
   return entries
     .map(({ c, n }) => {
-      const repoName = c.repoFullName.split('/')[1] ?? c.repoFullName;
+      const repoName = parseRepoRef(c.repoFullName)?.name ?? c.repoFullName;
       const label = `${repoName}/${c.path}:${c.startLine}-${c.endLine}`;
       return `\`[${n}]\` <${githubUrl(c)}|${label}>`;
     })

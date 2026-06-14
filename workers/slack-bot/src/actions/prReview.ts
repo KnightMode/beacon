@@ -13,6 +13,7 @@ import { call, type StreamTarget } from '../stream.js';
 import { fetchThreadHistory, type Turn } from '../history.js';
 import type { AssistantMessage } from '../assistant.js';
 import { getTenantRepoAccess } from '../tenant.js';
+import { repoIdFor } from '@scintel/shared';
 
 const MAX_FILES = 20;
 const MAX_PATCH_CHARS = 2_400;
@@ -434,7 +435,7 @@ async function assertTenantCanAccessRepo(
     if (teamId) throw new Error('This Slack workspace is not onboarded yet.');
     return;
   }
-  if (!access.repoIds.includes(fullName.toLowerCase())) {
+  if (!access.repoIds.includes(repoIdFor(fullName))) {
     throw new Error(`Repo ${fullName} is not selected for this Slack workspace.`);
   }
 }

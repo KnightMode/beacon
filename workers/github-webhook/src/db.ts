@@ -4,7 +4,12 @@
  * index-status lifecycle.
  */
 
-import { INDEX_STATUS, type IndexStatus } from '@scintel/shared';
+import {
+  INDEX_STATUS,
+  parseRepoRef,
+  repoIdFor as sharedRepoIdFor,
+  type IndexStatus,
+} from '@scintel/shared';
 import type { Env } from './env.js';
 
 export interface RepoUpsert {
@@ -15,12 +20,12 @@ export interface RepoUpsert {
 }
 
 export function repoIdFor(fullName: string): string {
-  return fullName.toLowerCase();
+  return sharedRepoIdFor(fullName);
 }
 
 export async function upsertRepo(env: Env, repo: RepoUpsert): Promise<string> {
-  const [owner, name] = repo.fullName.split('/');
-  const id = repoIdFor(repo.fullName);
+  const parsed = parseRepoRef(repo.fullName);
+  if (!parsed) throw new Error(`Invalid GitHub repository: ${repo.fullName}`);
   await env.DB.prepare(
     `INSERT INTO repos (id, github_id, full_name, owner, name, default_branch, private, indexing_status, updated_at)
      VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, datetime('now'))
@@ -31,17 +36,17 @@ export async function upsertRepo(env: Env, repo: RepoUpsert): Promise<string> {
        updated_at = datetime('now')`,
   )
     .bind(
-      id,
+      parsed.id,
       repo.githubId ?? null,
-      repo.fullName,
-      owner ?? '',
-      name ?? '',
+      parsed.fullName,
+      parsed.owner,
+      parsed.name,
       repo.defaultBranch ?? 'main',
       repo.private === false ? 0 : 1,
       INDEX_STATUS.PENDING,
     )
     .run();
-  return id;
+  return parsed.id;
 }
 
 export async function addToAllowlist(

@@ -1,4 +1,9 @@
 import {
+  createRepositoryDispatch,
+  isValidRepoFullName,
+  repoIdFor,
+} from '@scintel/shared';
+import {
   audit,
   handleError,
   HttpError,
@@ -112,7 +117,7 @@ function normalizeRepos(input) {
       defaultBranch: value.defaultBranch || value.default_branch,
       private: value.private,
     };
-  }).filter((repo) => /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repo.fullName));
+  }).filter((repo) => isValidRepoFullName(repo.fullName));
 }
 
 export async function resolveTenantInstallationRepo(env, tenantId, fullName, installationId) {
@@ -129,7 +134,7 @@ export async function resolveTenantInstallationRepo(env, tenantId, fullName, ins
     throw new HttpError(400, 'Connect GitHub before choosing repos.');
   }
 
-  const repoId = fullName.toLowerCase();
+  const repoId = repoIdFor(fullName);
   for (const installation of installations) {
     const localGrant = await env.DB.prepare(
       `SELECT gir.full_name, gir.github_id, gir.default_branch, gir.private, gir.installation_id
@@ -177,34 +182,25 @@ async function dispatchIndex(context, job) {
     await markLocalIndexReady(env, job.repoId);
     return null;
   }
-
   if (env.PIPELINE_DISPATCH_REPO && env.PIPELINE_DISPATCH_TOKEN) {
-    const res = await fetch(`https://api.github.com/repos/${env.PIPELINE_DISPATCH_REPO}/dispatches`, {
-      method: 'POST',
-      headers: {
-        authorization: `Bearer ${env.PIPELINE_DISPATCH_TOKEN}`,
-        accept: 'application/vnd.github+json',
-        'content-type': 'application/json',
-        'user-agent': 'beacon-admin-portal',
-        'x-github-api-version': '2022-11-28',
+    const res = await createRepositoryDispatch({
+      repository: env.PIPELINE_DISPATCH_REPO,
+      token: env.PIPELINE_DISPATCH_TOKEN,
+      eventType: env.PIPELINE_DISPATCH_EVENT || 'index-repo',
+      clientPayload: {
+        repo: job.repoFullName,
+        repoId: job.repoId,
+        tenantId: job.tenantId,
+        installationId: job.installationId,
+        jobType: 'FULL_INDEX',
       },
-      body: JSON.stringify({
-        event_type: env.PIPELINE_DISPATCH_EVENT || 'index-repo',
-        client_payload: {
-          repo: job.repoFullName,
-          repoId: job.repoId,
-          tenantId: job.tenantId,
-          installationId: job.installationId,
-          jobType: 'FULL_INDEX',
-        },
-      }),
+      userAgent: 'beacon-admin-portal',
     });
     if (!res.ok) {
-      const text = await res.text().catch(() => '');
       console.error('GitHub Actions index dispatch failed', {
         repo: job.repoFullName,
         status: res.status,
-        body: text.slice(0, 200),
+        body: res.body.slice(0, 200),
       });
       return 'Could not start indexing for this repository. Try again or contact support.';
     }

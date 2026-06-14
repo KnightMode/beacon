@@ -3,6 +3,7 @@
  */
 
 import type { Env } from './env.js';
+import { parseRepoRef, repoIdFor } from '@scintel/shared';
 import { getTenantRepoAccess } from './tenant.js';
 
 export interface RepoTarget {
@@ -20,12 +21,12 @@ export function parseRepoFromText(text: string): RepoTarget | null {
   const urlMatch = text.match(REPO_GH_URL);
   if (urlMatch) {
     const [, owner, repo] = urlMatch;
-    return { owner: owner!, repo: repo!, fullName: `${owner}/${repo}` };
+    return repoTargetFromFullName(`${owner}/${repo}`);
   }
   const shortMatch = text.match(REPO_SHORT);
   if (shortMatch) {
     const [, owner, repo] = shortMatch;
-    return { owner: owner!, repo: repo!, fullName: `${owner}/${repo}` };
+    return repoTargetFromFullName(`${owner}/${repo}`);
   }
   return null;
 }
@@ -38,9 +39,7 @@ export async function getDefaultAllowlistedRepo(
 
   const fullName = results[0]?.full_name;
   if (!fullName) return null;
-  const [owner, repo] = fullName.split('/');
-  if (!owner || !repo) return null;
-  return { owner, repo, fullName };
+  return repoTargetFromFullName(fullName);
 }
 
 /** Match phrases like "ebpf router repo" to allowlisted KnightMode/ebpf-wiremock-router. */
@@ -59,8 +58,9 @@ export async function fuzzyMatchAllowlistedRepo(
   let best: { fullName: string; score: number } | null = null;
   for (const row of results) {
     const fullName = row.full_name;
-    const slug = (fullName.split('/')[1] ?? '').toLowerCase();
-    if (!slug) continue;
+    const repo = parseRepoRef(fullName);
+    if (!repo) continue;
+    const slug = repo.name.toLowerCase();
     const parts = slug.split('-').filter((p) => p.length > 2);
 
     let score = 0;
@@ -79,9 +79,7 @@ export async function fuzzyMatchAllowlistedRepo(
   }
 
   if (!best || best.score < 3) return null;
-  const [owner, repo] = best.fullName.split('/');
-  if (!owner || !repo) return null;
-  return { owner, repo, fullName: best.fullName };
+  return repoTargetFromFullName(best.fullName);
 }
 
 const REPO_STOPWORDS = new Set([
@@ -114,21 +112,25 @@ export async function resolveTargetRepo(
   const fromText = parseRepoFromText(text);
   if (fromText) {
     if (!access) return fromText;
-    return access.repoIds.includes(fromText.fullName.toLowerCase()) ? fromText : null;
+    return access.repoIds.includes(repoIdFor(fromText.fullName)) ? fromText : null;
   }
 
   const fuzzy = await fuzzyMatchAllowlistedRepo(env, text, teamId);
   if (fuzzy) return fuzzy;
 
   const configured = env.DEFAULT_PR_REPO?.trim();
-  if (configured && (!access || access.repoIds.includes(configured.toLowerCase()))) {
-    const [owner, repo] = configured.split('/');
-    if (owner && repo) {
-      return { owner, repo, fullName: `${owner}/${repo}` };
-    }
+  if (configured && (!access || access.repoIds.includes(repoIdFor(configured)))) {
+    return repoTargetFromFullName(configured);
   }
 
   return getDefaultAllowlistedRepo(env, teamId);
+}
+
+function repoTargetFromFullName(fullName: string): RepoTarget | null {
+  const parsed = parseRepoRef(fullName);
+  return parsed
+    ? { owner: parsed.owner, repo: parsed.name, fullName: parsed.fullName }
+    : null;
 }
 
 async function listAccessibleRepos(

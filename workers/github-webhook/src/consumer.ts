@@ -5,6 +5,7 @@
  */
 
 import type { IndexJob } from '@scintel/shared';
+import { createRepositoryDispatch } from '@scintel/shared';
 import type { Env } from './env.js';
 
 export async function handleIndexBatch(
@@ -55,34 +56,29 @@ async function dispatchToIndexer(env: Env, job: IndexJob): Promise<void> {
 }
 
 async function dispatchToPipeline(env: Env, job: IndexJob): Promise<void> {
-  const url = `https://api.github.com/repos/${env.PIPELINE_DISPATCH_REPO}/dispatches`;
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: {
-      authorization: `Bearer ${env.PIPELINE_DISPATCH_TOKEN}`,
-      accept: 'application/vnd.github+json',
-      'content-type': 'application/json',
-      'user-agent': 'scintel-github-webhook',
-      'x-github-api-version': '2022-11-28',
+  if (!env.PIPELINE_DISPATCH_REPO || !env.PIPELINE_DISPATCH_TOKEN) {
+    throw new Error('repository_dispatch is not configured');
+  }
+
+  const res = await createRepositoryDispatch({
+    repository: env.PIPELINE_DISPATCH_REPO,
+    token: env.PIPELINE_DISPATCH_TOKEN,
+    eventType: env.PIPELINE_DISPATCH_EVENT || 'index-repo',
+    clientPayload: {
+      repo: job.repoFullName,
+      jobType: job.jobType,
+      commitSha: job.commitSha ?? null,
+      changedFiles: (job as { changedFiles?: string[] }).changedFiles ?? [],
+      removedFiles: (job as { removedFiles?: string[] }).removedFiles ?? [],
+      force: (job as { force?: boolean }).force ?? false,
+      repoId: job.repoId,
+      tenantId: job.tenantId ?? null,
+      installationId: job.installationId ?? null,
     },
-    body: JSON.stringify({
-      event_type: env.PIPELINE_DISPATCH_EVENT || 'index-repo',
-      client_payload: {
-        repo: job.repoFullName,
-        repoId: job.repoId,
-        tenantId: job.tenantId ?? null,
-        installationId: job.installationId ?? null,
-        jobType: job.jobType,
-        commitSha: job.commitSha ?? null,
-        changedFiles: (job as { changedFiles?: string[] }).changedFiles ?? [],
-        removedFiles: (job as { removedFiles?: string[] }).removedFiles ?? [],
-        force: (job as { force?: boolean }).force ?? false,
-      },
-    }),
+    userAgent: 'scintel-github-webhook',
   });
   // GitHub returns 204 No Content on success.
   if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new Error(`repository_dispatch responded ${res.status}: ${text.slice(0, 500)}`);
+    throw new Error(`repository_dispatch responded ${res.status}: ${res.body.slice(0, 500)}`);
   }
 }

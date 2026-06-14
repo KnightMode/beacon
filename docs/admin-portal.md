@@ -1,134 +1,95 @@
-# Admin portal (multi-tenant design)
+# Admin portal
 
-A web dashboard where customers manage their account: see usage, manage
-billing, repos, people, and settings. Everything an owner/admin needs from an
-"account perspective", in one place.
+The admin portal is live inside the existing Cloudflare Pages site. It is not a
+separate React app or a separate Worker.
 
-The Slack commands (`@beacon admins add`, `@beacon billing`, …) stay — they
-are the quick path. The portal is the complete path, and the only place for
-anything that needs a real screen (usage charts, invoices, audit history).
-
-## How customers get in: Sign in with Slack
-
-No new passwords. The portal uses **Sign in with Slack** (OpenID Connect):
-
-1. Customer visits `portal.<domain>` and clicks "Sign in with Slack".
-2. Slack confirms who they are and which workspace they belong to.
-3. We map workspace → tenant and user → role (owner / admin / member, same
-   roles as `docs/rbac.md`), then set a short-lived signed session cookie.
-
-So access to the portal is governed by exactly the same identity as the bot:
-if you can't get into the company Slack, you can't get into the portal. No
-separate user management, ever.
-
-What each role sees:
-
-| Page | Member | Admin | Owner |
-|---|---|---|---|
-| Overview + usage | view | view | view |
-| Repos | view | manage | manage |
-| People & roles | view | view | manage |
-| Settings | view | manage | manage |
-| Billing & invoices | — | view | manage |
-| Audit log | — | view | view |
-| Danger zone | — | — | manage |
-
-## The pages
-
-### 1. Overview
-
-The "is everything okay?" page: current plan, usage this billing period shown
-against plan limits (questions used / quota, repos indexed / quota), GitHub
-connection status, and any warnings (over quota, payment failed, indexing
-errors). One glance answers "are we fine".
-
-### 2. Usage
-
-The reason customers actually open the portal:
-
-- Questions asked per day/month, with plan quota drawn on the chart.
-- Indexing activity (repos indexed, incremental updates).
-- Breakdown by Slack user — who's getting value (great ammo for whoever
-  champions the tool internally).
-- What the current period will cost if it ends today (base plan + metered
-  overage), so the invoice is never a surprise.
-- CSV export.
-
-Data comes from the same `usage_events` table that feeds Stripe metering —
-one source of truth, so the portal and the invoice always agree.
-
-### 3. Repos
-
-- Every indexed repo: status (indexed / indexing / failed), last index time,
-  commit, size, language mix.
-- Actions: trigger re-index, remove a repo, see why a repo failed.
-- "Add repo" shows what the GitHub installation can see but isn't indexed
-  yet — one click to index, quota permitting.
-
-### 4. People & roles
-
-- Everyone who has used the bot, with their role.
-- Owners promote/demote admins here (same effect as the Slack command).
-- In strict mode: who has linked GitHub, who hasn't, and a nudge button that
-  DMs the unlinked.
-
-### 5. Billing
-
-- Current plan, renewal date, payment method, plan comparison with
-  upgrade/downgrade (Stripe Checkout for upgrades).
-- Invoice history (from Stripe).
-- "Manage payment details" hands off to the Stripe Customer Portal — card
-  data never touches our systems.
-
-### 6. Settings
-
-- Strict mode toggle (per-user repo permissions).
-- Who may create fix-PRs (everyone vs admins).
-- Optional CI alert channel defaults.
-- GitHub connections: connected accounts/orgs, repos granted by each
-  installation, selected repos, reconnect, and add another account/org.
-
-### 7. Audit log
-
-The per-tenant audit trail from `docs/rbac.md`, searchable and filterable:
-who indexed what, who changed roles, who changed settings, when.
-
-### 8. Danger zone (owners only)
-
-- Disconnect GitHub.
-- Pause the bot (tenant-level kill switch — useful during *their* incidents).
-- Delete account and all data: types the workspace name to confirm, then runs
-  the structural deletion from `docs/emergency-handling.md` (drop tenant
-  database, vector namespace, control rows, Stripe customer). Email + DM
-  confirmation when complete.
-
-## How it's built
-
-Same stack as everything else — no new infrastructure type:
+## Current implementation
 
 ```
-portal/  (React SPA, static assets)
-   served by →  workers/portal  (new Worker)
-                  ├─ GET  /auth/slack, /auth/callback   Sign in with Slack (OIDC)
-                  ├─ GET  /api/overview, /api/usage     reads control-plane D1
-                  ├─ GET/POST /api/repos, /api/members, /api/settings
-                  │       reads/writes tenant D1 (HTTP API) + enqueues jobs
-                  └─ POST /api/billing/checkout, /api/billing/portal   Stripe
+site/
+  admin/                 static admin UI
+  admin/onboarding/      guided onboarding page
+
+functions/
+  api/admin/*            session, onboarding summary, repos, channel mapping
+  api/admin/slack/*      Slack OAuth start + channel list
+  api/admin/github/*     GitHub App start, callback completion, repo picker
+  oauth/slack/callback   Slack OAuth callback
+  oauth/github/callback  GitHub App setup callback
 ```
 
-- **One new Worker** (`workers/portal`) serves both the static SPA and its
-  JSON API. It binds the same `CONTROL_DB` and uses the same shared
-  `TenantDb` client and Stripe helpers as the bot — the portal contains no
-  logic of its own beyond screens.
-- Every API route re-derives tenant and role from the session cookie and
-  re-checks permissions server-side; the role table above is enforced in the
-  API, not just hidden in the UI.
-- Mutations (re-index, role change, setting change) go through the same code
-  paths and queues as the Slack commands, and write the same audit log — two
-  front doors, one set of rules.
+The portal serves two views:
 
-## What stays out of scope (deliberately)
+- `/admin/` — workspace status: Slack/GitHub connection state, selected repos,
+  and onboarding progress.
+- `/admin/onboarding/` — guided six-step setup: connect Slack, connect GitHub,
+  choose repos, watch indexing, map a CI notification channel, and ask the first
+  cited question.
 
-- No asking code questions from the portal — Slack is the product surface.
-- No portal-only roles or separate logins — identity stays Slack-defined.
-- No custom payment forms — Stripe owns all card handling.
+## Identity and session model
+
+Slack OAuth is the first step. The callback creates or updates a tenant keyed by
+Slack workspace/team ID, stores the Slack bot token encrypted with
+`SLACK_TOKEN_ENCRYPTION_SECRET`, records the Slack install, and sets a signed
+`beacon_admin_session` cookie.
+
+GitHub App setup is linked to that Slack tenant by a short-lived signed
+`beacon_github_link` cookie plus the optional GitHub setup `state` value.
+Repository listing uses GitHub App installation access through Octokit App auth,
+so the picker only shows repositories visible to the installation.
+
+## Data written by the portal
+
+The current implementation uses the shared `scintel` D1 database with
+tenant-scoped rows:
+
+- `tenants`
+- `tenant_slack_installs`
+- `tenant_github_installations`
+- `pending_installation_repos`
+- `tenant_repos`
+- `tenant_onboarding_steps`
+- `tenant_ci_notify_channels`
+- `repos`
+- `repo_index_status`
+
+Selecting repositories writes `tenant_repos` rows and, when
+`PIPELINE_DISPATCH_*` is configured, fires the GitHub Actions indexing workflow
+through `repository_dispatch`. Index status is read from `repo_index_status`;
+the portal also syncs remote D1 index status when the relevant Cloudflare API
+vars are present.
+
+## Security boundary
+
+In deployed environments, Cloudflare Access protects `/admin`, `/api/admin`,
+`/oauth/slack/callback`, and `/oauth/github/callback`. Pages middleware verifies
+the Access JWT issuer, audience, expiry, signature, and optional email/domain
+allow-list before serving the admin UI or API routes.
+
+Localhost is exempt by default so `wrangler pages dev` remains usable.
+
+## Local verification
+
+```bash
+cp site/.dev.vars.example .dev.vars
+npm run db:local:init
+npm run dev:portal
+```
+
+Then in another terminal:
+
+```bash
+npm run verify:local
+```
+
+Mock OAuth is available for local smoke tests:
+
+- `/api/admin/slack/start?mock=1`
+- `/api/admin/github/start?mock=1`
+
+## Not implemented yet
+
+The broader customer dashboard is still future work. The current portal does
+not include billing, usage charts, people/roles, audit-log browsing, account
+deletion, or Stripe Customer Portal links. Those belong to the future SaaS plan
+in [multi-tenant-saas.md](multi-tenant-saas.md), not to the current runtime.
