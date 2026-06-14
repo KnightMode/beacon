@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <a href="https://beacon-90k.pages.dev"><strong>Website</strong></a> ·
+  <a href="https://askbeacon.dev"><strong>Website</strong></a> ·
   <a href="docs/architecture.md">Architecture</a> ·
   <a href="docs/setup.md">Setup</a> ·
   <a href="docs/usage.md">Usage</a> ·

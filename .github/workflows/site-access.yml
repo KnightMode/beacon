@@ -22,7 +22,7 @@ on:
       site_hostname:
         description: 'Hostname to protect with Cloudflare Access'
         required: true
-        default: 'beacon-90k.pages.dev'
+        default: 'askbeacon.dev'
         type: string
       protected_paths:
         description: 'Comma-separated hostname paths to protect'
@@ -110,6 +110,12 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - name: Attach custom domain
+        run: npm run attach:pages-domain
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          PAGES_CUSTOM_DOMAIN: askbeacon.dev
       - name: Apply D1 admin schema
         run: |
           set -euo pipefail
