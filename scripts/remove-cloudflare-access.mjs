@@ -5,7 +5,7 @@ const PAGES_ENVIRONMENTS = ['production', 'preview'];
 
 const accountId = requiredEnv('CLOUDFLARE_ACCOUNT_ID');
 const apiToken = requiredEnv('CLOUDFLARE_API_TOKEN');
-const hostname = cleanHostname(process.env.ACCESS_SITE_HOSTNAME || 'beacon-90k.pages.dev');
+const hostname = cleanHostname(process.env.ACCESS_SITE_HOSTNAME || 'askbeacon.dev');
 const pagesProjectName = process.env.ACCESS_PAGES_PROJECT_NAME?.trim() || 'beacon';
 const pagesEnvironment = normalizePagesEnvironment(process.env.ACCESS_PAGES_ENVIRONMENT || 'production');
 const appName = process.env.ACCESS_APP_NAME?.trim() || 'Beacon admin portal';
