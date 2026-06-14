@@ -22,9 +22,8 @@
     "dev:bot": "npm run dev --workspace @scintel/slack-bot -- --persist-to ../../.wrangler/state",
     "verify:local": "node scripts/verify-local-onboarding.mjs",
     "e2e:local": "node scripts/e2e-local.mjs",
-    "configure:site-access": "node scripts/configure-cloudflare-access.mjs",
-    "remove:site-access": "node scripts/remove-cloudflare-access.mjs",
-    "attach:pages-domain": "node scripts/attach-pages-domain.mjs",
+    "configure:site-access": "echo \"Use the Configure site Access GitHub Actions workflow or terraform/environments/production.\"",
+    "remove:site-access": "echo \"Use the Make site public GitHub Actions workflow or terraform -var='enable_admin_access=false'.\"",
     "dry-run": "npm run dry-run --workspace workers/github-webhook && npm run dry-run --workspace workers/slack-bot"
   },
   "devDependencies": {

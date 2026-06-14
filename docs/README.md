@@ -12,6 +12,7 @@ The [README](../README.md) is the pitch. This is everything else.
 | [Onboarding](./onboarding.md) | Customer setup flow as implemented today, plus what remains future work. |
 | [Local verification](./local-verification.md) | Local D1 + mock OAuth smoke tests for the Pages admin portal and tenant-scoped bot behavior. |
 | [Site Access](./site-access.md) | Protect the Cloudflare Pages admin portal with email OTP login via Cloudflare Access. |
+| [Cloudflare Terraform](./cloudflare-terraform.md) | Terraform ownership for stable Cloudflare resources and the remaining Wrangler/runtime split. |
 | [Development](./development.md) | Local workflow, tests, dry-runs, and the answer-quality eval harness. |
 | [Multi-tenant SaaS plan](./multi-tenant-saas.md) | Current shared-D1 tenant scope and the remaining path to fully isolated, billable SaaS. |
 | [Provisioning design](./provisioning.md) | Future per-tenant D1/Vectorize provisioning design; not the current runtime model. |

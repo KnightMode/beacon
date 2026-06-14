@@ -1,11 +1,9 @@
 name: Make site public
 
-# Removes the Cloudflare Access applications for the Cloudflare Pages admin
-# portal. This leaves the Zero Trust organization and identity provider in
-# place so Access can be re-enabled later by running Configure site Access.
-# The CLOUDFLARE_API_TOKEN secret needs:
-# - Access: Apps and Policies Write
-# - Cloudflare Pages: Edit
+# Removes the Terraform-managed Cloudflare Access applications for the Pages
+# admin portal and clears Access runtime vars from the Pages deployment config.
+# The CLOUDFLARE_API_TOKEN secret needs Cloudflare Pages and Zero Trust Access
+# edit permissions.
 
 on:
   workflow_dispatch:
@@ -38,9 +36,19 @@ on:
         required: true
         default: 'Beacon'
         type: string
+      confirm_imported_state:
+        description: 'Required safety check: confirm existing Cloudflare resources have been imported into Terraform state'
+        required: true
+        default: false
+        type: boolean
 
 permissions:
   contents: read
+
+env:
+  TF_WORKING_DIR: terraform/environments/production
+  TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET || 'beacon-terraform-state' }}
+  TF_STATE_KEY: ${{ vars.TF_STATE_KEY || 'cloudflare/production.tfstate' }}
 
 jobs:
   remove-access:
@@ -51,13 +59,94 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: 22
-      - name: Remove Access
-        run: node scripts/remove-cloudflare-access.mjs
+          cache: npm
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+      - run: npm ci
+      - name: Apply Terraform public state
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: |
+          terraform init \
+            -backend-config="bucket=${TF_STATE_BUCKET}" \
+            -backend-config="key=${TF_STATE_KEY}" \
+            -backend-config="region=auto" \
+            -backend-config="endpoint=https://${CLOUDFLARE_ACCOUNT_ID}.r2.cloudflarestorage.com" \
+            -backend-config="skip_credentials_validation=true" \
+            -backend-config="skip_region_validation=true" \
+            -backend-config="skip_metadata_api_check=true" \
+            -backend-config="force_path_style=true"
+
+          if [ "${CONFIRM_IMPORTED_STATE}" != "true" ]; then
+            echo "::error::Refusing to apply Terraform until existing Cloudflare resources have been imported into state."
+            exit 1
+          fi
+
+          required_state=(
+            'cloudflare_d1_database.scintel'
+            'cloudflare_pages_domain.site'
+            'cloudflare_zero_trust_access_identity_provider.otp'
+            'cloudflare_zero_trust_access_application.admin["/admin*"]'
+            'cloudflare_zero_trust_access_application.admin["/api/admin*"]'
+            'cloudflare_zero_trust_access_application.admin["/oauth/slack/callback*"]'
+            'cloudflare_zero_trust_access_application.admin["/oauth/github/callback*"]'
+            'cloudflare_queue.beacon["scintel-answer-jobs"]'
+            'cloudflare_queue.beacon["scintel-answer-jobs-dlq"]'
+            'cloudflare_queue.beacon["scintel-create-pr-jobs"]'
+            'cloudflare_queue.beacon["scintel-create-pr-jobs-dlq"]'
+            'cloudflare_queue.beacon["scintel-index-jobs"]'
+            'cloudflare_queue.beacon["scintel-index-jobs-dlq"]'
+            'cloudflare_queue.beacon["scintel-triage-jobs"]'
+            'cloudflare_queue.beacon["scintel-triage-jobs-dlq"]'
+          )
+          state_list="$(terraform state list)"
+          missing=()
+          for address in "${required_state[@]}"; do
+            if ! grep -Fxq "$address" <<<"$state_list"; then
+              missing+=("$address")
+            fi
+          done
+          if [ "${#missing[@]}" -gt 0 ]; then
+            printf '::error::Missing Terraform imports:\n'
+            printf '  %s\n' "${missing[@]}"
+            exit 1
+          fi
+
+          terraform apply -auto-approve
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          ACCESS_SITE_HOSTNAME: ${{ inputs.site_hostname }}
-          ACCESS_PROTECTED_PATHS: ${{ inputs.protected_paths }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.TF_STATE_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.TF_STATE_SECRET_ACCESS_KEY }}
+          CONFIRM_IMPORTED_STATE: ${{ inputs.confirm_imported_state }}
+          TF_VAR_cloudflare_account_id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          TF_VAR_enable_admin_access: 'false'
+          TF_VAR_pages_project_name: ${{ inputs.pages_project_name }}
+          TF_VAR_pages_custom_domain: ${{ inputs.site_hostname }}
+          TF_VAR_access_app_name: ${{ inputs.app_name }}
+          TF_VAR_protected_paths_csv: ${{ inputs.protected_paths }}
+      - name: Capture Terraform outputs
+        id: tf
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: |
+          echo "d1_database_id=$(terraform output -raw d1_database_id)" >> "$GITHUB_OUTPUT"
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.TF_STATE_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.TF_STATE_SECRET_ACCESS_KEY }}
+      - name: Clear Pages Access runtime config
+        run: node scripts/configure-pages-runtime.mjs
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          PAGES_ADMIN_ACCESS_ENABLED: 'false'
+          PAGES_REQUIRE_ADMIN_RUNTIME_CONFIG: 'false'
+          PAGES_PROJECT_NAME: ${{ inputs.pages_project_name }}
+          PAGES_ENVIRONMENT: ${{ inputs.pages_environment }}
+          PAGES_D1_BINDING: DB
+          PAGES_D1_DATABASE_ID: ${{ steps.tf.outputs.d1_database_id }}
+      - name: Deploy Pages without Access vars
+        run: npx wrangler pages deploy site --project-name="${ACCESS_PAGES_PROJECT_NAME}" --branch=main
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           ACCESS_PAGES_PROJECT_NAME: ${{ inputs.pages_project_name }}
-          ACCESS_PAGES_ENVIRONMENT: ${{ inputs.pages_environment }}
-          ACCESS_APP_NAME: ${{ inputs.app_name }}

@@ -14,6 +14,8 @@ const pagesProjectName = process.env.ACCESS_PAGES_PROJECT_NAME?.trim()
 const pagesEnvironment = normalizePagesEnvironment(
   process.env.ACCESS_PAGES_ENVIRONMENT || process.env.PAGES_ENVIRONMENT || 'production',
 );
+const adminAccessEnabled = optionalBoolean(process.env.PAGES_ADMIN_ACCESS_ENABLED);
+const requireAdminRuntimeConfig = optionalBoolean(process.env.PAGES_REQUIRE_ADMIN_RUNTIME_CONFIG) ?? true;
 const pagesD1Binding = String(firstValue(process.env.PAGES_D1_BINDING, 'DB')).trim();
 const pagesD1DatabaseId = String(
   firstValue(
@@ -42,6 +44,19 @@ const pageSecretVars = compactVars({
   GITHUB_APP_PRIVATE_KEY: firstValue(process.env.PAGES_GITHUB_APP_PRIVATE_KEY, process.env.GITHUB_APP_PRIVATE_KEY),
   INDEXER_SHARED_SECRET: firstValue(process.env.PAGES_INDEXER_SHARED_SECRET, process.env.INDEXER_SHARED_SECRET),
   PIPELINE_DISPATCH_TOKEN: firstValue(process.env.PAGES_PIPELINE_DISPATCH_TOKEN, process.env.PIPELINE_DISPATCH_TOKEN),
+});
+
+const pageAccessVars = compactVars({
+  ADMIN_CF_ACCESS_ISSUER: firstValue(process.env.PAGES_ADMIN_CF_ACCESS_ISSUER, process.env.ADMIN_CF_ACCESS_ISSUER),
+  ADMIN_CF_ACCESS_AUD: firstValue(process.env.PAGES_ADMIN_CF_ACCESS_AUD, process.env.ADMIN_CF_ACCESS_AUD),
+  ADMIN_CF_ACCESS_ALLOWED_EMAILS: firstValue(
+    process.env.PAGES_ADMIN_CF_ACCESS_ALLOWED_EMAILS,
+    process.env.ADMIN_CF_ACCESS_ALLOWED_EMAILS,
+  ),
+  ADMIN_CF_ACCESS_ALLOWED_DOMAINS: firstValue(
+    process.env.PAGES_ADMIN_CF_ACCESS_ALLOWED_DOMAINS,
+    process.env.ADMIN_CF_ACCESS_ALLOWED_DOMAINS,
+  ),
 });
 
 const project = await cfFetch(`/pages/projects/${encodeURIComponent(pagesProjectName)}`);
@@ -81,8 +96,26 @@ function adminRuntimeVars(existingEnvVars) {
   for (const [name, value] of Object.entries(pageSecretVars)) {
     envVars[name] = secretTextVar(value);
   }
+  syncAccessRuntimeVars(envVars);
   assertRuntimeConfigured(envVars);
   return envVars;
+}
+
+function syncAccessRuntimeVars(envVars) {
+  if (adminAccessEnabled === undefined) return;
+
+  if (!adminAccessEnabled) {
+    envVars.ADMIN_CF_ACCESS_ISSUER = null;
+    envVars.ADMIN_CF_ACCESS_AUD = null;
+    envVars.ADMIN_CF_ACCESS_ALLOWED_EMAILS = null;
+    envVars.ADMIN_CF_ACCESS_ALLOWED_DOMAINS = null;
+    return;
+  }
+
+  for (const [name, value] of Object.entries(pageAccessVars)) {
+    envVars[name] = plainTextVar(value);
+  }
+  assertAccessRuntimeConfigured(envVars);
 }
 
 function adminD1Databases(existingD1Databases) {
@@ -99,6 +132,8 @@ function adminD1Databases(existingD1Databases) {
 }
 
 function assertRuntimeConfigured(envVars) {
+  if (!requireAdminRuntimeConfig) return;
+
   const required = [
     'SLACK_CLIENT_ID',
     'ADMIN_SESSION_SECRET',
@@ -115,6 +150,16 @@ function assertRuntimeConfigured(envVars) {
   throw new Error(
     `Missing Pages admin runtime config: ${missing.join(', ')}. ` +
       'Set matching GitHub Actions variables/secrets before deploying.',
+  );
+}
+
+function assertAccessRuntimeConfigured(envVars) {
+  const required = ['ADMIN_CF_ACCESS_ISSUER', 'ADMIN_CF_ACCESS_AUD'];
+  const missing = required.filter((name) => !envVars[name]);
+  if (missing.length === 0) return;
+  throw new Error(
+    `Missing Pages Access runtime config: ${missing.join(', ')}. ` +
+      'Run Terraform and pass its admin_access_* outputs before deploying protected admin routes.',
   );
 }
 
@@ -145,6 +190,14 @@ function normalizePagesEnvironment(value) {
   const normalized = String(value || '').trim();
   if (normalized === 'production' || normalized === 'preview') return normalized;
   throw new Error('Pages environment must be "production" or "preview".');
+}
+
+function optionalBoolean(value) {
+  if (value === undefined || value === null || String(value).trim() === '') return undefined;
+  const normalized = String(value).trim().toLowerCase();
+  if (['1', 'true', 'yes', 'on'].includes(normalized)) return true;
+  if (['0', 'false', 'no', 'off'].includes(normalized)) return false;
+  throw new Error('PAGES_ADMIN_ACCESS_ENABLED must be true or false when set.');
 }
 
 function plainTextVar(value) {
