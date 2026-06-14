@@ -59,6 +59,10 @@ export function clearGithubLinkCookie(request) {
   return `${GITHUB_LINK_COOKIE}=; Path=/; Max-Age=0; HttpOnly${secureCookieSuffix(request)}; SameSite=Lax`;
 }
 
+export function clearSessionCookie(request) {
+  return `${COOKIE}=; Path=/; Max-Age=0; HttpOnly${secureCookieSuffix(request)}; SameSite=Lax`;
+}
+
 export async function readGithubLinkTenant(context) {
   const raw = cookieValue(context.request.headers.get('cookie') || '', GITHUB_LINK_COOKIE);
   if (!raw) return null;
