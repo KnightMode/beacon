@@ -29,7 +29,7 @@ async function dispatchToIndexer(env: Env, job: IndexJob): Promise<void> {
   // Prefer the GitHub Actions pipeline when configured: fire a
   // repository_dispatch that runs the indexer CLI in CI. Falls back to the
   // direct INDEXER_URL POST when pipeline dispatch is not configured.
-  if (env.PIPELINE_DISPATCH_REPO && env.PIPELINE_DISPATCH_TOKEN) {
+  if (!job.tenantId && !job.installationId && env.PIPELINE_DISPATCH_REPO && env.PIPELINE_DISPATCH_TOKEN) {
     await dispatchToPipeline(env, job);
     return;
   }
@@ -64,6 +64,9 @@ async function dispatchToPipeline(env: Env, job: IndexJob): Promise<void> {
       event_type: env.PIPELINE_DISPATCH_EVENT || 'index-repo',
       client_payload: {
         repo: job.repoFullName,
+        repoId: job.repoId,
+        tenantId: job.tenantId ?? null,
+        installationId: job.installationId ?? null,
         jobType: job.jobType,
         commitSha: job.commitSha ?? null,
         changedFiles: (job as { changedFiles?: string[] }).changedFiles ?? [],

@@ -32,23 +32,30 @@ export async function onRequestPost(context) {
         context.env,
         session.tenantId,
         repoInput.fullName,
+        repoInput.installationId,
       );
       const repo = await upsertRepo(context.env, repoGrant);
       await context.env.DB.prepare(
-        `INSERT INTO tenant_repos (tenant_id, repo_id, full_name, enabled, selected_by, updated_at)
-         VALUES (?1, ?2, ?3, 1, ?4, datetime('now'))
+        `INSERT INTO tenant_repos (tenant_id, repo_id, installation_id, full_name, enabled, selected_by, updated_at)
+         VALUES (?1, ?2, ?3, ?4, 1, ?5, datetime('now'))
          ON CONFLICT(tenant_id, repo_id) DO UPDATE SET
            enabled = 1,
+           installation_id = excluded.installation_id,
            full_name = excluded.full_name,
            selected_by = COALESCE(excluded.selected_by, tenant_repos.selected_by),
            updated_at = datetime('now')`,
       )
-        .bind(session.tenantId, repo.repoId, repo.fullName, session.userId || null)
+        .bind(session.tenantId, repo.repoId, repoGrant.installationId, repo.fullName, session.userId || null)
         .run();
 
       await markRepoIndexRequested(context.env, repo.repoId);
 
-      const dispatchError = await dispatchIndex(context.env, repo.fullName);
+      const dispatchError = await dispatchIndex(context, {
+        tenantId: session.tenantId,
+        repoId: repo.repoId,
+        repoFullName: repo.fullName,
+        installationId: repoGrant.installationId,
+      });
       if (dispatchError) dispatchErrors.push({ repo: repo.fullName, error: dispatchError });
       await audit(context.env, session.tenantId, session.userId, 'repo.selected', 'repo', repo.repoId, repo);
     }
@@ -100,6 +107,7 @@ function normalizeRepos(input) {
     if (typeof value === 'string') return { fullName: value };
     return {
       fullName: value.fullName || value.full_name || '',
+      installationId: Number(value.installationId || value.installation_id || 0) || undefined,
       githubId: value.githubId || value.github_id,
       defaultBranch: value.defaultBranch || value.default_branch,
       private: value.private,
@@ -107,39 +115,45 @@ function normalizeRepos(input) {
   }).filter((repo) => /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repo.fullName));
 }
 
-export async function resolveTenantInstallationRepo(env, tenantId, fullName) {
-  const installation = await env.DB.prepare(
+export async function resolveTenantInstallationRepo(env, tenantId, fullName, installationId) {
+  const { results: installations } = await env.DB.prepare(
     `SELECT installation_id
      FROM tenant_github_installations
      WHERE tenant_id = ?1
-     ORDER BY updated_at DESC
-     LIMIT 1`,
+       AND (?2 IS NULL OR installation_id = ?2)
+     ORDER BY account_login, installation_id`,
   )
-    .bind(tenantId)
-    .first();
-  if (!installation?.installation_id) {
+    .bind(tenantId, installationId || null)
+    .all();
+  if (installations.length === 0) {
     throw new HttpError(400, 'Connect GitHub before choosing repos.');
   }
 
   const repoId = fullName.toLowerCase();
-  const localGrant = await env.DB.prepare(
-    `SELECT p.full_name, r.github_id, r.default_branch, r.private
-     FROM pending_installation_repos p
-     LEFT JOIN repos r ON r.id = p.repo_id
-     WHERE p.installation_id = ?1 AND p.repo_id = ?2
-     UNION ALL
-     SELECT tr.full_name, r.github_id, r.default_branch, r.private
-     FROM tenant_repos tr
-     LEFT JOIN repos r ON r.id = tr.repo_id
-     WHERE tr.tenant_id = ?3 AND tr.repo_id = ?2 AND tr.enabled = 1
-     LIMIT 1`,
-  )
-    .bind(installation.installation_id, repoId, tenantId)
-    .first();
-  if (localGrant?.full_name) return repoFromGrant(localGrant);
+  for (const installation of installations) {
+    const localGrant = await env.DB.prepare(
+      `SELECT gir.full_name, gir.github_id, gir.default_branch, gir.private, gir.installation_id
+       FROM github_installation_repos gir
+       WHERE gir.installation_id = ?1 AND gir.repo_id = ?2
+       UNION ALL
+       SELECT p.full_name, r.github_id, r.default_branch, r.private, p.installation_id
+       FROM pending_installation_repos p
+       LEFT JOIN repos r ON r.id = p.repo_id
+       WHERE p.installation_id = ?1 AND p.repo_id = ?2
+       UNION ALL
+       SELECT tr.full_name, r.github_id, r.default_branch, r.private, tr.installation_id
+       FROM tenant_repos tr
+       LEFT JOIN repos r ON r.id = tr.repo_id
+       WHERE tr.tenant_id = ?3 AND tr.repo_id = ?2 AND tr.enabled = 1
+       LIMIT 1`,
+    )
+      .bind(installation.installation_id, repoId, tenantId)
+      .first();
+    if (localGrant?.full_name) return repoFromGrant(localGrant, installation.installation_id);
 
-  const githubRepo = await findInstallationRepository(env, installation.installation_id, fullName);
-  if (githubRepo) return githubRepo;
+    const githubRepo = await findInstallationRepository(env, installation.installation_id, fullName);
+    if (githubRepo) return { ...githubRepo, installationId: installation.installation_id };
+  }
 
   throw new HttpError(
     403,
@@ -147,18 +161,58 @@ export async function resolveTenantInstallationRepo(env, tenantId, fullName) {
   );
 }
 
-function repoFromGrant(row) {
+function repoFromGrant(row, fallbackInstallationId) {
   return {
     fullName: row.full_name,
+    installationId: row.installation_id || fallbackInstallationId,
     githubId: row.github_id,
     defaultBranch: row.default_branch || 'main',
     private: row.private === 0 ? false : true,
   };
 }
 
-async function dispatchIndex(env, repoFullName) {
+async function dispatchIndex(context, job) {
+  const { env, request } = context;
+  if (env.BEACON_LOCAL_E2E === '1' && isLocalRequest(request)) {
+    await markLocalIndexReady(env, job.repoId);
+    return null;
+  }
+
+  if (env.INDEXER_URL && env.INDEXER_SHARED_SECRET) {
+    const res = await fetch(`${env.INDEXER_URL.replace(/\/$/, '')}/index`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        authorization: `Bearer ${env.INDEXER_SHARED_SECRET}`,
+      },
+      body: JSON.stringify({
+        jobType: 'FULL_INDEX',
+        tenantId: job.tenantId,
+        installationId: job.installationId,
+        repoId: job.repoId,
+        repoFullName: job.repoFullName,
+        enqueuedAt: new Date().toISOString(),
+      }),
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      console.error('Hosted indexer dispatch failed', {
+        repo: job.repoFullName,
+        status: res.status,
+        body: text.slice(0, 200),
+      });
+      return 'Could not start indexing for this repository. Try again or contact support.';
+    }
+    return null;
+  }
+
+  if (env.BEACON_ALLOW_LEGACY_PIPELINE !== '1') {
+    console.error('Hosted index dispatch is not configured.');
+    return 'Indexing is not configured. Contact an administrator.';
+  }
+
   if (!env.PIPELINE_DISPATCH_REPO || !env.PIPELINE_DISPATCH_TOKEN) {
-    console.error('Pipeline dispatch is not configured.');
+    console.error('Legacy pipeline dispatch is not configured.');
     return 'Indexing is not configured. Contact an administrator.';
   }
   const res = await fetch(`https://api.github.com/repos/${env.PIPELINE_DISPATCH_REPO}/dispatches`, {
@@ -172,17 +226,56 @@ async function dispatchIndex(env, repoFullName) {
     },
     body: JSON.stringify({
       event_type: env.PIPELINE_DISPATCH_EVENT || 'index-repo',
-      client_payload: { repo: repoFullName, jobType: 'FULL_INDEX' },
+      client_payload: {
+        repo: job.repoFullName,
+        repoId: job.repoId,
+        tenantId: job.tenantId,
+        installationId: job.installationId,
+        jobType: 'FULL_INDEX',
+      },
     }),
   });
   if (!res.ok) {
     const text = await res.text().catch(() => '');
     console.error('GitHub dispatch failed', {
-      repo: repoFullName,
+      repo: job.repoFullName,
       status: res.status,
       body: text.slice(0, 200),
     });
     return 'Could not start indexing for this repository. Try again or contact support.';
   }
   return null;
+}
+
+async function markLocalIndexReady(env, repoId) {
+  await env.DB.batch([
+    env.DB.prepare(
+      `UPDATE repos
+       SET indexing_status = 'READY',
+           last_indexed_sha = COALESCE(last_indexed_sha, 'local-e2e'),
+           last_indexed_at = datetime('now'),
+           updated_at = datetime('now')
+       WHERE id = ?1`,
+    ).bind(repoId),
+    env.DB.prepare(
+      `INSERT INTO repo_index_status
+         (repo_id, status, job_type, total_files, indexed_files, total_chunks, commit_sha, started_at, finished_at, updated_at)
+       VALUES (?1, 'READY', 'FULL_INDEX', 2, 2, 4, 'local-e2e', datetime('now'), datetime('now'), datetime('now'))
+       ON CONFLICT(repo_id) DO UPDATE SET
+         status = 'READY',
+         job_type = 'FULL_INDEX',
+         total_files = 2,
+         indexed_files = 2,
+         total_chunks = 4,
+         commit_sha = 'local-e2e',
+         error = NULL,
+         finished_at = datetime('now'),
+         updated_at = datetime('now')`,
+    ).bind(repoId),
+  ]);
+}
+
+function isLocalRequest(request) {
+  const host = new URL(request.url).hostname;
+  return host === 'localhost' || host === '127.0.0.1' || host === '::1';
 }

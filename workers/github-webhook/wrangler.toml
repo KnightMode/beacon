@@ -7,13 +7,12 @@ compatibility_flags = ["nodejs_compat"]
 [vars]
 # Comma-separated owner/name seed for the allowlist (also stored in D1).
 REPO_ALLOWLIST = ""
-# Base URL of the deployed indexer HTTP service (Node container).
+# Base URL of the deployed hosted indexer HTTP service (Node container).
 INDEXER_URL = "https://your-indexer.example.com"
-# ---- Pipeline dispatch (optional) -------------------------------------------
-# When PIPELINE_DISPATCH_REPO is set (and PIPELINE_DISPATCH_TOKEN secret exists),
-# the queue consumer triggers the GitHub Actions index.yml workflow via
-# repository_dispatch instead of POSTing to INDEXER_URL. Leave empty to keep the
-# existing INDEXER_URL behavior.
+# ---- Legacy pipeline dispatch (optional, non-tenant jobs only) ---------------
+# Tenant jobs always POST to INDEXER_URL so the indexer can mint GitHub App
+# installation tokens. repository_dispatch remains only for legacy/internal jobs
+# that are not tenant-scoped.
 PIPELINE_DISPATCH_REPO = "KnightMode/beacon"
 PIPELINE_DISPATCH_EVENT = "index-repo"
 

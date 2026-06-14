@@ -5,7 +5,7 @@ Everything happens in Slack — in channels, DMs, or the assistant pane.
 | In Slack | What happens |
 |---|---|
 | `@bot <question>` / `/ask-code <q>` | streamed, cited answer from the index |
-| `@bot index owner/repo` | validate, allowlist, and full-index a repo |
+| `@bot index owner/repo` | validate the GitHub App grant and full-index a repo |
 | `@bot index status` | live indexing progress for every repo |
 | `review <pr-url>` (or emoji on a PR link) | streamed PR review |
 | `create pr: <issue>` (or :rocket: on a thread) | LLM-proposed pull request |
@@ -30,13 +30,16 @@ run fails:
   (timeouts, rate limits, OOM, runner death) get a short re-run note instead of
   a full triage, and the indexing pipeline repo is excluded to prevent loops.
 
-Requires the GitHub App to have **Actions: Read** and the **Workflow runs**
-event subscription (and `Actions: Read` on the indexing PAT).
+Requires the tenant GitHub App installation to have **Actions: Read** and the
+**Workflow runs** event subscription.
 
 ## Triggering indexing manually
 
-Besides `@bot index owner/repo` and automatic indexing via the GitHub App, you
-can kick off an index run by:
+For tenant workspaces, use `@bot index owner/repo`, the admin portal repo
+picker, or automatic indexing from GitHub App webhooks. Tenant indexing runs
+through Beacon-hosted infrastructure with short-lived installation tokens.
+
+Legacy/internal options remain available for development and non-tenant repos:
 
 - **Actions tab** — `Index Repository` → Run workflow
 - **Admin endpoint** — `POST /admin/index` on the webhook worker

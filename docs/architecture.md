@@ -17,10 +17,10 @@ pipeline that runs in GitHub Actions. Nothing to operate, nothing to keep warm.
                                               │ writes (Cloudflare REST)
  GitHub App ──install/push──▶ workers/github-webhook (CF Worker)
                               │  HMAC verify → enqueue index job (CF Queue)
-                              │  consumer → repository_dispatch
+                              │  consumer → hosted indexer for tenant jobs
                               ▼
-                .github/workflows/index.yml (GitHub Actions)
-                              │  runs services/indexer CLI:
+                services/indexer (Node HTTP service)
+                              │  mints GitHub App installation token:
                               │  fetch tree → tree-sitter chunking →
                               │  secret redaction → embed → upsert
 ```
@@ -44,17 +44,18 @@ pipeline that runs in GitHub Actions. Nothing to operate, nothing to keep warm.
 
 ## The indexing path (`workers/github-webhook` + `services/indexer`)
 
-The webhook worker verifies GitHub HMAC signatures, enqueues an index job on a
-Cloudflare Queue, and the consumer fires a `repository_dispatch` that kicks off
-`.github/workflows/index.yml`. That workflow runs the indexer CLI:
+The webhook worker verifies GitHub HMAC signatures, stores the installation's
+live repo grants, and enqueues index jobs only for tenant-selected repos. Tenant
+jobs go to the hosted Node indexer, which mints a short-lived GitHub App
+installation token for the selected installation and then runs:
 
 ```
 fetch tree → tree-sitter chunking → secret redaction → embed → upsert
 ```
 
 Tree-sitter parsing is too heavy for a request-path Worker, so the indexer is a
-standalone Node CLI executed in CI. It can also run as a Docker/HTTP service via
-`INDEXER_URL` if you prefer your own compute.
+standalone Node service. The legacy GitHub Actions `repository_dispatch` path is
+kept for internal/dev fallback jobs that are not tenant-scoped.
 
 ### Chunking by language
 

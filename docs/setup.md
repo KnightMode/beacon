@@ -20,19 +20,22 @@ Databases created before FTS5 existed need the one-time, idempotent migration:
 npx wrangler d1 execute scintel --remote --file=packages/shared/migrations/0001_chunks_fts.sql
 ```
 
-Multi-tenant admin portal support needs the tenant migration:
+Multi-tenant admin portal support needs the tenant migrations:
 
 ```bash
 npx wrangler d1 execute scintel --remote --file=packages/shared/migrations/0004_tenants.sql
 npx wrangler d1 execute scintel --remote --file=packages/shared/migrations/0005_tenant_ci_triage_runs.sql
+npx wrangler d1 execute scintel --remote --file=packages/shared/migrations/0006_installation_repo_grants.sql
 ```
 
-## 2. GitHub PAT
+## 2. GitHub App credentials
 
-Create a fine-grained PAT with **Contents: Read** on every repo you want
-indexed (plus **Pull requests: Write** if you use PR creation).
+Create a GitHub App and use its app id/private key for tenant repo access.
+Beacon mints short-lived installation tokens per selected repo installation;
+customer repos should not be indexed with PATs.
 
-> The PAT's repo list is the hard boundary of what can be indexed.
+Legacy fine-grained PAT support remains only for internal/dev fallback traffic
+that has no Slack tenant id.
 
 ## 3. Slack app
 
@@ -55,7 +58,9 @@ npx wrangler secret put SLACK_BOT_TOKEN
 # workers/github-webhook bootstrap secrets:
 npx wrangler secret put GITHUB_WEBHOOK_SECRET
 npx wrangler secret put ADMIN_TOKEN
-npx wrangler secret put PIPELINE_DISPATCH_TOKEN
+npx wrangler secret put INDEXER_SHARED_SECRET
+npx wrangler secret put GITHUB_APP_ID
+npx wrangler secret put GITHUB_APP_PRIVATE_KEY
 
 npm run deploy --workspace workers/slack-bot
 npm run deploy --workspace workers/github-webhook
@@ -63,20 +68,21 @@ npm run deploy --workspace workers/github-webhook
 
 The `Deploy Workers` GitHub Actions workflow automatically syncs the
 deploy-managed slack-bot secrets from repo secrets before each slack-bot deploy:
-`SLACK_TOKEN_ENCRYPTION_SECRET`, `INDEXER_GITHUB_PAT` as Worker `GITHUB_PAT`,
-and `EVAL_TOKEN`.
+`SLACK_TOKEN_ENCRYPTION_SECRET`, `GITHUB_APP_ID`, `GITHUB_APP_PRIVATE_KEY`, and
+`EVAL_TOKEN`.
 
 For the Cloudflare Pages admin portal, the `Configure site Access` workflow
 updates the Pages project and redeploys it with:
 
 - **D1 binding:** `DB` pointing at the same `scintel` database.
-- **D1 tenant migrations:** `0004_tenants.sql` and
-  `0005_tenant_ci_triage_runs.sql` applied to the remote database.
+- **D1 tenant migrations:** `0004_tenants.sql`,
+  `0005_tenant_ci_triage_runs.sql`, and `0006_installation_repo_grants.sql`
+  applied to the remote database.
 - **Secrets from GitHub Actions:** `ADMIN_SESSION_SECRET`, `SLACK_CLIENT_SECRET`,
-  `SLACK_TOKEN_ENCRYPTION_SECRET`, and optionally `PIPELINE_DISPATCH_TOKEN` and
+  `SLACK_TOKEN_ENCRYPTION_SECRET`, `INDEXER_SHARED_SECRET`, and
   `BEACON_GITHUB_APP_PRIVATE_KEY` (written to Pages as `GITHUB_APP_PRIVATE_KEY`).
-- **Vars:** `SLACK_CLIENT_ID`, `GITHUB_APP_SLUG`, `PIPELINE_DISPATCH_REPO`, and
-  `PIPELINE_DISPATCH_EVENT`.
+- **Vars:** `SLACK_CLIENT_ID`, `GITHUB_APP_SLUG`, `GITHUB_APP_ID`, and
+  `INDEXER_URL`.
 - **Cloudflare Access vars:** `ADMIN_CF_ACCESS_ISSUER` and
   `ADMIN_CF_ACCESS_AUD` are required for deployed admin routes. Optionally set
   `ADMIN_CF_ACCESS_ALLOWED_EMAILS` or `ADMIN_CF_ACCESS_ALLOWED_DOMAINS` for an
@@ -101,22 +107,21 @@ that directory from the project root when you run `wrangler pages dev site` or
 [local-verification.md](local-verification.md). Quick start:
 
 ```bash
-cp site/.dev.vars.example .dev.vars
-npm run db:local:init
-npm run dev:portal          # terminal 1
-npm run verify:local        # terminal 2
+npm install
+npm run e2e:local
 ```
 
 For local UI testing without real OAuth, append `?mock=1` to
-`/api/admin/slack/start` or `/api/admin/github/start`.
+`/api/admin/slack/start` or `/api/admin/github/start`. The automated E2E path
+connects two mock GitHub installations.
 
-**Repo Actions secrets** for the indexing pipeline: `INDEXER_GITHUB_PAT`,
-`CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN`.
+**Hosted indexer secrets:** `GITHUB_APP_ID`, `GITHUB_APP_PRIVATE_KEY`,
+`CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN`, and `INDEXER_SHARED_SECRET`.
 
 **Key vars** (`wrangler.toml`): `LLM_MODEL`, `EMBEDDING_MODEL`,
-`AGENTIC_RETRIEVAL`, `INDEX_DISPATCH_REPO`, `PIPELINE_DISPATCH_REPO`.
+`AGENTIC_RETRIEVAL`, `INDEXER_URL`.
 
-## 5. GitHub App (for automatic indexing)
+## 5. GitHub App (tenant access and webhooks)
 
 Create one under [GitHub → Settings → Developer settings → GitHub Apps](https://github.com/settings/apps/new):
 
@@ -127,8 +132,11 @@ Create one under [GitHub → Settings → Developer settings → GitHub Apps](ht
 - **Redirect on update:** enable this so saving repo access on GitHub sends users back to onboarding
 - **Webhook URL:** `https://<github-webhook-url>/webhooks/github`
 - **Webhook secret:** your `GITHUB_WEBHOOK_SECRET`
-- **Permission:** Contents: Read-only
-- **Subscribe to:** Push, and installation events if offered
+- **Permissions:** Contents: Read-only; Pull requests: Read if PR review is enabled;
+  Actions: Read if CI triage is enabled; Contents: Write and Pull requests:
+  Write only if create-PR is enabled.
+- **Subscribe to:** Push, workflow run, installation, and installation
+  repositories events as needed for enabled features.
 
 After creating the app, copy its **slug** from the app settings URL
 (`https://github.com/settings/apps/<slug>`) into `.dev.vars`:
@@ -139,9 +147,10 @@ GITHUB_APP_ID=<app-id>
 GITHUB_APP_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----"
 ```
 
-`GITHUB_APP_ID` and `GITHUB_APP_PRIVATE_KEY` power the onboarding repo picker
-(listing repos from the customer's GitHub install). Generate a new private key
-in the app settings if you do not have one yet.
+`GITHUB_APP_ID` and `GITHUB_APP_PRIVATE_KEY` power the onboarding repo picker,
+hosted indexing, PR review, CI triage, and create-PR by minting installation
+tokens for the tenant-selected repo. Generate a new private key in the app
+settings if you do not have one yet.
 
 For the GitHub Actions `Configure site Access` workflow, use repository variable
 `BEACON_GITHUB_APP_ID` and repository secret `BEACON_GITHUB_APP_PRIVATE_KEY`;
