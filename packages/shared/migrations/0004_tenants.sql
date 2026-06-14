@@ -48,9 +48,21 @@ CREATE TABLE IF NOT EXISTS pending_installation_repos (
   PRIMARY KEY (installation_id, repo_id)
 );
 
+CREATE TABLE IF NOT EXISTS github_installation_repos (
+  installation_id  INTEGER NOT NULL,
+  repo_id          TEXT NOT NULL REFERENCES repos(id) ON DELETE CASCADE,
+  full_name        TEXT NOT NULL,
+  github_id        INTEGER,
+  default_branch   TEXT NOT NULL DEFAULT 'main',
+  private          INTEGER NOT NULL DEFAULT 1,
+  updated_at       TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (installation_id, repo_id)
+);
+
 CREATE TABLE IF NOT EXISTS tenant_repos (
   tenant_id    TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
   repo_id      TEXT NOT NULL REFERENCES repos(id) ON DELETE CASCADE,
+  installation_id INTEGER,
   full_name    TEXT NOT NULL,
   enabled      INTEGER NOT NULL DEFAULT 1,
   selected_by  TEXT,
@@ -94,4 +106,5 @@ CREATE INDEX IF NOT EXISTS idx_tenant_repos_repo      ON tenant_repos (repo_id);
 CREATE INDEX IF NOT EXISTS idx_tenant_repos_enabled   ON tenant_repos (tenant_id, enabled);
 CREATE INDEX IF NOT EXISTS idx_tenant_github_install  ON tenant_github_installations (installation_id);
 CREATE INDEX IF NOT EXISTS idx_pending_install_repos  ON pending_installation_repos (installation_id);
+CREATE INDEX IF NOT EXISTS idx_github_install_repos   ON github_installation_repos (repo_id);
 CREATE INDEX IF NOT EXISTS idx_audit_events_tenant    ON audit_events (tenant_id, created_at);

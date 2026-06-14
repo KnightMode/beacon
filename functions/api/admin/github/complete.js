@@ -35,6 +35,7 @@ export async function onRequestPost(context) {
       tenantId: session.tenantId,
       installationId,
       accountLogin,
+      repos,
       userId: session.userId,
     });
 

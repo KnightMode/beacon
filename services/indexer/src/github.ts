@@ -1,12 +1,13 @@
 /**
- * Minimal GitHub REST client (fetch-based) for the single indexing identity.
- * Uses a fine-grained PAT by default. GitHub App auth is stubbed: if app
- * credentials are provided we still fall back to the PAT for the prototype.
+ * Minimal GitHub REST client (fetch-based) for indexing. Tenant-scoped jobs
+ * use GitHub App installation tokens; legacy local/internal jobs can still use
+ * the configured PAT.
  */
 
 import type { IndexerConfig } from './config.js';
 import { log } from './logger.js';
 import { gunzipSync } from 'node:zlib';
+import { getGitHubInstallationToken } from '@scintel/shared';
 
 const API = 'https://api.github.com';
 
@@ -20,12 +21,32 @@ export interface TreeEntry {
 export class GitHubClient {
   private readonly token: string;
 
-  constructor(config: IndexerConfig) {
-    if (config.github.appId) {
-      // GitHub App support is stubbed for the prototype.
-      log.warn('GitHub App credentials present but App auth is stubbed; using PAT');
+  private constructor(token: string) {
+    this.token = token;
+  }
+
+  static async fromConfig(
+    config: IndexerConfig,
+    installationId?: number,
+  ): Promise<GitHubClient> {
+    if (installationId) {
+      const token = await getGitHubInstallationToken(
+        {
+          appId: config.github.appId,
+          privateKey: config.github.appPrivateKey,
+        },
+        installationId,
+      );
+      return new GitHubClient(token);
     }
-    this.token = config.github.pat;
+
+    if (!config.github.pat) {
+      throw new Error(
+        'tenant index jobs require installationId; legacy jobs require GITHUB_PAT',
+      );
+    }
+    log.warn('indexing with legacy GITHUB_PAT fallback');
+    return new GitHubClient(config.github.pat);
   }
 
   private headers(): Record<string, string> {

@@ -27,21 +27,13 @@ const REVIEW_LOADING = [
 
 export function prReviewMissingPatMessage(): string {
   return (
-    'PR review needs a GitHub token on the slack-bot worker. Run:\n' +
-    '`cd workers/slack-bot && npx wrangler secret put GITHUB_PAT`\n' +
-    'Use a fine-grained PAT with *Pull requests: Read* and *Contents: Read* ' +
-    'on the target repos.'
+    'PR review needs GitHub access for this repo. Connect the repo through the ' +
+    'workspace GitHub App installation with *Pull requests: Read* and *Contents: Read*.'
   );
 }
 
 /** Stream a PR review into a channel thread (same UX as Q&A). */
 export async function streamPrReview(env: Env, t: StreamTarget): Promise<void> {
-  const gh = GitHubClient.fromEnv(env);
-  if (!gh) {
-    await postPlain(env, t.channel, t.threadTs, prReviewMissingPatMessage(), t.teamId);
-    return;
-  }
-
   const ref = parsePrReference(t.question);
   if (!ref) {
     await postPlain(
@@ -52,6 +44,11 @@ export async function streamPrReview(env: Env, t: StreamTarget): Promise<void> {
         '`review https://github.com/owner/repo/pull/123` or `review owner/repo#123`',
       t.teamId,
     );
+    return;
+  }
+  const gh = await GitHubClient.forTenantRepo(env, t.teamId, `${ref.owner}/${ref.repo}`);
+  if (!gh) {
+    await postPlain(env, t.channel, t.threadTs, prReviewMissingPatMessage(), t.teamId);
     return;
   }
 
@@ -111,22 +108,21 @@ export async function handleAssistantPrReview(
   env: Env,
   m: AssistantMessage,
 ): Promise<void> {
-  const gh = GitHubClient.fromEnv(env);
-  if (!gh) {
-    await call(env, 'chat.postMessage', {
-      channel: m.channelId,
-      thread_ts: m.threadTs,
-      text: prReviewMissingPatMessage(),
-    }, m.teamId);
-    return;
-  }
-
   const ref = parsePrReference(m.text);
   if (!ref) {
     await call(env, 'chat.postMessage', {
       channel: m.channelId,
       thread_ts: m.threadTs,
       text: 'Could not parse a PR reference from your message.',
+    }, m.teamId);
+    return;
+  }
+  const gh = await GitHubClient.forTenantRepo(env, m.teamId, `${ref.owner}/${ref.repo}`);
+  if (!gh) {
+    await call(env, 'chat.postMessage', {
+      channel: m.channelId,
+      thread_ts: m.threadTs,
+      text: prReviewMissingPatMessage(),
     }, m.teamId);
     return;
   }
@@ -187,19 +183,6 @@ export async function reviewToResponseUrl(
   responseUrl: string,
   teamId?: string,
 ): Promise<void> {
-  const gh = GitHubClient.fromEnv(env);
-  if (!gh) {
-    await fetch(responseUrl, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        response_type: 'ephemeral',
-        text: prReviewMissingPatMessage(),
-      }),
-    });
-    return;
-  }
-
   const ref = parsePrReference(text);
   if (!ref) {
     await fetch(responseUrl, {
@@ -208,6 +191,18 @@ export async function reviewToResponseUrl(
       body: JSON.stringify({
         response_type: 'ephemeral',
         text: 'Could not parse a PR reference.',
+      }),
+    });
+    return;
+  }
+  const gh = await GitHubClient.forTenantRepo(env, teamId, `${ref.owner}/${ref.repo}`);
+  if (!gh) {
+    await fetch(responseUrl, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        response_type: 'ephemeral',
+        text: prReviewMissingPatMessage(),
       }),
     });
     return;

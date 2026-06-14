@@ -15,21 +15,27 @@ export async function onRequestGet(context) {
     const page = Number(url.searchParams.get('page') || 1);
     const limit = Number(url.searchParams.get('limit') || 50);
 
-    const installation = await context.env.DB.prepare(
-      `SELECT installation_id, account_login
+    const requestedInstallationId = Number(url.searchParams.get('installationId') || 0);
+    const { results: installations } = await context.env.DB.prepare(
+      `SELECT installation_id, account_login, account_type
        FROM tenant_github_installations
        WHERE tenant_id = ?1
-       ORDER BY updated_at DESC
-       LIMIT 1`,
+       ORDER BY account_login, installation_id`,
     )
       .bind(session.tenantId)
-      .first();
-    if (!installation?.installation_id) {
+      .all();
+    const scopedInstallations = requestedInstallationId
+      ? installations.filter((row) => Number(row.installation_id) === requestedInstallationId)
+      : installations;
+    if (installations.length === 0) {
       throw new HttpError(400, 'Connect GitHub before choosing repos.');
+    }
+    if (requestedInstallationId && scopedInstallations.length === 0) {
+      throw new HttpError(404, 'That GitHub installation is not connected to this workspace.');
     }
 
     const selectedRepos = await listTenantRepos(context.env, session.tenantId);
-    const selected = new Set(selectedRepos.map((repo) => repo.fullName));
+    const selected = new Map(selectedRepos.map((repo) => [repo.fullName, repo]));
 
     let repos = [];
     let source = 'empty';
@@ -37,27 +43,36 @@ export async function onRequestGet(context) {
     let hasMore = false;
     let totalScanned = 0;
 
-    try {
-      const githubResult = await queryInstallationRepositories(
-        context.env,
-        installation.installation_id,
-        { q, page, limit },
-      );
-      if (githubResult) {
-        repos = githubResult.repos;
-        hasMore = githubResult.hasMore;
-        totalScanned = githubResult.totalScanned;
-        source = 'github-api';
+    for (const installation of scopedInstallations) {
+      try {
+        const githubResult = await queryInstallationRepositories(
+          context.env,
+          installation.installation_id,
+          { q, page, limit },
+        );
+        if (githubResult) {
+          repos.push(...githubResult.repos.map((repo) => ({
+            ...repo,
+            installationId: installation.installation_id,
+            accountLogin: installation.account_login,
+          })));
+          hasMore = hasMore || githubResult.hasMore;
+          totalScanned += githubResult.totalScanned;
+          source = 'github-api';
+          continue;
+        }
+      } catch (err) {
+        console.error('GitHub repo list failed', err);
+        message = 'Could not load repositories from GitHub. Try again or contact support.';
       }
-    } catch (err) {
-      console.error('GitHub repo list failed', err);
-      message = 'Could not load repositories from GitHub. Try again or contact support.';
-    }
 
-    if (repos.length === 0 && !q) {
-      const fallback = await listReposFromDatabase(context.env, installation.installation_id);
+      const fallback = await listReposFromDatabase(context.env, installation.installation_id, q);
       if (fallback.length > 0) {
-        repos = fallback.slice(0, limit);
+        repos.push(...fallback.slice(0, limit).map((repo) => ({
+          ...repo,
+          installationId: installation.installation_id,
+          accountLogin: installation.account_login,
+        })));
         source = 'database';
         hasMore = fallback.length > limit;
       }
@@ -72,13 +87,19 @@ export async function onRequestGet(context) {
     }
 
     return json({
-      installation: {
+      installations: installations.map((installation) => ({
         id: installation.installation_id,
         accountLogin: installation.account_login,
-      },
+        accountType: installation.account_type,
+      })),
+      installation: scopedInstallations.length === 1 ? {
+        id: scopedInstallations[0].installation_id,
+        accountLogin: scopedInstallations[0].account_login,
+      } : null,
       repos: repos.map((repo) => ({
         ...repo,
         selected: selected.has(repo.fullName),
+        selectedInstallationId: selected.get(repo.fullName)?.installationId || null,
       })),
       selectedRepos: selectedRepos.map((repo) => ({
         fullName: repo.fullName,
@@ -95,21 +116,25 @@ export async function onRequestGet(context) {
   }
 }
 
-async function listReposFromDatabase(env, installationId) {
+async function listReposFromDatabase(env, installationId, q = '') {
+  const needle = String(q || '').trim().toLowerCase();
   const { results } = await env.DB.prepare(
-    `SELECT DISTINCT full_name
-     FROM pending_installation_repos
+    `SELECT DISTINCT gir.full_name, gir.github_id, gir.default_branch, gir.private
+     FROM github_installation_repos gir
      WHERE installation_id = ?1
      ORDER BY full_name`,
   )
     .bind(installationId)
     .all();
 
-  return results.map((row) => ({
+  return results.filter((row) => {
+    if (!needle) return true;
+    return String(row.full_name || '').toLowerCase().includes(needle);
+  }).map((row) => ({
     fullName: row.full_name,
-    githubId: null,
-    defaultBranch: 'main',
-    private: true,
+    githubId: row.github_id,
+    defaultBranch: row.default_branch || 'main',
+    private: row.private === 0 ? false : true,
   }));
 }
 
