@@ -160,6 +160,33 @@ code {
   box-shadow: 5px 5px 0 color-mix(in oklch, currentColor 18%, transparent);
 }
 
+.brand__text {
+  display: grid;
+  gap: 0.15rem;
+  align-content: center;
+}
+
+.brand__name {
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1;
+}
+
+.brand__tagline {
+  font-family: var(--font-mono);
+  font-size: 0.58rem;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  line-height: 1;
+  color: var(--acid);
+  white-space: nowrap;
+}
+
+.nav.is-stuck .brand__tagline {
+  color: color-mix(in oklch, var(--acid) 52%, var(--ink));
+}
+
 .nav__links {
   display: flex;
   align-items: center;
@@ -939,6 +966,8 @@ code {
 }
 
 .loop-step {
+  display: flex;
+  flex-direction: column;
   min-height: 27rem;
   padding: clamp(1.2rem, 2vw, 1.7rem);
   border: 1px solid var(--white-line);
@@ -951,9 +980,10 @@ code {
   transform: translateY(2rem);
 }
 
-.loop-step span {
+.loop-step > span {
   display: inline-flex;
-  margin-bottom: clamp(5rem, 14vw, 9rem);
+  align-self: flex-start;
+  margin-bottom: 1.25rem;
   padding: 0.34rem 0.48rem;
   border: 1px solid color-mix(in oklch, var(--acid) 45%, transparent);
   color: var(--acid);
@@ -961,6 +991,108 @@ code {
   font-size: 0.74rem;
   font-weight: 600;
   text-transform: uppercase;
+}
+
+/* Per-step mockups — fill the space between the label and the heading */
+.loop-viz {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: auto;
+  padding: 0.8rem 0.85rem;
+  border: 1px solid var(--white-line);
+  background: color-mix(in oklch, black 24%, transparent);
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  line-height: 1.35;
+  color: color-mix(in oklch, var(--paper) 78%, transparent);
+}
+
+.loop-viz code {
+  color: color-mix(in oklch, var(--paper) 70%, transparent);
+  font-size: 0.92em;
+}
+
+.loop-viz__at {
+  padding: 0 0.28rem;
+  background: color-mix(in oklch, var(--gold) 28%, transparent);
+  color: var(--paper);
+  font-weight: 700;
+}
+
+.loop-viz--input {
+  position: relative;
+}
+
+.loop-viz__caret {
+  width: 1px;
+  height: 1.05em;
+  background: var(--acid);
+  animation: slack-blink 1.1s steps(1) infinite;
+}
+
+.loop-viz--trace span {
+  padding: 0.18rem 0.4rem;
+  border: 1px solid var(--white-line);
+  color: var(--paper);
+}
+
+.loop-viz--trace i {
+  color: var(--acid);
+  font-style: normal;
+}
+
+.loop-viz--answer {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.6rem;
+}
+
+.loop-viz--answer p {
+  margin: 0;
+  color: var(--paper);
+}
+
+.loop-viz__cite {
+  padding: 0.24rem 0.42rem;
+  border: 1px solid color-mix(in oklch, var(--acid) 40%, transparent);
+  color: var(--acid);
+  font-size: 0.72rem;
+}
+
+.loop-viz__tag {
+  padding: 0.18rem 0.42rem;
+  border: 1px solid var(--white-line);
+  color: var(--paper);
+  font-weight: 700;
+}
+
+.loop-viz__muted {
+  color: color-mix(in oklch, var(--paper) 55%, transparent);
+}
+
+.loop-viz__ok {
+  padding: 0.18rem 0.42rem;
+  border: 1px solid color-mix(in oklch, var(--acid) 50%, transparent);
+  background: color-mix(in oklch, var(--acid) 16%, transparent);
+  color: var(--acid);
+  font-weight: 700;
+}
+
+.loop-viz--ci,
+.loop-viz--fix {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.55rem;
+}
+
+.loop-viz__fail {
+  padding: 0.18rem 0.42rem;
+  border: 1px solid color-mix(in oklch, var(--signal) 55%, transparent);
+  background: color-mix(in oklch, var(--signal) 18%, transparent);
+  color: color-mix(in oklch, var(--signal) 75%, white);
+  font-weight: 700;
 }
 
 .loop-step h3 {
@@ -4155,6 +4287,30 @@ code {
   overflow: hidden;
 }
 
+/* Hero variant — floats as a Slack window on the dark hero board */
+.slack-mock--hero {
+  width: 100%;
+  max-width: none;
+  min-width: 0;
+  border-color: var(--white-line);
+  box-shadow: 18px 18px 0 color-mix(in oklch, black 34%, transparent);
+}
+
+/* Inset variant — sits inside a light card (proof board, etc.) */
+.slack-mock--inset {
+  width: 100%;
+  max-width: none;
+  min-width: 0;
+  margin-top: 1.4rem;
+  box-shadow: 6px 6px 0 color-mix(in oklch, var(--coal) 16%, transparent);
+}
+
+.proof-card--large .slack-mock--inset {
+  grid-column: 2;
+  align-self: end;
+  margin-top: 0;
+}
+
 .slack-mock__bar {
   display: flex;
   align-items: center;
@@ -4209,6 +4365,7 @@ code {
   place-items: center;
   width: 2.4rem;
   height: 2.4rem;
+  overflow: hidden;
   background: var(--avatar, var(--coal));
   color: white;
   font-family: var(--font-mono);
@@ -4217,8 +4374,16 @@ code {
 }
 
 .slack-msg__avatar--bot {
-  background: var(--signal);
+  background: var(--coal);
   color: var(--paper);
+}
+
+.slack-msg__avatar img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center 32%;
 }
 
 .slack-msg__body {

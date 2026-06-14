@@ -3,11 +3,11 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Beacon — evidence-first Slack code intelligence</title>
-  <meta name="description" content="Beacon is the evidence-first Slack agent for engineering teams: cited code answers, PR review, CI triage, and fix PRs from one grounded dev loop." />
+  <title>Beacon — your agentic dev loop, in Slack</title>
+  <meta name="description" content="Beacon is an agentic engineering teammate in Slack. It deep-dives your codebase, answers with citations, reviews pull requests, triages failing CI, and opens fix PRs — taking real steps, grounded in your code." />
 
-  <meta property="og:title" content="Beacon — evidence-first Slack code intelligence" />
-  <meta property="og:description" content="Cursor Slack Agent can answer. CodeRabbit can review. Beacon closes the loop with cited answers, PR review, CI diagnosis, and fix PRs from Slack." />
+  <meta property="og:title" content="Beacon — your agentic dev loop, in Slack" />
+  <meta property="og:description" content="More than a Slack bot. Beacon investigates your codebase, reviews pull requests, triages failing builds, and opens the fix PR — agentically, grounded in your real code." />
   <meta property="og:type" content="website" />
   <meta property="og:image" content="assets/beacon-logo.png" />
   <link rel="icon" type="image/png" href="assets/beacon-logo.png" />
@@ -16,21 +16,24 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&family=Newsreader:opsz,wght@6..72,500;6..72,650;6..72,750&display=swap" rel="stylesheet" />
 
-  <link rel="stylesheet" href="styles.css?v=9" />
+  <link rel="stylesheet" href="styles.css?v=18" />
 </head>
 <body>
   <a class="skip-link" href="#main">Skip to content</a>
 
   <header class="nav" id="nav">
-    <a class="brand" href="#top" aria-label="Beacon home">
+    <a class="brand brand--lockup" href="#top" aria-label="Beacon home">
       <img class="brand__mark" src="assets/beacon-logo.png" alt="" width="40" height="40" />
-      <span>Beacon</span>
+      <span class="brand__text">
+        <span class="brand__name">Beacon</span>
+        <span class="brand__tagline">Your agentic dev loop, in Slack</span>
+      </span>
     </a>
     <nav class="nav__links" aria-label="Primary navigation">
-      <a href="#proof">Proof</a>
-      <a href="#loop">Loop</a>
-      <a href="#versus">Versus</a>
-      <a href="#deploy">Deploy</a>
+      <a href="#loop">How it works</a>
+      <a href="#proof">Why trust it</a>
+      <a href="#versus">Compare</a>
+      <a href="#deploy">Security</a>
     </nav>
     <a class="button button--ghost nav__cta" href="/admin/onboarding/">Start onboarding</a>
   </header>
@@ -42,168 +45,224 @@
       <div class="grid-noise" aria-hidden="true"></div>
       <div class="hero__layout">
         <div class="hero__copy">
-          <p class="kicker reveal">Evidence-first dev loop for Slack</p>
           <div class="hero__headline">
             <img class="hero__logo" src="assets/beacon-logo.png" alt="" width="120" height="103" />
             <h1 id="hero-title" class="hero__title reveal">
-              Stop asking AI to guess what your code does.
+              More than a bot. Your whole dev loop, in Slack.
             </h1>
           </div>
           <p class="hero__lede reveal">
-            Beacon turns Slack into a codebase control room: ask a question, retrieve evidence, answer with citations, review a PR, diagnose CI, and open the fix PR without leaving the thread.
+            Beacon is an agentic teammate, not a Q&amp;A box. From one Slack thread it deep-dives your codebase, reviews pull requests, triages failing builds, and opens the fix PR — taking real steps on its own, every answer and action grounded in your code.
           </p>
           <div class="hero__actions reveal">
             <a class="button button--primary" href="/admin/onboarding/">Start onboarding</a>
-            <a class="button button--quiet" href="#versus">Compare the options</a>
+            <a class="button button--quiet" href="#loop">See what it does</a>
           </div>
         </div>
 
-        <aside class="war-room reveal" aria-label="Beacon proof board">
-          <div class="war-room__topline">
-            <span>incident thread</span>
-            <strong>#eng-help</strong>
+        <aside class="slack-mock slack-mock--hero reveal" aria-label="Example Slack thread with Beacon">
+          <div class="slack-mock__bar">
+            <span class="slack-mock__channel"><b>#</b> eng-help</span>
+            <span class="slack-mock__topic">Beacon · agentic teammate</span>
           </div>
-          <div class="thread-card">
-            <p class="thread-card__name">Dana <span>10:24</span></p>
-            <p><span class="mention">@beacon</span> why does create-PR use a queue instead of waitUntil?</p>
-          </div>
-          <div class="thread-card thread-card--beacon">
-            <p class="thread-card__name">Beacon <span>APP</span></p>
-            <p>Because Cloudflare can cancel waitUntil work after the response returns, and PR creation can exceed that budget. The slash handler enqueues durable work instead.</p>
-            <div class="citation-strip" aria-label="Sources">
-              <span>workers/slack-bot/wrangler.toml:31-38</span>
-              <span>src/actions/createPr.ts:24-61</span>
+          <div class="slack-mock__stream">
+            <div class="slack-msg">
+              <span class="slack-msg__avatar" style="--avatar: oklch(0.62 0.13 220)">DA</span>
+              <div class="slack-msg__body">
+                <p class="slack-msg__head"><b>Dana</b> <time>10:24 AM</time></p>
+                <p class="slack-msg__text"><span class="slack-mention">@beacon</span> why is the deploy build failing?</p>
+              </div>
+            </div>
+            <div class="slack-msg slack-msg--beacon">
+              <span class="slack-msg__avatar slack-msg__avatar--bot"><img src="assets/beacon-logo.png" alt="" /></span>
+              <div class="slack-msg__body">
+                <p class="slack-msg__head"><b>Beacon</b> <span class="slack-app-badge">APP</span> <time>10:24 AM</time></p>
+                <p class="slack-msg__text">The build breaks in <code>hydrateContent()</code> — a null check was dropped. The other red tests are flaky and unrelated. Want me to open a fix PR?</p>
+                <div class="slack-cite" aria-label="Cited sources">
+                  <span>ci/build.log:42-58</span>
+                  <span>src/hydrate.ts:31-40</span>
+                </div>
+              </div>
             </div>
           </div>
-          <div class="evidence-rail">
-            <span>FTS5 hit</span>
-            <span>Vector hit</span>
-            <span>Graph expansion</span>
-            <span>Reranked answer</span>
+          <div class="slack-composer">
+            <div class="slack-composer__toolbar" aria-hidden="true">
+              <b>B</b><i>i</i><s>S</s><span class="slack-composer__div"></span><span>code</span><span>link</span>
+            </div>
+            <div class="slack-composer__field">
+              <p class="slack-composer__text"><span class="slack-mention">@beacon</span> yes — open it, and review PR #491 too<span class="slack-caret" aria-hidden="true"></span></p>
+              <button class="slack-send" type="button" aria-label="Send message">
+                <svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true"><path d="M2 10 18 2 12 18 9 11z" fill="currentColor"/></svg>
+              </button>
+            </div>
           </div>
         </aside>
       </div>
 
-      <div class="hero__brief reveal" aria-label="Beacon positioning summary">
-        <p><strong>Cursor Slack Agent answers in Slack.</strong> Useful, but editor-first context is still the center.</p>
-        <p><strong>CodeRabbit-style agents review PRs.</strong> Helpful, but the loop starts after code is written.</p>
-        <p><strong>Beacon starts with the team question and keeps going until there is a cited answer or a fix PR.</strong></p>
+      <div class="hero__brief reveal" aria-label="What Beacon does">
+        <p><strong>Far beyond Q&amp;A.</strong> It reviews PRs, triages broken builds, digs through the codebase, and ships fixes — not just chat replies.</p>
+        <p><strong>Agentic, not one-shot.</strong> Beacon plans, retrieves, reads further, and takes action across steps until the job is actually done.</p>
+        <p><strong>Grounded in your code.</strong> Every answer and every action cites the exact files and lines behind it.</p>
       </div>
+    </section>
+
+    <section class="loop" id="loop" aria-labelledby="loop-title">
+      <div class="section-copy section-copy--center">
+        <p class="kicker reveal">What it does</p>
+        <h2 id="loop-title" class="reveal">One teammate, across the whole loop.</h2>
+      </div>
+      <ol class="loop__map">
+        <li class="loop-step reveal">
+          <span>Ask</span>
+          <div class="loop-viz loop-viz--input" aria-hidden="true">
+            <span class="loop-viz__at">@beacon</span> where do we sign requests?
+            <i class="loop-viz__caret"></i>
+          </div>
+          <h3>It starts where your team works.</h3>
+          <p>Mention <code>@beacon</code> or run <code>/ask-code</code> in any channel, DM, or the Slack assistant pane.</p>
+        </li>
+        <li class="loop-step reveal">
+          <span>Investigate</span>
+          <div class="loop-viz loop-viz--trace" aria-hidden="true">
+            <span>router.ts</span><i>→</i><span>auth.ts</span><i>→</i><span>verify.ts</span>
+          </div>
+          <h3>It deep-dives your codebase.</h3>
+          <p>Beacon searches by keyword and by meaning, follows calls and imports, and keeps reading until it has the full picture.</p>
+        </li>
+        <li class="loop-step reveal">
+          <span>Answer</span>
+          <div class="loop-viz loop-viz--answer" aria-hidden="true">
+            <p>Verified in <code>verifySignature()</code></p>
+            <span class="loop-viz__cite">signature.ts:21-44</span>
+          </div>
+          <h3>It replies with proof.</h3>
+          <p>Answers stream in with the exact file paths and line ranges, so anyone can check the source on the spot.</p>
+        </li>
+        <li class="loop-step reveal">
+          <span>Review</span>
+          <div class="loop-viz loop-viz--row" aria-hidden="true">
+            <span class="loop-viz__tag">PR #491</span>
+            <span class="loop-viz__muted">12 files</span>
+            <span class="loop-viz__ok">reviewed</span>
+          </div>
+          <h3>It reviews pull requests.</h3>
+          <p>Paste a PR link or react to one, and Beacon reviews it against your whole codebase — not just the diff.</p>
+        </li>
+        <li class="loop-step loop-step--alert reveal">
+          <span>Triage</span>
+          <div class="loop-viz loop-viz--ci" aria-hidden="true">
+            <span class="loop-viz__fail">✗ build failed</span>
+            <code>hydrateContent() · null check dropped</code>
+          </div>
+          <h3>It diagnoses failing builds.</h3>
+          <p>Red GitHub Actions turn into cited diagnoses, with flaky tests separated from real breakage.</p>
+        </li>
+        <li class="loop-step reveal">
+          <span>Fix</span>
+          <div class="loop-viz loop-viz--fix" aria-hidden="true">
+            <span class="loop-viz__ok">✓ fix PR opened</span>
+            <code>fix/hydrate-null-guard</code>
+          </div>
+          <h3>It opens the fix PR.</h3>
+          <p>Give the word, and Beacon writes the change and opens the pull request — ready for your team to review.</p>
+        </li>
+      </ol>
     </section>
 
     <section class="proof" id="proof" aria-labelledby="proof-title">
       <div class="section-copy">
-        <p class="kicker reveal">The anti-hallucination contract</p>
-        <h2 id="proof-title" class="reveal">Every answer enters with a badge, a source, and an escape hatch.</h2>
+        <p class="kicker reveal">Why you can trust it</p>
+        <h2 id="proof-title" class="reveal">An answer you can't verify isn't an answer.</h2>
       </div>
       <div class="proof__board">
         <article class="proof-card proof-card--large reveal">
           <p class="proof-card__label">01 / Grounded</p>
           <h3>Cited or silent.</h3>
-          <p>Beacon builds answers only from retrieved code chunks and returns file-line citations. If the evidence is missing, it refuses the answer instead of filling the gap with confidence.</p>
-          <div class="proof-flow" aria-hidden="true">
-            <span>claim</span>
-            <i></i>
-            <span>retrieve</span>
-            <i></i>
-            <span>cite</span>
-          </div>
-          <div class="proof-receipt" aria-label="Example cited source">
-            <span>verified source</span>
-            <code>workers/slack-bot/src/signature.ts:21-44</code>
+          <p>Beacon answers only from code it actually retrieved, and shows you the file and line behind every claim. If the evidence isn't there, it says so instead of filling the gap with confidence.</p>
+          <div class="slack-mock slack-mock--inset" aria-label="Example cited answer">
+            <div class="slack-mock__bar">
+              <span class="slack-mock__channel"><b>#</b> eng-help</span>
+              <span class="slack-mock__topic">cited or silent</span>
+            </div>
+            <div class="slack-mock__stream">
+              <div class="slack-msg">
+                <span class="slack-msg__avatar" style="--avatar: oklch(0.6 0.13 150)">JO</span>
+                <div class="slack-msg__body">
+                  <p class="slack-msg__head"><b>Jordan</b> <time>09:12 AM</time></p>
+                  <p class="slack-msg__text"><span class="slack-mention">@beacon</span> can the cache ever serve stale data?</p>
+                </div>
+              </div>
+              <div class="slack-msg slack-msg--beacon">
+                <span class="slack-msg__avatar slack-msg__avatar--bot"><img src="assets/beacon-logo.png" alt="" /></span>
+                <div class="slack-msg__body">
+                  <p class="slack-msg__head"><b>Beacon</b> <span class="slack-app-badge">APP</span> <time>09:12 AM</time></p>
+                  <p class="slack-msg__text">No — entries are invalidated on write in <code>writeThrough()</code>, so reads always hit fresh data.</p>
+                  <div class="slack-cite" aria-label="Cited sources">
+                    <span>cache/store.ts:54-72</span>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </article>
         <article class="proof-card reveal">
-          <p class="proof-card__label">02 / Multi-hop</p>
-          <h3>It traces why.</h3>
-          <p>Lexical search, vectors, and code-graph expansion work together, then an agent runs follow-up reads when the first pass is thin.</p>
+          <p class="proof-card__label">02 / Thorough</p>
+          <h3>It traces the why.</h3>
+          <p>Keyword search, meaning-based search, and call-graph tracing work together — and Beacon reads further when the first pass comes up thin.</p>
           <div class="retrieval-gauge" aria-hidden="true">
-            <span style="--fill: 86%"><b>FTS5</b></span>
-            <span style="--fill: 74%"><b>Vector</b></span>
-            <span style="--fill: 58%"><b>Graph</b></span>
+            <span style="--fill: 86%"><b>Keyword</b></span>
+            <span style="--fill: 74%"><b>Meaning</b></span>
+            <span style="--fill: 58%"><b>Call graph</b></span>
           </div>
         </article>
         <article class="proof-card reveal">
-          <p class="proof-card__label">03 / Slack-native</p>
-          <h3>The thread is the UI.</h3>
-          <p>Channels, DMs, mentions, slash commands, emoji triggers, and assistant pane follow-ups all preserve team context.</p>
-          <div class="thread-proof" aria-hidden="true">
-            <div class="thread-proof__bar">
-              <span>#release-room</span>
-              <b>thread context kept</b>
+          <p class="proof-card__label">03 / In Slack</p>
+          <h3>The thread is the workspace.</h3>
+          <p>Channels, DMs, mentions, slash commands, and emoji reactions all keep the team's context — no new tool to learn.</p>
+          <div class="slack-mock slack-mock--inset" aria-label="Example Slack thread">
+            <div class="slack-mock__bar">
+              <span class="slack-mock__channel"><b>#</b> release-room</span>
+              <span class="slack-mock__topic">context kept in thread</span>
             </div>
-            <div class="thread-proof__msg thread-proof__msg--ask">
-              <strong>Sam</strong>
-              <p><span>@beacon</span> fix this CI failure?</p>
-            </div>
-            <div class="thread-proof__msg thread-proof__msg--answer">
-              <strong>Beacon</strong>
-              <p><code>hydrateContent</code> is the likely fault. React to open a PR.</p>
-              <em>[1] ci/logExcerpt.ts:12-58</em>
-            </div>
-            <div class="thread-proof__triggers">
-              <span>/ask-code</span>
-              <span>@mention</span>
-              <span>rocket reaction</span>
+            <div class="slack-mock__stream">
+              <div class="slack-msg">
+                <span class="slack-msg__avatar" style="--avatar: oklch(0.58 0.13 30)">SA</span>
+                <div class="slack-msg__body">
+                  <p class="slack-msg__head"><b>Sam</b> <time>4:05 PM</time></p>
+                  <p class="slack-msg__text"><span class="slack-mention">@beacon</span> what broke this build?</p>
+                </div>
+              </div>
+              <div class="slack-msg slack-msg--beacon">
+                <span class="slack-msg__avatar slack-msg__avatar--bot"><img src="assets/beacon-logo.png" alt="" /></span>
+                <div class="slack-msg__body">
+                  <p class="slack-msg__head"><b>Beacon</b> <span class="slack-app-badge">APP</span> <time>4:05 PM</time></p>
+                  <p class="slack-msg__text"><code>hydrateContent()</code> is the likely cause. React 🚀 to open the fix PR.</p>
+                  <div class="slack-cite" aria-label="Cited sources">
+                    <span>ci/logExcerpt.ts:12-58</span>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </article>
         <article class="proof-card proof-card--stamp reveal">
-          <span class="proof-card__stamp-label">abstention gate</span>
+          <span class="proof-card__stamp-label">no guessing</span>
           <p>NO SOURCE</p>
           <strong>NO ANSWER</strong>
         </article>
       </div>
     </section>
 
-    <section class="loop" id="loop" aria-labelledby="loop-title">
-      <div class="section-copy section-copy--center">
-        <p class="kicker reveal">Not a bot. A loop.</p>
-        <h2 id="loop-title" class="reveal">Beacon connects the moments other Slack agents leave scattered.</h2>
-      </div>
-      <ol class="loop__map">
-        <li class="loop-step reveal">
-          <span>Ask</span>
-          <h3>A question lands where the team already is.</h3>
-          <p><code>@beacon</code> or <code>/ask-code</code> in channels, DMs, and the Slack assistant pane.</p>
-        </li>
-        <li class="loop-step reveal">
-          <span>Retrieve</span>
-          <h3>The index fans out for evidence.</h3>
-          <p>BM25, Vectorize, and one-hop call/import graph expansion retrieve the surrounding code context.</p>
-        </li>
-        <li class="loop-step reveal">
-          <span>Answer</span>
-          <h3>The reply arrives with source lines.</h3>
-          <p>Streaming answers cite paths and line ranges so the team can verify the claim immediately.</p>
-        </li>
-        <li class="loop-step reveal">
-          <span>Review</span>
-          <h3>PR review sees more than the diff.</h3>
-          <p>Paste a PR URL or react to a link and Beacon reviews against indexed repo context.</p>
-        </li>
-        <li class="loop-step reveal">
-          <span>Fix</span>
-          <h3>The thread can become a pull request.</h3>
-          <p>Describe the issue, react, and Beacon proposes file edits and opens a PR.</p>
-        </li>
-        <li class="loop-step loop-step--alert reveal">
-          <span>Triage</span>
-          <h3>Red CI loops back to Slack.</h3>
-          <p>GitHub Actions failures become cited diagnoses, with transient flakes separated from real fixes.</p>
-        </li>
-      </ol>
-    </section>
-
     <section class="versus" id="versus" aria-labelledby="versus-title">
       <div class="section-copy">
-        <p class="kicker reveal">Against current Slack-agent options</p>
-        <h2 id="versus-title" class="reveal">Beacon is built for engineering leads who need the whole loop, not one more clever reply.</h2>
+        <p class="kicker reveal">How it compares</p>
+        <h2 id="versus-title" class="reveal">Other tools do one slice. Beacon runs the loop.</h2>
       </div>
       <div class="versus__scope reveal" aria-hidden="true">
-        <span>market scan</span>
-        <span>slack agents</span>
-        <span>gap analysis</span>
+        <span>investigate</span>
+        <span>review</span>
+        <span>triage</span>
+        <span>fix</span>
       </div>
       <div class="versus__grid" role="list">
         <article class="versus-card reveal" role="listitem">
@@ -213,9 +272,9 @@
             <b>B</b>
           </div>
           <p class="versus-card__name">Cursor Slack Agent</p>
-          <h3>Good when the ask starts near an editor.</h3>
-          <p>Beacon's pitch is different: the team thread is the center, and the agent can continue from question to review, CI diagnosis, and fix PR.</p>
-          <strong>Beacon edge: team-wide loop ownership.</strong>
+          <h3>Answers questions near the editor.</h3>
+          <p>Beacon is an agent, not a chat box: it investigates, answers, reviews PRs, triages failing builds, and opens fixes — from the team thread.</p>
+          <strong>Beacon edge: acts across the whole loop, not one reply.</strong>
         </article>
         <article class="versus-card reveal" role="listitem">
           <div class="versus-card__visual" aria-hidden="true">
@@ -224,9 +283,9 @@
             <b>B</b>
           </div>
           <p class="versus-card__name">CodeRabbit-style Slack agent</p>
-          <h3>Strong around PR review events.</h3>
-          <p>Beacon covers review, but it also handles the question before the PR and the failed build after it.</p>
-          <strong>Beacon edge: pre-PR and post-CI workflow.</strong>
+          <h3>Reviews the pull request.</h3>
+          <p>Beacon reviews too — and also answers the question before the PR, deep-dives the codebase, and diagnoses the build that breaks after it merges.</p>
+          <strong>Beacon edge: the whole SDLC, not a single stage.</strong>
         </article>
         <article class="versus-card reveal" role="listitem">
           <div class="versus-card__visual" aria-hidden="true">
@@ -235,52 +294,52 @@
             <b>B</b>
           </div>
           <p class="versus-card__name">Generic AI in Slack</p>
-          <h3>Fast answers, weak provenance.</h3>
-          <p>Beacon is deliberately narrower: no retrieved evidence means no answer. The product earns trust by showing its working.</p>
-          <strong>Beacon edge: evidence over fluency.</strong>
+          <h3>Confident answers you can't check.</h3>
+          <p>Beacon won't answer without retrieved evidence — and it actually does the work: reviewing, diagnosing, and opening PRs, not just talking.</p>
+          <strong>Beacon edge: acts on your code, with proof.</strong>
         </article>
       </div>
       <div class="versus__verdict reveal">
-        <span>Beacon verdict</span>
-        <strong>Answers + reviews + triages + opens the fix PR, with receipts.</strong>
+        <span>The difference</span>
+        <strong>One agent across the whole loop — investigate, answer, review, triage, fix — every step cited.</strong>
       </div>
     </section>
 
     <section class="deploy" id="deploy" aria-labelledby="deploy-title">
       <div class="deploy__copy">
-        <p class="kicker reveal">Infrastructure posture</p>
-        <h2 id="deploy-title" class="reveal">Runs on your Cloudflare. Indexed by your GitHub Actions. Built as a private commercial product.</h2>
-        <p class="reveal">Two Workers, D1 with SQLite FTS5, Vectorize, Queues, Workers AI, tree-sitter chunking, secret redaction, and an indexing pipeline you can inspect.</p>
+        <p class="kicker reveal">Deploy it your way</p>
+        <h2 id="deploy-title" class="reveal">Hosted by us, or isolated in your own cloud.</h2>
+        <p class="reveal">Run Beacon as a managed instance we host, or as a dedicated, isolated deployment in your own infrastructure — whichever your security needs call for. Either way, secrets are redacted before they're stored, your code stays scoped to your workspace, and the pipeline is yours to inspect.</p>
       </div>
       <div class="system-card reveal" aria-label="Beacon architecture flow">
         <div class="system-card__row">
           <span>Slack</span>
           <i></i>
-          <span>slack-bot Worker</span>
+          <span>Beacon Worker</span>
           <i></i>
-          <span>D1 + Vectorize</span>
+          <span>Code search index</span>
         </div>
         <div class="system-card__row">
-          <span>GitHub App</span>
+          <span>GitHub</span>
           <i></i>
-          <span>webhook Worker</span>
+          <span>Beacon Worker</span>
           <i></i>
-          <span>Actions indexer</span>
+          <span>Managed or self-hosted</span>
         </div>
         <div class="system-card__footer">
-          <span>signature verification</span>
-          <span>prompt-injection boundary</span>
+          <span>request verification</span>
+          <span>prompt-injection guardrails</span>
           <span>secret redaction</span>
         </div>
       </div>
     </section>
 
     <section class="cta" aria-labelledby="cta-title">
-      <p class="kicker reveal">Bring receipts to every Slack answer</p>
-      <h2 id="cta-title" class="reveal">Point Beacon at the repo. Let the thread prove itself.</h2>
+      <p class="kicker reveal">Put an agentic teammate in your Slack</p>
+      <h2 id="cta-title" class="reveal">Point Beacon at your repo. Put it to work.</h2>
       <div class="cta__actions reveal">
         <a class="button button--primary button--large" href="/admin/onboarding/">Start onboarding</a>
-        <a class="button button--quiet button--large" href="https://github.com/KnightMode/beacon/blob/main/docs/setup.md">Read setup</a>
+        <a class="button button--quiet button--large" href="https://github.com/KnightMode/beacon/blob/main/docs/setup.md">Read the setup guide</a>
       </div>
     </section>
   </main>
