@@ -23,6 +23,7 @@
     "verify:local": "node scripts/verify-local-onboarding.mjs",
     "configure:site-access": "node scripts/configure-cloudflare-access.mjs",
     "remove:site-access": "node scripts/remove-cloudflare-access.mjs",
+    "attach:pages-domain": "node scripts/attach-pages-domain.mjs",
     "dry-run": "npm run dry-run --workspace workers/github-webhook && npm run dry-run --workspace workers/slack-bot"
   },
   "devDependencies": {
