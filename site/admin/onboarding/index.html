@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&family=Newsreader:opsz,wght@6..72,500;6..72,650;6..72,750&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="../../styles.css?v=18" />
+  <link rel="stylesheet" href="../../styles.css?v=20" />
 </head>
 <body class="admin-shell" data-admin-page="onboarding">
   <a class="skip-link" href="#main">Skip to content</a>
@@ -116,6 +116,54 @@
               </ul>
             </aside>
           </div>
+
+          <details class="slack-setup">
+            <summary class="slack-setup__summary">
+              <span class="slack-setup__summary-text">
+                <span class="slack-setup__kicker">No Slack workspace yet?</span>
+                <strong>Set one up in about two minutes</strong>
+              </span>
+              <span class="slack-setup__chevron" aria-hidden="true"></span>
+            </summary>
+
+            <div class="os-tabs">
+              <input class="os-tabs__radio" type="radio" name="slack-os" id="slack-os-mac" checked />
+              <input class="os-tabs__radio" type="radio" name="slack-os" id="slack-os-win" />
+
+              <div class="os-tabs__bar" role="tablist" aria-label="Choose your operating system">
+                <label class="os-tabs__label" for="slack-os-mac">macOS</label>
+                <label class="os-tabs__label" for="slack-os-win">Windows</label>
+              </div>
+
+              <div class="os-panel" data-os="mac">
+                <ol class="slack-setup__steps">
+                  <li>Download the Slack app for macOS.</li>
+                  <li>Open the downloaded file and drag <strong>Slack</strong> into your Applications folder.</li>
+                  <li>Launch Slack and choose <strong>Create a new workspace</strong>.</li>
+                  <li>Use your work email, name the workspace, and invite your team.</li>
+                  <li>Come back to this tab and hit <strong>Connect Slack</strong> above.</li>
+                </ol>
+                <div class="slack-setup__actions">
+                  <a class="button button--primary button--small" href="https://slack.com/downloads/mac" target="_blank" rel="noopener noreferrer">Download for macOS</a>
+                  <a class="button button--quiet button--small" href="https://slack.com/get-started#/createnew" target="_blank" rel="noopener noreferrer">Create in browser</a>
+                </div>
+              </div>
+
+              <div class="os-panel" data-os="win">
+                <ol class="slack-setup__steps">
+                  <li>Download the Slack app for Windows.</li>
+                  <li>Run the installer — Slack opens automatically when it finishes.</li>
+                  <li>Choose <strong>Create a new workspace</strong>.</li>
+                  <li>Use your work email, name the workspace, and invite your team.</li>
+                  <li>Come back to this tab and hit <strong>Connect Slack</strong> above.</li>
+                </ol>
+                <div class="slack-setup__actions">
+                  <a class="button button--primary button--small" href="https://slack.com/downloads/windows" target="_blank" rel="noopener noreferrer">Download for Windows</a>
+                  <a class="button button--quiet button--small" href="https://slack.com/get-started#/createnew" target="_blank" rel="noopener noreferrer">Create in browser</a>
+                </div>
+              </div>
+            </div>
+          </details>
         </section>
 
         <section id="journey-panel-github" class="journey-panel" data-step-card="github" data-journey-panel="github" role="tabpanel" aria-labelledby="journey-card-github" hidden>
