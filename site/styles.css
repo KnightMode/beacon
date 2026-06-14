@@ -4298,6 +4298,176 @@ code {
   background: color-mix(in oklch, var(--journey-surface) 74%, transparent);
 }
 
+/* "No Slack yet?" helper with CSS-only macOS / Windows tabs */
+.slack-setup {
+  margin-top: clamp(0.9rem, 1.5vw, 1.3rem);
+  border: 1px solid var(--line-strong);
+  background:
+    linear-gradient(180deg, color-mix(in oklch, var(--gold) 8%, transparent), transparent 40%),
+    var(--journey-surface);
+  box-shadow: 5px 5px 0 color-mix(in oklch, var(--coal) 10%, transparent);
+}
+
+.os-tabs {
+  position: relative;
+  display: block;
+}
+
+.os-tabs__radio {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.slack-setup__summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: clamp(0.85rem, 1.4vw, 1.15rem);
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+
+.slack-setup__summary::-webkit-details-marker {
+  display: none;
+}
+
+.slack-setup__summary:focus-visible {
+  outline: 2px solid var(--signal);
+  outline-offset: -2px;
+}
+
+.slack-setup[open] .slack-setup__summary {
+  border-bottom: 1px solid var(--journey-line);
+}
+
+.slack-setup__kicker {
+  display: block;
+  margin-bottom: 0.2rem;
+  color: var(--signal);
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+}
+
+.slack-setup__summary strong {
+  font-size: clamp(1.05rem, 1.5vw, 1.3rem);
+  letter-spacing: -0.02em;
+}
+
+.slack-setup__chevron {
+  flex: 0 0 auto;
+  width: 0.68rem;
+  height: 0.68rem;
+  border-right: 2px solid var(--muted);
+  border-bottom: 2px solid var(--muted);
+  transform: rotate(45deg);
+  transition: transform 0.22s var(--ease), border-color 0.18s var(--ease);
+}
+
+.slack-setup__summary:hover .slack-setup__chevron {
+  border-color: var(--signal);
+}
+
+.slack-setup[open] .slack-setup__chevron {
+  transform: rotate(-135deg);
+}
+
+.os-tabs__bar {
+  display: inline-flex;
+  margin: clamp(0.85rem, 1.4vw, 1.15rem) clamp(0.95rem, 1.5vw, 1.3rem) 0;
+  padding: 0.2rem;
+  border: 1px solid var(--line-strong);
+  background: color-mix(in oklch, var(--paper-raw) 32%, var(--paper));
+}
+
+.os-tabs__label {
+  padding: 0.4rem 0.85rem;
+  font-family: var(--font-mono);
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  cursor: pointer;
+  transition: background 0.16s var(--ease), color 0.16s var(--ease);
+}
+
+.os-tabs__label:hover {
+  color: var(--ink);
+}
+
+#slack-os-mac:checked ~ .os-tabs__bar .os-tabs__label[for="slack-os-mac"],
+#slack-os-win:checked ~ .os-tabs__bar .os-tabs__label[for="slack-os-win"] {
+  background: var(--coal);
+  color: var(--paper);
+}
+
+.os-tabs__radio:focus-visible ~ .os-tabs__bar .os-tabs__label {
+  outline: 2px solid var(--signal);
+  outline-offset: 2px;
+}
+
+.os-panel {
+  display: none;
+  padding: clamp(0.95rem, 1.5vw, 1.3rem);
+}
+
+#slack-os-mac:checked ~ .os-panel[data-os="mac"],
+#slack-os-win:checked ~ .os-panel[data-os="win"] {
+  display: block;
+  animation: journey-panel-enter 0.2s var(--ease);
+}
+
+.slack-setup__steps {
+  display: grid;
+  gap: 0.55rem;
+  margin: 0 0 1rem;
+  padding: 0;
+  list-style: none;
+  counter-reset: slackstep;
+}
+
+.slack-setup__steps li {
+  position: relative;
+  padding-left: 2.1rem;
+  color: var(--ink-2);
+  line-height: 1.5;
+  counter-increment: slackstep;
+}
+
+.slack-setup__steps li::before {
+  content: counter(slackstep);
+  position: absolute;
+  left: 0;
+  top: 0.05rem;
+  display: grid;
+  place-items: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border: 1px solid color-mix(in oklch, var(--signal) 45%, var(--line));
+  background: color-mix(in oklch, var(--signal) 10%, transparent);
+  color: var(--signal-dark);
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.slack-setup__steps strong {
+  color: var(--ink);
+}
+
+.slack-setup__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+}
+
 /* First-answer step — a Slack-flavored conversation mock */
 .slack-mock {
   --slack-green: oklch(0.52 0.11 162);

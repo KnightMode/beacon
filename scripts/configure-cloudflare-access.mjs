@@ -8,7 +8,15 @@ const apiToken = requiredEnv('CLOUDFLARE_API_TOKEN');
 const hostname = cleanHostname(process.env.ACCESS_SITE_HOSTNAME || 'beacon-90k.pages.dev');
 const pagesProjectName = process.env.ACCESS_PAGES_PROJECT_NAME?.trim() || 'beacon';
 const pagesEnvironment = normalizePagesEnvironment(process.env.ACCESS_PAGES_ENVIRONMENT || 'production');
-const appName = process.env.ACCESS_APP_NAME?.trim() || 'Beacon admin portal';
+const appName = process.env.ACCESS_APP_NAME?.trim() || 'Beacon';
+// Friendly labels so each protected path becomes a readable Access app name
+// (e.g. the login screen reads "Log in to Beacon onboarding portal").
+const PATH_LABELS = {
+  '/admin*': 'onboarding portal',
+  '/api/admin*': 'admin API',
+  '/oauth/slack/callback*': 'Slack connection',
+  '/oauth/github/callback*': 'GitHub connection',
+};
 const organizationName = process.env.ACCESS_ORGANIZATION_NAME?.trim() || 'Beacon';
 const authDomain = cleanAuthDomain(process.env.ACCESS_AUTH_DOMAIN || 'beacon-90k.cloudflareaccess.com');
 const policyName = process.env.ACCESS_POLICY_NAME?.trim() || 'Allow approved email OTP';
@@ -382,7 +390,8 @@ function policyPayload() {
 
 function appDisplayName(domain) {
   const path = domain.slice(hostname.length) || '/*';
-  return `${appName} ${path}`;
+  const label = PATH_LABELS[path] || path;
+  return `${appName} ${label}`;
 }
 
 async function listAll(pathname) {
