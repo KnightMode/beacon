@@ -1503,6 +1503,10 @@ code {
     max-width: 680px;
     transform: none;
   }
+
+  .slack-mock--hero {
+    max-width: 640px;
+  }
 }
 
 @media (max-width: 1020px) {
@@ -1537,11 +1541,13 @@ code {
   }
 
   .proof-card--large .proof-flow,
-  .proof-card--large .proof-receipt {
+  .proof-card--large .proof-receipt,
+  .proof-card--large .slack-mock--inset {
     grid-column: 1;
   }
 
-  .proof-card--large .proof-flow {
+  .proof-card--large .proof-flow,
+  .proof-card--large .slack-mock--inset {
     margin-top: 1.5rem;
   }
 
@@ -1561,13 +1567,24 @@ code {
 }
 
 @media (max-width: 720px) {
+  .nav {
+    gap: 0.6rem;
+    padding-inline: 1rem;
+  }
+
+  .brand__tagline {
+    font-size: 0.5rem;
+    letter-spacing: 0.05em;
+  }
+
+  /* The hero and footer already carry the onboarding CTA, so drop the
+     redundant nav button on phones and let the brand lockup breathe. */
   .nav__cta {
-    min-height: 2.4rem;
-    padding: 0.62rem 0.85rem;
+    display: none;
   }
 
   .hero {
-    padding-top: 6.8rem;
+    padding-top: 5.8rem;
   }
 
   .hero__title {
@@ -1628,8 +1645,12 @@ code {
     transform: none;
   }
 
-  .loop-step span {
-    margin-bottom: 3rem;
+  .loop-step > span {
+    margin-bottom: 1rem;
+  }
+
+  .loop-viz {
+    margin-bottom: 1.1rem;
   }
 
   .system-card__row {
