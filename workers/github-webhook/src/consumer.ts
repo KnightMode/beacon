@@ -1,7 +1,7 @@
 /**
- * Queue consumer: forwards each index job to the standalone indexer HTTP
- * service. Tree-sitter parsing must NOT run inside a Worker, so the heavy work
- * lives in the Node indexer; this consumer is a thin, retrying dispatcher.
+ * Queue consumer: forwards each index job to an external Node runner.
+ * Tree-sitter parsing must NOT run inside a Worker, so the heavy work lives in
+ * the GitHub Actions indexer workflow by default, or an optional hosted indexer.
  */
 
 import type { IndexJob } from '@scintel/shared';
@@ -26,12 +26,17 @@ export async function handleIndexBatch(
 }
 
 async function dispatchToIndexer(env: Env, job: IndexJob): Promise<void> {
-  // Prefer the GitHub Actions pipeline when configured: fire a
-  // repository_dispatch that runs the indexer CLI in CI. Falls back to the
-  // direct INDEXER_URL POST when pipeline dispatch is not configured.
-  if (!job.tenantId && !job.installationId && env.PIPELINE_DISPATCH_REPO && env.PIPELINE_DISPATCH_TOKEN) {
+  // GitHub Actions remains the default runner. Tenant jobs include
+  // installationId so the CLI mints a GitHub App installation token at runtime.
+  if (env.PIPELINE_DISPATCH_REPO && env.PIPELINE_DISPATCH_TOKEN) {
     await dispatchToPipeline(env, job);
     return;
+  }
+
+  if (!env.INDEXER_URL || !env.INDEXER_SHARED_SECRET) {
+    throw new Error(
+      'index dispatch is not configured; set PIPELINE_DISPATCH_REPO/PIPELINE_DISPATCH_TOKEN or INDEXER_URL/INDEXER_SHARED_SECRET',
+    );
   }
 
   const url = `${env.INDEXER_URL.replace(/\/$/, '')}/index`;

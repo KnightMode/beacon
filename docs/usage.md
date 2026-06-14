@@ -37,7 +37,8 @@ Requires the tenant GitHub App installation to have **Actions: Read** and the
 
 For tenant workspaces, use `@bot index owner/repo`, the admin portal repo
 picker, or automatic indexing from GitHub App webhooks. Tenant indexing runs
-through Beacon-hosted infrastructure with short-lived installation tokens.
+in the `Index Repository` GitHub Actions workflow with short-lived GitHub App
+installation tokens.
 
 Legacy/internal options remain available for development and non-tenant repos:
 

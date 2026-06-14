@@ -5,6 +5,7 @@
  *   npm run index -- <owner/repo> --commit <sha>          # FULL_INDEX at sha
  *   npm run index -- <owner/repo> --incremental a.go b.ts # INCREMENTAL_INDEX
  *   npm run index -- <owner/repo> --incremental a.go --removed b.ts
+ *   npm run index -- <owner/repo> --installation-id 123   # GitHub App auth
  *   npm run index -- --help
  *
  * `--help` works without any environment configuration.
@@ -20,6 +21,8 @@ Usage:
   npm run index -- <owner/repo> --force                  Full re-chunk/re-embed
                                                          (skips no shortcuts)
   npm run index -- <owner/repo> --commit <sha>           FULL_INDEX at a commit
+  npm run index -- <owner/repo> --installation-id <id>    Use GitHub App auth
+  npm run index -- <owner/repo> --tenant-id <id>          Tag tenant vectors
   npm run index -- <owner/repo> --incremental <files...> INCREMENTAL re-index
   npm run index -- <owner/repo> --incremental <files...> --removed <files...>
                                                          also delete removed files
@@ -47,6 +50,8 @@ async function run(): Promise<void> {
   }
 
   let commitSha: string | undefined;
+  let tenantId: string | undefined;
+  let installationId: number | undefined;
   let force = false;
   const incrementalFiles: string[] = [];
   const removedFiles: string[] = [];
@@ -55,7 +60,18 @@ async function run(): Promise<void> {
   for (let i = 1; i < argv.length; i++) {
     const arg = argv[i]!;
     if (arg === '--commit') {
-      commitSha = argv[++i];
+      commitSha = requiredArgValue(argv, ++i, '--commit');
+    } else if (arg === '--tenant-id') {
+      tenantId = requiredArgValue(argv, ++i, '--tenant-id');
+    } else if (arg === '--installation-id') {
+      const raw = requiredArgValue(argv, ++i, '--installation-id');
+      const parsed = Number(raw);
+      if (!Number.isInteger(parsed) || parsed <= 0) {
+        process.stderr.write(`error: --installation-id must be a positive integer, got "${raw}"\n`);
+        process.exitCode = 1;
+        return;
+      }
+      installationId = parsed;
     } else if (arg === '--force') {
       force = true;
     } else if (arg === '--incremental') {
@@ -76,29 +92,44 @@ async function run(): Promise<void> {
   const config = loadConfig();
 
   const repoId = repoIdFor(repoFullName);
+  const commonJob = {
+    repoId,
+    repoFullName,
+    commitSha,
+    tenantId,
+    installationId,
+    enqueuedAt: new Date().toISOString(),
+  };
   const job: IndexJob =
     mode !== 'full'
       ? {
+          ...commonJob,
           jobType: JOB_TYPES.INCREMENTAL_INDEX,
-          repoId,
-          repoFullName,
-          commitSha,
           changedFiles: incrementalFiles,
           removedFiles,
-          enqueuedAt: new Date().toISOString(),
         }
       : {
+          ...commonJob,
           jobType: JOB_TYPES.FULL_INDEX,
-          repoId,
-          repoFullName,
-          commitSha,
           force,
-          enqueuedAt: new Date().toISOString(),
         };
 
-  process.stdout.write(`Indexing ${repoFullName} (${job.jobType})...\n`);
+  process.stdout.write(
+    `Indexing ${repoFullName} (${job.jobType})` +
+      (tenantId ? ` tenant=${tenantId}` : '') +
+      (installationId ? ` installation=${installationId}` : '') +
+      '...\n',
+  );
   const result = await indexRepo(config, job);
   process.stdout.write(`Done: ${JSON.stringify(result, null, 2)}\n`);
+}
+
+function requiredArgValue(argv: string[], index: number, flag: string): string {
+  const value = argv[index];
+  if (!value || value.startsWith('--')) {
+    throw new Error(`${flag} requires a value`);
+  }
+  return value;
 }
 
 run().catch((err) => {

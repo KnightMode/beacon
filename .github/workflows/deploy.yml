@@ -2,7 +2,7 @@ name: Deploy Workers
 
 # Auto-deploy the Cloudflare Workers on every push to main. Verifies first
 # (typecheck + tests), then deploys only the worker(s) affected by the change.
-# The indexer (services/indexer) is a Node container and is not deployed here.
+# The indexer runs in .github/workflows/index.yml; Workers only dispatch jobs.
 
 on:
   push:
@@ -153,21 +153,14 @@ jobs:
             printf '%s' "$value" | npx wrangler secret put "$name"
           }
 
-          put_secret INDEXER_SHARED_SECRET "$INDEXER_SHARED_SECRET"
+          put_secret PIPELINE_DISPATCH_TOKEN "$PIPELINE_DISPATCH_TOKEN"
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          INDEXER_SHARED_SECRET: ${{ secrets.INDEXER_SHARED_SECRET }}
+          PIPELINE_DISPATCH_TOKEN: ${{ secrets.PIPELINE_DISPATCH_TOKEN || secrets.INDEXER_GITHUB_PAT }}
       - name: Deploy
         working-directory: workers/github-webhook
-        run: |
-          set -euo pipefail
-          if [ -z "$INDEXER_URL" ]; then
-            echo "::error::INDEXER_URL is not configured in GitHub Actions vars"
-            exit 1
-          fi
-          npx wrangler deploy --keep-vars --var "INDEXER_URL:${INDEXER_URL}"
+        run: npx wrangler deploy
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          INDEXER_URL: ${{ vars.INDEXER_URL }}
