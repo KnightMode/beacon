@@ -1,22 +1,40 @@
 # Setup
 
-**Prerequisites:** Node ≥ 20, a Cloudflare account, a GitHub account, and a
-Slack workspace you can install apps into.
+**Prerequisites:** Node ≥ 20, Terraform ≥ 1.5, a Cloudflare account, a GitHub
+account, and a Slack workspace you can install apps into.
 
 ## 1. Cloudflare resources
 
 ```bash
 npm install
-npx wrangler d1 create scintel              # put the id in both workers' wrangler.toml
-npx wrangler d1 execute scintel --remote --file=packages/shared/schema.sql
-npx wrangler vectorize create code-chunks --dimensions=768 --metric=cosine
-npx wrangler queues create scintel-index-jobs
-npx wrangler queues create scintel-index-jobs-dlq
 ```
 
-Databases created before FTS5 existed need the one-time, idempotent migration:
+Stable Cloudflare resources are managed by Terraform where the provider can own
+them cleanly: D1, queues, the Pages custom domain, and Cloudflare Access. The
+production Terraform environment is in `terraform/environments/production`.
+Import existing production resources before the first apply; see
+[Cloudflare Terraform](./cloudflare-terraform.md).
 
 ```bash
+cd terraform/environments/production
+terraform init \
+  -backend-config="bucket=beacon-terraform-state" \
+  -backend-config="key=cloudflare/production.tfstate" \
+  -backend-config="region=auto" \
+  -backend-config="endpoint=https://<account-id>.r2.cloudflarestorage.com" \
+  -backend-config="skip_credentials_validation=true" \
+  -backend-config="skip_region_validation=true" \
+  -backend-config="skip_metadata_api_check=true" \
+  -backend-config="force_path_style=true"
+terraform plan
+terraform apply
+```
+
+D1 schema remains a migration concern, not Terraform state. Apply the schema
+after Terraform has created or imported the D1 database:
+
+```bash
+npx wrangler d1 execute scintel --remote --file=packages/shared/schema.sql
 npx wrangler d1 execute scintel --remote --file=packages/shared/migrations/0001_chunks_fts.sql
 ```
 
@@ -26,6 +44,13 @@ Multi-tenant admin portal support needs the tenant migrations:
 npx wrangler d1 execute scintel --remote --file=packages/shared/migrations/0004_tenants.sql
 npx wrangler d1 execute scintel --remote --file=packages/shared/migrations/0005_tenant_ci_triage_runs.sql
 npx wrangler d1 execute scintel --remote --file=packages/shared/migrations/0006_installation_repo_grants.sql
+```
+
+The Vectorize index is still created through Wrangler/runtime tooling until the
+Cloudflare Terraform provider has a clean supported import path for it:
+
+```bash
+npx wrangler vectorize create code-chunks --dimensions=768 --metric=cosine
 ```
 
 ## 2. GitHub credentials
@@ -76,9 +101,10 @@ deploy-managed slack-bot secrets from repo secrets before each slack-bot deploy:
 `EVAL_TOKEN`.
 
 For the Cloudflare Pages admin portal, the `Configure site Access` workflow
-updates the Pages project and redeploys it with:
+applies Terraform first, then updates the Pages project runtime config and
+redeploys it with:
 
-- **D1 binding:** `DB` pointing at the same `scintel` database.
+- **D1 binding:** `DB` pointing at the Terraform-managed `scintel` database.
 - **D1 tenant migrations:** `0004_tenants.sql`,
   `0005_tenant_ci_triage_runs.sql`, and `0006_installation_repo_grants.sql`
   applied to the remote database.
@@ -88,9 +114,10 @@ updates the Pages project and redeploys it with:
 - **Vars:** `SLACK_CLIENT_ID`, `GITHUB_APP_SLUG`, `GITHUB_APP_ID`, and
   `PIPELINE_DISPATCH_REPO`.
 - **Cloudflare Access vars:** `ADMIN_CF_ACCESS_ISSUER` and
-  `ADMIN_CF_ACCESS_AUD` are required for deployed admin routes. Optionally set
-  `ADMIN_CF_ACCESS_ALLOWED_EMAILS` or `ADMIN_CF_ACCESS_ALLOWED_DOMAINS` for an
-  in-app allow-list that mirrors the Access policy.
+  `ADMIN_CF_ACCESS_AUD` are read from Terraform outputs. Optionally set
+  `ADMIN_CF_ACCESS_ALLOWED_EMAILS` or `ADMIN_CF_ACCESS_ALLOWED_DOMAINS` through
+  the workflow allow-list inputs; they are mirrored into Pages for in-app
+  verification.
 
 The Slack OAuth redirect URL is
 `https://askbeacon.dev/oauth/slack/callback`. The GitHub App setup callback is
@@ -185,8 +212,8 @@ The marketing site deploys from `site/` to Cloudflare Pages, but the sensitive
 admin surface is path-scoped behind Cloudflare Access. To require email one-time
 PIN login for `/admin`, `/api/admin`, and the OAuth callbacks, run the manual
 `Configure site Access` GitHub Actions workflow with the allowed emails or email
-domains. The workflow creates the Access apps and writes the required
-`ADMIN_CF_ACCESS_*` runtime vars into the Pages project. See
+domains. The workflow applies the Terraform-managed Access apps and writes the
+required `ADMIN_CF_ACCESS_*` runtime vars into the Pages project. See
 [Protect the admin portal with Cloudflare Access](./site-access.md).
 
 ## Environment reference
