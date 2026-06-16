@@ -13,6 +13,12 @@ export interface Env {
   LLM_MODEL: string;
   /** Set to "false" to disable the agentic retrieval planner loop for Q&A. */
   AGENTIC_RETRIEVAL?: string;
+  /**
+   * Planner mode for follow-up retrieval tools. Default is "on_demand": run the
+   * first hybrid search every time, but only pay the extra planner LLM call when
+   * evidence is weak or the question asks for call/reference tracing.
+   */
+  AGENTIC_PLANNER_MODE?: string;
   /** Optional Zoekt-compatible search endpoint. When unset, D1 FTS remains the lexical path. */
   ZOEKT_SEARCH_URL?: string;
   /** Optional bearer token used when calling ZOEKT_SEARCH_URL. */

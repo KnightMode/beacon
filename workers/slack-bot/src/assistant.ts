@@ -9,10 +9,7 @@
  */
 
 import type { Env } from './env.js';
-import { markFirstCitedAnswer } from './tenant.js';
-import { call, monotonicStatus } from './stream.js';
-import { buildAnswer } from './answer.js';
-import { fetchThreadHistory } from './history.js';
+import { call, streamAnswer } from './stream.js';
 import {
   detectIntent,
   stripCreatePrPrefix,
@@ -132,45 +129,17 @@ export async function handleAssistantMessage(
   await answerAssistantQuestion(env, m);
 }
 
-/** The actual assistant Q&A: staged status, retrieval + LLM, posted reply. */
+/** The actual assistant Q&A: staged status, retrieval + streamed LLM reply. */
 export async function answerAssistantQuestion(
   env: Env,
   m: AssistantMessage,
 ): Promise<void> {
-  // Status under the composer, advanced at real stage transitions; it clears
-  // the moment we post the reply below. Monotonic: never repeats or cycles.
-  const setStatus = monotonicStatus((status) => {
-    void call(env, 'assistant.threads.setStatus', {
-      channel_id: m.channelId,
-      thread_ts: m.threadTs,
-      status,
-    }, m.teamId).catch(() => undefined);
-  });
-  setStatus('is reading your question…');
-
-  const history = await fetchThreadHistory(
-    env,
-    m.channelId,
-    m.threadTs,
-    m.messageTs,
-    m.teamId,
-  ).catch(() => []);
-
-  const { message, hadCitations } = await buildAnswer(
-    env,
-    m.text,
-    history,
-    setStatus,
-    m.teamId,
-  );
-
-  await call(env, 'chat.postMessage', {
+  await streamAnswer(env, {
     channel: m.channelId,
-    thread_ts: m.threadTs,
-    text: message.text,
-    blocks: message.blocks,
-  }, m.teamId);
-  if (hadCitations) {
-    await markFirstCitedAnswer(env, m.teamId).catch(() => undefined);
-  }
+    threadTs: m.threadTs,
+    userId: m.userId,
+    teamId: m.teamId,
+    question: m.text,
+    messageTs: m.messageTs,
+  });
 }
