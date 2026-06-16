@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { buildFtsMatch } from '../src/retrieval/lexical.js';
 import { parseQuery } from '../src/retrieval/queryUnderstanding.js';
-import { parsePlannerOutput } from '../src/retrieval/agent.js';
+import { parsePlannerOutput, shouldRunPlanner } from '../src/retrieval/agent.js';
 import { detectIntent, parseIndexRepoTarget } from '../src/intent.js';
 import { needsStagedPrPlan } from '../src/actions/stagedPrPlan.js';
 import { scopeAllowlist } from '../src/retrieval/pipeline.js';
@@ -191,6 +191,70 @@ describe('parsePlannerOutput', () => {
     expect(parsePlannerOutput('I could not decide.')).toBeNull();
     expect(parsePlannerOutput('{not json}')).toBeNull();
     expect(parsePlannerOutput('')).toBeNull();
+  });
+});
+
+describe('shouldRunPlanner', () => {
+  it('keeps ordinary well-recalled questions on the fast path', () => {
+    expect(
+      shouldRunPlanner('how does ebpf wiremock router work?', {
+        poolSize: 27,
+        highConfidenceHits: 10,
+        codeIntelHits: 6,
+      }),
+    ).toBe(false);
+  });
+
+  it('plans when first-pass evidence is weak', () => {
+    expect(
+      shouldRunPlanner('where is the router configured?', {
+        poolSize: 3,
+        highConfidenceHits: 2,
+        codeIntelHits: 1,
+      }),
+    ).toBe(true);
+  });
+
+  it('plans when recall is broad but low quality, even without trigger words', () => {
+    expect(
+      shouldRunPlanner('how is a question answered end to end?', {
+        poolSize: 20,
+        highConfidenceHits: 2,
+        codeIntelHits: 0,
+      }),
+    ).toBe(true);
+  });
+
+  it('plans for explicit trace and impact questions', () => {
+    const strongEvidence = {
+      poolSize: 27,
+      highConfidenceHits: 10,
+      codeIntelHits: 6,
+    };
+    expect(
+      shouldRunPlanner('trace all callers of handleRequest across repos', strongEvidence),
+    ).toBe(true);
+    expect(
+      shouldRunPlanner('impact analysis for this breaking change', strongEvidence),
+    ).toBe(
+      true,
+    );
+  });
+
+  it('honors explicit modes', () => {
+    const strongEvidence = {
+      poolSize: 27,
+      highConfidenceHits: 10,
+      codeIntelHits: 6,
+    };
+    expect(shouldRunPlanner('anything', strongEvidence, 'always')).toBe(true);
+    expect(
+      shouldRunPlanner(
+        'trace callers',
+        { poolSize: 2, highConfidenceHits: 1, codeIntelHits: 1 },
+        'off',
+      ),
+    ).toBe(false);
   });
 });
 

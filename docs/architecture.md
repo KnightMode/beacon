@@ -45,16 +45,19 @@ GitHub Actions. Nothing to operate, nothing to keep warm.
 3. **Route** the intent: question, index command, index status, notify-channel
    mapping, PR review, PR creation.
 4. **Retrieve** evidence with hybrid search:
-   - Zoekt exact source-code search when `ZOEKT_SEARCH_URL` is configured
+   - Zoekt exact source-code search through the `ZOEKT_SEARCH` service binding
+     or `ZOEKT_SEARCH_URL`
    - SCIP definitions/references when normalized facts are populated
    - BM25 full-text over code (SQLite FTS5 in D1)
    - vector similarity (Vectorize + `embeddinggemma-300m`, 768d)
    - one-hop expansion over extracted `CALLS` / `IMPORTS` edges
    - merge + rerank with symbol and diversity heuristics
-5. **Plan (agentic)** — a planner LLM inspects the first round of results and,
-   when something is missing, runs follow-up tools (search, read file, find
-   callers/callees over the code graph) before answering. Hard time-budgeted,
-   with graceful fallback to single-shot retrieval.
+5. **Plan when needed** — the first hybrid pass is the default fast path. With
+   `AGENTIC_PLANNER_MODE=on_demand`, the planner LLM runs when first-pass
+   evidence is weak, lacks high-confidence Zoekt/SCIP hits, or the question
+   explicitly asks for tracing, references, cross-repo impact, or
+   breaking-change analysis. `always` forces deeper planner loops; `off`
+   disables them.
 6. **Answer** with an LLM (Workers AI, Kimi), grounded strictly in the
    retrieved evidence, streamed token-by-token into the Slack thread with a
    `Sources` list of `repo/path:lines`. If the evidence isn't there, it says so.

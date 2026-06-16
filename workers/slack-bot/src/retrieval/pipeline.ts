@@ -73,6 +73,7 @@ export async function retrieve(
   searchText?: string,
   teamId?: string,
 ): Promise<RetrievalOutcome> {
+  const startedAt = Date.now();
   // searchText may be an enriched follow-up query (prev question + current);
   // the LLM still receives the real `question` separately.
   const query = searchText ?? question;
@@ -101,6 +102,19 @@ export async function retrieve(
 
   const ranked = rerank(parsed, [scip, zoekt, vector, lexical, graph]);
   const packed = packContext(ranked);
+  console.log('retrieval done', {
+    mode: 'single_shot',
+    allowlistCount: allowlist.length,
+    sources: {
+      lexical: lexical.length,
+      vector: vector.length,
+      zoekt: zoekt.length,
+      scip: scip.length,
+      graph: graph.length,
+    },
+    packedChunks: packed.used.length,
+    elapsedMs: Date.now() - startedAt,
+  });
 
   return {
     parsed,
