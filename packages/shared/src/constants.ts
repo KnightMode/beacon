@@ -23,6 +23,71 @@ export const EDGE_TYPES = {
 } as const;
 export type EdgeType = (typeof EDGE_TYPES)[keyof typeof EDGE_TYPES];
 
+export const CODE_INDEX_ARTIFACT_TYPES = {
+  ZOEKT_SHARD: 'ZOEKT_SHARD',
+  SCIP_INDEX: 'SCIP_INDEX',
+  SCIP_SYMBOLS: 'SCIP_SYMBOLS',
+} as const;
+export type CodeIndexArtifactType =
+  (typeof CODE_INDEX_ARTIFACT_TYPES)[keyof typeof CODE_INDEX_ARTIFACT_TYPES];
+
+export const CODE_INDEX_ARTIFACT_STATUS = {
+  PENDING: 'PENDING',
+  READY: 'READY',
+  FAILED: 'FAILED',
+  DISABLED: 'DISABLED',
+} as const;
+export type CodeIndexArtifactStatus =
+  (typeof CODE_INDEX_ARTIFACT_STATUS)[keyof typeof CODE_INDEX_ARTIFACT_STATUS];
+
+export const SCIP_SYMBOL_KINDS = {
+  UNKNOWN: 'unknown',
+  PACKAGE: 'package',
+  MODULE: 'module',
+  NAMESPACE: 'namespace',
+  TYPE: 'type',
+  INTERFACE: 'interface',
+  CLASS: 'class',
+  ENUM: 'enum',
+  FUNCTION: 'function',
+  METHOD: 'method',
+  CONSTRUCTOR: 'constructor',
+  FIELD: 'field',
+  VARIABLE: 'variable',
+  CONSTANT: 'constant',
+} as const;
+export type ScipSymbolKind = (typeof SCIP_SYMBOL_KINDS)[keyof typeof SCIP_SYMBOL_KINDS];
+
+export const SCIP_REFERENCE_ROLES = {
+  DEFINITION: 'definition',
+  REFERENCE: 'reference',
+  IMPLEMENTATION: 'implementation',
+  OVERRIDE: 'override',
+} as const;
+export type ScipReferenceRole =
+  (typeof SCIP_REFERENCE_ROLES)[keyof typeof SCIP_REFERENCE_ROLES];
+
+export const STAGED_PR_PLAN_STATUS = {
+  PLANNED: 'PLANNED',
+  ACTIVE: 'ACTIVE',
+  COMPLETE: 'COMPLETE',
+  BLOCKED: 'BLOCKED',
+  CANCELLED: 'CANCELLED',
+} as const;
+export type StagedPrPlanStatus =
+  (typeof STAGED_PR_PLAN_STATUS)[keyof typeof STAGED_PR_PLAN_STATUS];
+
+export const STAGED_PR_STEP_STATUS = {
+  PENDING: 'PENDING',
+  READY: 'READY',
+  OPENED: 'OPENED',
+  MERGED: 'MERGED',
+  BLOCKED: 'BLOCKED',
+  SKIPPED: 'SKIPPED',
+} as const;
+export type StagedPrStepStatus =
+  (typeof STAGED_PR_STEP_STATUS)[keyof typeof STAGED_PR_STEP_STATUS];
+
 export const INDEX_STATUS = {
   PENDING: 'PENDING',
   INDEXING: 'INDEXING',
@@ -145,6 +210,7 @@ export const EXTENSION_LANGUAGE_MAP: Readonly<Record<string, string>> = {
 /** Languages that have a tree-sitter grammar wired up in the indexer. */
 export const TREE_SITTER_LANGUAGES: ReadonlySet<string> = new Set([
   'go',
+  'java',
   'typescript',
   'javascript',
   'python',

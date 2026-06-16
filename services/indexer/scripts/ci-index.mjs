@@ -75,6 +75,9 @@ if (tenantId) {
 if (installationId) {
   args.push('--installation-id', installationId);
 }
+if (process.env.INDEX_RESULT_JSON && process.env.INDEX_RESULT_JSON.trim() !== '') {
+  args.push('--result-json', process.env.INDEX_RESULT_JSON.trim());
+}
 if (jobType === 'INCREMENTAL_INDEX' && (files.length || removed.length)) {
   args.push('--incremental', ...files);
   if (removed.length) args.push('--removed', ...removed);

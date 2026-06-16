@@ -15,7 +15,8 @@ GitHub Actions. Nothing to operate, nothing to keep warm.
                                               │  verify sig → intent routing
                                               │  resolve Slack team → tenant
                                               │  agentic retrieval:
-                                              │   FTS5(D1) + Vectorize + graph
+                                              │   Zoekt + SCIP + FTS5(D1)
+                                              │   + Vectorize + graph
                                               │   → planner tools → rerank
                                               │  LLM answer (Workers AI, Kimi)
                                               │  streamed + cited to Slack
@@ -32,6 +33,7 @@ GitHub Actions. Nothing to operate, nothing to keep warm.
                               │  GitHub App installation token:
                               │  fetch tree → tree-sitter chunking →
                               │  secret redaction → embed → upsert
+                              │  optional Zoekt + SCIP artifacts/facts
 ```
 
 ## The query path (`workers/slack-bot`)
@@ -43,6 +45,8 @@ GitHub Actions. Nothing to operate, nothing to keep warm.
 3. **Route** the intent: question, index command, index status, notify-channel
    mapping, PR review, PR creation.
 4. **Retrieve** evidence with hybrid search:
+   - Zoekt exact source-code search when `ZOEKT_SEARCH_URL` is configured
+   - SCIP definitions/references when normalized facts are populated
    - BM25 full-text over code (SQLite FTS5 in D1)
    - vector similarity (Vectorize + `embeddinggemma-300m`, 768d)
    - one-hop expansion over extracted `CALLS` / `IMPORTS` edges
@@ -90,17 +94,23 @@ runs:
 fetch tree → tree-sitter chunking → secret redaction → embed → upsert
 ```
 
-Tree-sitter parsing is too heavy for a request-path Worker, so the indexer runs
-as a Node process in GitHub Actions. The optional hosted HTTP indexer path is
-only a fallback for deployments that choose to operate one.
+Tree-sitter parsing, Zoekt shard generation, and SCIP indexer execution are too
+heavy for a request-path Worker, so the indexer runs as a Node process in GitHub
+Actions. The optional hosted HTTP indexer path is only a fallback for
+deployments that choose to operate one.
 
 The indexer writes through Cloudflare REST clients, not Worker bindings. The
 REST plumbing is centralized in `services/indexer/src/cloudflare/api.ts`, with
 D1, Vectorize, and Workers AI clients layered on top.
 
+Zoekt query serving is separate from generation: a Cloudflare Container runs the
+Zoekt search surface for low-latency Slack queries, while GitHub Actions remains
+the heavy generation runner. See
+[Zoekt + SCIP Code-Intel Foundation](code-intel-foundation.md).
+
 ### Chunking by language
 
-- **Go, TypeScript/JavaScript, Python** — full semantic chunking: functions,
+- **Go, Java, TypeScript/JavaScript, Python** — full semantic chunking: functions,
   classes, types, imports, and call edges.
 - **Markdown** — chunked by heading.
 - **Other text** — line windows.
