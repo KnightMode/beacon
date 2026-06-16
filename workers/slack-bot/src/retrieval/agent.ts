@@ -22,6 +22,8 @@ import { vectorSearch } from './vector.js';
 import { hydrateContent, fetchChunksBySymbols } from './db.js';
 import { rerank } from './rerank.js';
 import { packContext } from './pack.js';
+import { zoektSearch } from './zoekt.js';
+import { scipSearch, fetchScipDefinitions, fetchScipReferences } from './scip.js';
 
 const MAX_TURNS = 3;
 const MAX_TOOLS_PER_TURN = 3;
@@ -38,6 +40,8 @@ const SNIPPET_CHARS = 160;
 export type PlannerTool =
   | { tool: 'search'; query: string }
   | { tool: 'read_file'; path: string; repo?: string; start_line?: number; end_line?: number }
+  | { tool: 'definitions'; symbol: string }
+  | { tool: 'references'; symbol: string }
   | { tool: 'callers'; symbol: string }
   | { tool: 'callees'; symbol: string };
 
@@ -57,6 +61,8 @@ when the evidence already covers the question (or more tools would not help), or
 to gather more. Available tools:
   {"tool":"search","query":"keywords or a symbol name"}        — hybrid code search
   {"tool":"read_file","repo":"owner/name","path":"src/x.ts","start_line":1,"end_line":120} — read code around lines
+  {"tool":"definitions","symbol":"SomeClass.someMethod"}        — precise SCIP definitions
+  {"tool":"references","symbol":"SomeClass.someMethod"}         — precise SCIP references/implementations
   {"tool":"callers","symbol":"someFunction"}                   — who calls this symbol
   {"tool":"callees","symbol":"someFunction"}                   — definitions of what this symbol calls
 
@@ -116,6 +122,11 @@ function validateTool(t: unknown): PlannerTool | null {
         : null;
     case 'callers':
     case 'callees':
+      return typeof o.symbol === 'string' && o.symbol.trim() !== ''
+        ? { tool: o.tool, symbol: o.symbol.trim() }
+        : null;
+    case 'definitions':
+    case 'references':
       return typeof o.symbol === 'string' && o.symbol.trim() !== ''
         ? { tool: o.tool, symbol: o.symbol.trim() }
         : null;
@@ -269,12 +280,14 @@ async function runSearch(
   allowlist: string[],
   pool: Map<string, RetrievedChunk>,
 ): Promise<void> {
-  const [lexical, vectorRaw] = await Promise.all([
+  const [lexical, vectorRaw, zoekt, scip] = await Promise.all([
     safe(lexicalSearch(env, parsed, allowlist)),
     safe(vectorSearch(env, queryText, allowlist)),
+    safe(zoektSearch(env, parsed, allowlist)),
+    safe(scipSearch(env, parsed, allowlist)),
   ]);
   const vector = await hydrateContent(env, vectorRaw);
-  addToPool(pool, [...vector, ...lexical]);
+  addToPool(pool, [...scip, ...zoekt, ...vector, ...lexical]);
 }
 
 async function execTool(
@@ -292,8 +305,25 @@ async function execTool(
       addToPool(pool, await readFileChunks(env, tool, allowlist));
       return;
     }
+    case 'definitions': {
+      addToPool(pool, await fetchScipDefinitions(env, [tool.symbol], allowlist));
+      return;
+    }
+    case 'references': {
+      addToPool(pool, await fetchScipReferences(env, [tool.symbol], allowlist));
+      return;
+    }
     case 'callers': {
-      addToPool(pool, await fetchCallers(env, tool.symbol, allowlist));
+      const [scipRefs, callers] = await Promise.all([
+        fetchScipReferences(env, [tool.symbol], allowlist).catch((err) => {
+          console.warn('SCIP callers lookup failed; using code_edges fallback', {
+            error: (err as Error).message,
+          });
+          return [];
+        }),
+        fetchCallers(env, tool.symbol, allowlist),
+      ]);
+      addToPool(pool, [...scipRefs, ...callers]);
       return;
     }
     case 'callees': {
