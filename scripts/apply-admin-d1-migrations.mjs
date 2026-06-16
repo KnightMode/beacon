@@ -22,6 +22,7 @@ function main() {
   runFile('packages/shared/migrations/0004_tenants.sql');
   runFile('packages/shared/migrations/0005_tenant_ci_triage_runs.sql');
   applyInstallationGrantMigration();
+  runFile('packages/shared/migrations/0007_code_intel_foundation.sql');
   console.log('Admin D1 migrations applied.');
 }
 

@@ -5,6 +5,7 @@
   "description": "Slack Code Intelligence Bot — answer questions across GitHub repos using a pre-built tree-sitter + vector index on Cloudflare.",
   "license": "UNLICENSED",
   "workspaces": [
+    "containers/*",
     "packages/*",
     "workers/*",
     "services/*"
@@ -25,6 +26,8 @@
     "configure:site-access": "node scripts/configure-cloudflare-access.mjs",
     "remove:site-access": "node scripts/remove-cloudflare-access.mjs",
     "attach:pages-domain": "node scripts/attach-pages-domain.mjs",
+    "codeintel:provision": "node scripts/provision-code-intel.mjs",
+    "codeintel:sync-zoekt": "node scripts/sync-zoekt-index-to-r2.mjs",
     "dry-run": "npm run dry-run --workspace workers/github-webhook && npm run dry-run --workspace workers/slack-bot"
   },
   "devDependencies": {

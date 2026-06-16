@@ -3,6 +3,7 @@
  */
 
 import type { Env } from '../env.js';
+import { repoIdFor } from '@scintel/shared';
 import { GitHubClient } from '../github.js';
 import { resolveTargetRepo } from '../repoTarget.js';
 import { retrieve } from '../retrieval/pipeline.js';
@@ -18,6 +19,7 @@ import { buildIssueFromThread } from '../slackApi.js';
 import { fetchThreadHistory } from '../history.js';
 import type { AssistantMessage } from '../assistant.js';
 import { enqueueCreatePr, type CreatePrJob } from '../jobs/createPrQueue.js';
+import { createStagedPrPlan, needsStagedPrPlan } from './stagedPrPlan.js';
 
 const CREATE_LOADING = [
   'Reading the issue…',
@@ -146,6 +148,21 @@ async function runCreatePr(env: Env, target: CreatePrTarget): Promise<void> {
       indexedContextPromise,
     ]);
     log('context-ready', { contextChars: indexedContext.length });
+
+    if (needsStagedPrPlan(issue, indexedContext)) {
+      const plan = await createStagedPrPlan(env, {
+        tenantId: target.teamId,
+        repoId: repoIdFor(repo.fullName),
+        repoFullName: repo.fullName,
+        channel: target.channel,
+        threadTs: target.threadTs,
+        userId: target.userId,
+        issue,
+      });
+      await postPlain(env, target.channel, target.threadTs, plan.summary, target.teamId);
+      log('staged-plan-created', { planId: plan.id, repo: repo.fullName });
+      return;
+    }
 
     const targetPaths = guessTargetPaths(issue, indexedContext, repo.fullName);
     const pathsToLoad = new Set(targetPaths);

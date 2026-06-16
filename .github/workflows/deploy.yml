@@ -8,8 +8,10 @@ on:
   push:
     branches: [main]
     paths:
+      - 'containers/**'
       - 'workers/**'
       - 'packages/**'
+      - 'scripts/provision-code-intel.mjs'
       - 'scripts/apply-admin-d1-migrations.mjs'
       - 'package.json'
       - 'package-lock.json'
@@ -41,6 +43,7 @@ jobs:
     outputs:
       slack: ${{ steps.filter.outputs.slack }}
       webhook: ${{ steps.filter.outputs.webhook }}
+      zoekt: ${{ steps.filter.outputs.zoekt }}
     steps:
       - uses: actions/checkout@v6
       - uses: dorny/paths-filter@v4
@@ -48,9 +51,16 @@ jobs:
         with:
           filters: |
             slack:
+              - 'containers/zoekt-search/**'
               - 'workers/slack-bot/**'
               - 'packages/**'
+              - 'scripts/provision-code-intel.mjs'
               - 'scripts/apply-admin-d1-migrations.mjs'
+              - 'package.json'
+              - 'package-lock.json'
+              - '.github/workflows/deploy.yml'
+            zoekt:
+              - 'containers/zoekt-search/**'
               - 'package.json'
               - 'package-lock.json'
               - '.github/workflows/deploy.yml'
@@ -79,9 +89,63 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           PAGES_D1_DATABASE_NAME: ${{ vars.PAGES_D1_DATABASE_NAME || 'scintel' }}
 
+  deploy-zoekt-search:
+    name: Deploy Zoekt search container
+    needs: [changes, verify]
+    if: needs.changes.outputs.zoekt == 'true' || needs.changes.outputs.slack == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Provision code-intel R2 bucket
+        run: node scripts/provision-code-intel.mjs
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          BEACON_CODE_INTEL_BUCKET: ${{ vars.BEACON_CODE_INTEL_BUCKET || 'beacon-code-intel' }}
+          BEACON_ZOEKT_R2_PREFIX: ${{ vars.BEACON_ZOEKT_R2_PREFIX || 'zoekt' }}
+      - name: Sync container secrets
+        working-directory: containers/zoekt-search
+        run: |
+          set -euo pipefail
+
+          put_secret() {
+            local name="$1"
+            local value="$2"
+            if [ -z "$value" ]; then
+              echo "::error::$name is not configured in GitHub Actions secrets/vars"
+              exit 1
+            fi
+            printf '%s' "$value" | npx wrangler secret put "$name"
+          }
+
+          put_secret ZOEKT_SEARCH_TOKEN "$ZOEKT_SEARCH_TOKEN"
+          put_secret AWS_ACCESS_KEY_ID "$R2_ACCESS_KEY_ID"
+          put_secret AWS_SECRET_ACCESS_KEY "$R2_SECRET_ACCESS_KEY"
+          put_secret R2_ACCOUNT_ID "$CLOUDFLARE_ACCOUNT_ID"
+          put_secret R2_BUCKET_NAME "$BEACON_CODE_INTEL_BUCKET"
+          put_secret R2_BUCKET_PREFIX "$BEACON_ZOEKT_R2_PREFIX"
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          ZOEKT_SEARCH_TOKEN: ${{ secrets.ZOEKT_SEARCH_TOKEN || secrets.INDEXER_SHARED_SECRET }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          BEACON_CODE_INTEL_BUCKET: ${{ vars.BEACON_CODE_INTEL_BUCKET || 'beacon-code-intel' }}
+          BEACON_ZOEKT_R2_PREFIX: ${{ vars.BEACON_ZOEKT_R2_PREFIX || 'zoekt' }}
+      - name: Deploy Zoekt search container
+        run: npm run deploy --workspace @beacon/zoekt-search-container
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
   deploy-slack-bot:
     name: Deploy slack-bot
-    needs: [changes, migrate-admin-d1]
+    needs: [changes, migrate-admin-d1, deploy-zoekt-search]
     if: needs.changes.outputs.slack == 'true'
     runs-on: ubuntu-latest
     steps:
@@ -111,6 +175,7 @@ jobs:
           put_secret GITHUB_APP_ID "$GITHUB_APP_ID"
           put_secret GITHUB_APP_PRIVATE_KEY "$GITHUB_APP_PRIVATE_KEY"
           put_secret EVAL_TOKEN "$EVAL_TOKEN"
+          put_secret ZOEKT_SEARCH_TOKEN "$ZOEKT_SEARCH_TOKEN"
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
@@ -119,6 +184,7 @@ jobs:
           GITHUB_APP_ID: ${{ vars.BEACON_GITHUB_APP_ID }}
           GITHUB_APP_PRIVATE_KEY: ${{ secrets.BEACON_GITHUB_APP_PRIVATE_KEY }}
           EVAL_TOKEN: ${{ secrets.EVAL_TOKEN }}
+          ZOEKT_SEARCH_TOKEN: ${{ secrets.ZOEKT_SEARCH_TOKEN || secrets.INDEXER_SHARED_SECRET }}
       - name: Deploy
         working-directory: workers/slack-bot
         run: npx wrangler deploy
