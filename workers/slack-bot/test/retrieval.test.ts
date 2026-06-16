@@ -8,11 +8,13 @@ import { scopeAllowlist } from '../src/retrieval/pipeline.js';
 import { normalizeZoektResponse } from '../src/retrieval/zoekt.js';
 import { citedMarkers } from '../src/format.js';
 import { getAllowlistedRepoIds } from '../src/allowlist.js';
+import { buildRetrievalText } from '../src/history.js';
 
 const REPOS = [
   'knightmode/slack-code-intelligence',
   'knightmode/aim',
   'spf13/viper',
+  'knightmode/ebpf-wiremock-router',
 ];
 
 describe('scopeAllowlist', () => {
@@ -34,10 +36,37 @@ describe('scopeAllowlist', () => {
     ).toEqual(['knightmode/slack-code-intelligence']);
   });
 
+  it('matches partial repo aliases like "ebpf report"', () => {
+    expect(scopeAllowlist('explain the ebpf report', REPOS)).toEqual([
+      'knightmode/ebpf-wiremock-router',
+    ]);
+  });
+
   it('keeps all repos when none are mentioned', () => {
     expect(scopeAllowlist('where is the webhook signature verified?', REPOS)).toEqual(
       REPOS,
     );
+  });
+});
+
+describe('buildRetrievalText', () => {
+  it('includes the previous assistant answer so "this" resolves to mentioned symbols', () => {
+    const text = buildRetrievalText(
+      [
+        { role: 'user', text: 'explain the ebpf report' },
+        {
+          role: 'assistant',
+          text:
+            'The class is `EbpfTestReport` in `EbpfTestReport.java`.\n\n*Sources*\n[1] beacon/irrelevant.ts:1-2',
+        },
+      ],
+      'which files import this then',
+    );
+
+    expect(text).toContain('explain the ebpf report');
+    expect(text).toContain('EbpfTestReport.java');
+    expect(text).toContain('which files import this then');
+    expect(text).not.toContain('beacon/irrelevant.ts');
   });
 });
 

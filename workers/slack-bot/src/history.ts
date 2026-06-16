@@ -100,10 +100,7 @@ function cleanText(raw: string, role: Turn['role']): string {
 
   if (role === 'assistant') {
     // Drop a leading "*Q:* ..." line the bot prefixes some answers with.
-    text = text.replace(/^\*Q:\*[^\n]*\n+/, '');
-    // Strip bracketed citation markers like [1], [2], [1][3].
-    text = text.replace(/\[\d+\]/g, '').trim();
-    return truncate(text, ASSISTANT_TRUNCATE);
+    return truncate(cleanAssistantText(text), ASSISTANT_TRUNCATE);
   }
 
   return truncate(text, USER_TRUNCATE);
@@ -121,12 +118,25 @@ function truncate(s: string, max: number): string {
  */
 export function buildRetrievalText(history: Turn[], question: string): string {
   let prevUser: string | undefined;
+  let prevAssistant: string | undefined;
   for (let i = history.length - 1; i >= 0; i--) {
     const turn = history[i];
     if (turn && turn.role === 'user') {
       prevUser = turn.text;
-      break;
+      if (prevAssistant) break;
+    } else if (turn && turn.role === 'assistant') {
+      prevAssistant ??= cleanAssistantText(turn.text);
     }
   }
-  return (prevUser ? `${prevUser} ${question}` : question).trim();
+  return [prevUser, prevAssistant, question].filter(Boolean).join(' ').trim();
+}
+
+function cleanAssistantText(raw: string): string {
+  let text = raw.replace(/^\*Q:\*[^\n]*\n+/, '');
+  // Strip bracketed citation markers like [1], [2], [1][3].
+  text = text.replace(/\[\d+\]/g, '').trim();
+  // Keep follow-up retrieval focused on answer content, not old source lists.
+  text = text.split(/\n\s*\*?Sources\*?\s*\n/i)[0]?.trim() ?? text;
+  text = text.split(/\n\s*:robot_face:/i)[0]?.trim() ?? text;
+  return text;
 }
