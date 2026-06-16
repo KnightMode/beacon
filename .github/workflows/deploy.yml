@@ -108,6 +108,11 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           BEACON_CODE_INTEL_BUCKET: ${{ vars.BEACON_CODE_INTEL_BUCKET || 'beacon-code-intel' }}
           BEACON_ZOEKT_R2_PREFIX: ${{ vars.BEACON_ZOEKT_R2_PREFIX || 'zoekt' }}
+      - name: Deploy Zoekt search container config
+        run: npm run deploy --workspace @beacon/zoekt-search-container
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       - name: Sync container secrets
         working-directory: containers/zoekt-search
         run: |
@@ -137,11 +142,6 @@ jobs:
           R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
           BEACON_CODE_INTEL_BUCKET: ${{ vars.BEACON_CODE_INTEL_BUCKET || 'beacon-code-intel' }}
           BEACON_ZOEKT_R2_PREFIX: ${{ vars.BEACON_ZOEKT_R2_PREFIX || 'zoekt' }}
-      - name: Deploy Zoekt search container
-        run: npm run deploy --workspace @beacon/zoekt-search-container
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
 
   deploy-slack-bot:
     name: Deploy slack-bot
