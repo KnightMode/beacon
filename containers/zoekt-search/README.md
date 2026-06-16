@@ -53,7 +53,9 @@ wrangler secret put ZOEKT_SEARCH_TOKEN
 
 ## Index Artifacts
 
-The container mounts the configured R2 bucket read-only via `rclone` and serves
-`${R2_BUCKET_PREFIX:-zoekt}` as the Zoekt index directory. The index workflow
-runs `scripts/sync-zoekt-index-to-r2.mjs` after `zoekt-index` generates shard
-files.
+The container syncs the configured R2 prefix into local disk with `rclone` and
+serves that local directory with `zoekt-webserver`. Zoekt shards must live
+directly under `${R2_BUCKET_PREFIX:-zoekt}` because Zoekt watches only the
+configured index directory for `*.zoekt` files. The index workflow runs
+`scripts/sync-zoekt-index-to-r2.mjs` after `zoekt-index` generates flat shard
+files such as `knightmode_beacon_v16.00000.zoekt`.

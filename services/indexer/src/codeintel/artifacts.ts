@@ -9,7 +9,7 @@
 
 import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdtemp, mkdir, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import {
@@ -107,9 +107,9 @@ async function maybeRunZoekt(
   root: string,
 ): Promise<boolean> {
   const shardPrefix = zoektShardPrefix(input.repoId);
-  const baseIndexDir = input.config.codeIntel.zoektIndexDir ?? path.join(root, 'zoekt-index');
-  const outDir = path.join(baseIndexDir, shardPrefix);
+  const outDir = input.config.codeIntel.zoektIndexDir ?? path.join(root, 'zoekt-index');
   await mkdir(outDir, { recursive: true });
+  await removeExistingZoektShards(outDir, shardPrefix);
 
   const metaPath = path.join(root, `${shardPrefix}.meta.json`);
   await writeFile(metaPath, `${JSON.stringify(zoektRepositoryMeta(input), null, 2)}\n`, 'utf8');
@@ -126,7 +126,7 @@ async function maybeRunZoekt(
   const artifactId = artifactIdFor(input.repoId, CODE_INDEX_ARTIFACT_TYPES.ZOEKT_SHARD, input.commitSha);
   try {
     await runCommand(input.config.codeIntel.zoektIndexBin, args, repoDir);
-    const contentHash = await hashDirectory(outDir);
+    const contentHash = await hashZoektShards(outDir, shardPrefix);
     await upsertCodeIndexArtifact(input.d1, {
       id: artifactId,
       repoId: input.repoId,
@@ -270,9 +270,8 @@ async function buildScipCompatibleFactsFromChunks(
      FROM chunks
      WHERE repo_id = ?1
        AND symbol IS NOT NULL
-       AND chunk_type IN ('function','method','class','struct','type','interface')
-       AND (?2 IS NULL OR commit_sha = ?2)`,
-    [repoId, commitSha],
+       AND chunk_type IN ('function','method','class','struct','type','interface')`,
+    [repoId],
   );
   if (chunks.length === 0) return null;
 
@@ -560,37 +559,33 @@ function zoektRepositoryId(repoId: string): number {
   return id === 0 ? 1 : id;
 }
 
-async function hashDirectory(dir: string): Promise<string> {
-  const hash = createHash('sha256');
-  await hashDirectoryInto(hash, dir, '');
-  return hash.digest('hex');
-}
-
-async function hashDirectoryInto(
-  hash: ReturnType<typeof createHash>,
-  dir: string,
-  prefix: string,
-): Promise<void> {
-  const entries = (await readdir(dir)).sort();
-  for (const entry of entries) {
-    const full = path.join(dir, entry);
-    const rel = prefix ? `${prefix}/${entry}` : entry;
-    const s = await stat(full);
-    if (s.isDirectory()) {
-      await hashDirectoryInto(hash, full, rel);
-    } else if (s.isFile()) {
-      hash.update(rel);
-      hash.update(await readFile(full));
-    }
-  }
-}
-
 async function hashFileIfExists(file: string): Promise<string | null> {
   try {
     return createHash('sha256').update(await readFile(file)).digest('hex');
   } catch {
     return null;
   }
+}
+
+async function hashZoektShards(dir: string, shardPrefix: string): Promise<string> {
+  const hash = createHash('sha256');
+  const entries = (await readdir(dir))
+    .filter((entry) => entry.startsWith(`${shardPrefix}_`) && entry.endsWith('.zoekt'))
+    .sort();
+  for (const entry of entries) {
+    hash.update(entry);
+    hash.update(await readFile(path.join(dir, entry)));
+  }
+  return hash.digest('hex');
+}
+
+async function removeExistingZoektShards(dir: string, shardPrefix: string): Promise<void> {
+  const entries = await readdir(dir).catch(() => []);
+  await Promise.all(
+    entries
+      .filter((entry) => entry.startsWith(`${shardPrefix}_`) && entry.endsWith('.zoekt'))
+      .map((entry) => rm(path.join(dir, entry), { force: true })),
+  );
 }
 
 function safeRepoPath(repoPath: string): string | null {
