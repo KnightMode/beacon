@@ -23,28 +23,26 @@ if (!indexDir) {
 
 async function main() {
   const root = path.resolve(indexDir);
-  const repoDirs = await discoverRepoIndexDirs(root);
-  if (repoDirs.length === 0) {
+  const shardSets = await discoverShardSets(root);
+  if (shardSets.length === 0) {
     console.log(`No Zoekt index files found under ${root}; skipping R2 sync.`);
     return;
   }
 
   let uploaded = 0;
-  for (const repoDir of repoDirs) {
-    uploaded += await syncRepoDir(root, repoDir);
+  for (const set of shardSets) {
+    uploaded += await syncShardSet(set);
   }
   console.log(`Uploaded ${uploaded} Zoekt index files to r2://${bucket}/${prefix}`);
 }
 
-async function syncRepoDir(root, repoDir) {
-  const repoPrefix = path.basename(repoDir);
-  const files = await listFiles(repoDir).catch(() => []);
+async function syncShardSet({ repoPrefix, files }) {
   if (files.length === 0) return 0;
 
   const oldManifest = await readRemoteManifest(repoPrefix);
   const newKeys = [];
   for (const file of files) {
-    const rel = path.relative(root, file).split(path.sep).join('/');
+    const rel = path.basename(file);
     const key = prefixedKey(rel);
     runWrangler(['r2', 'object', 'put', `${bucket}/${key}`, '--file', file]);
     newKeys.push(key);
@@ -62,18 +60,25 @@ async function syncRepoDir(root, repoDir) {
   return files.length;
 }
 
-async function discoverRepoIndexDirs(root) {
+async function discoverShardSets(root) {
   const expected = await expectedRepoPrefix();
   if (expected) {
-    const dir = path.join(root, expected);
-    const s = await stat(dir).catch(() => null);
-    return s?.isDirectory() ? [dir] : [];
+    return [{
+      repoPrefix: expected,
+      files: await findTopLevelShardFiles(root, expected),
+    }].filter((set) => set.files.length > 0);
   }
 
-  const entries = await readdir(root, { withFileTypes: true }).catch(() => []);
-  return entries
-    .filter((entry) => entry.isDirectory())
-    .map((entry) => path.join(root, entry.name));
+  const files = await findTopLevelShardFiles(root);
+  const byPrefix = new Map();
+  for (const file of files) {
+    const repoPrefix = repoPrefixFromShard(file);
+    if (!repoPrefix) continue;
+    const list = byPrefix.get(repoPrefix) ?? [];
+    list.push(file);
+    byPrefix.set(repoPrefix, list);
+  }
+  return [...byPrefix.entries()].map(([repoPrefix, files]) => ({ repoPrefix, files }));
 }
 
 async function expectedRepoPrefix() {
@@ -129,19 +134,27 @@ function zoektShardPrefix(repoFullName) {
   return repoFullName.replace(/[^A-Za-z0-9_.-]+/g, '_');
 }
 
-async function listFiles(dir) {
+async function findTopLevelShardFiles(dir, repoPrefix = '') {
   const out = [];
-  const entries = await readdir(dir);
+  const entries = await readdir(dir).catch(() => []);
   for (const entry of entries) {
     const full = path.join(dir, entry);
     const s = await stat(full);
-    if (s.isDirectory()) {
-      out.push(...(await listFiles(full)));
-    } else if (s.isFile()) {
+    if (
+      s.isFile() &&
+      entry.endsWith('.zoekt') &&
+      (!repoPrefix || entry.startsWith(`${repoPrefix}_`))
+    ) {
       out.push(full);
     }
   }
   return out;
+}
+
+function repoPrefixFromShard(file) {
+  const name = path.basename(file);
+  const match = /^(.*)_v\d+\.\d+\.zoekt$/.exec(name);
+  return match?.[1] ?? '';
 }
 
 function runWrangler(args, options = {}) {
