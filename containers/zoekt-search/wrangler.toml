@@ -4,9 +4,6 @@ compatibility_date = "2026-06-16"
 compatibility_flags = ["nodejs_compat"]
 
 [vars]
-# Set as a secret in production when the endpoint is not otherwise private:
-#   wrangler secret put ZOEKT_SEARCH_TOKEN
-ZOEKT_SEARCH_TOKEN = ""
 ZOEKT_R2_SYNC_INTERVAL_SECONDS = "60"
 
 [[containers]]
