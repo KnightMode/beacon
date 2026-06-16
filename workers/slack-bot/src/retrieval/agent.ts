@@ -28,14 +28,32 @@ import { scipSearch, fetchScipDefinitions, fetchScipReferences } from './scip.js
 const MAX_TURNS = 3;
 const MAX_TOOLS_PER_TURN = 3;
 const MAX_POOL = 60;
-// Hard wall-clock budget for the whole planning phase (turn-0 search
-// included), enforced both between turns and within each turn via races —
-// a single slow planner call or tool round can't blow past it. Q&A runs on
-// the answer queue (no 30s waitUntil cap), so this is purely a latency/UX
-// bound on how long users wait before the answer starts streaming.
-const PLANNING_BUDGET_MS = 10_000;
+const FAST_PATH_MIN_POOL = 8;
+const FAST_PATH_MIN_HIGH_CONFIDENCE = 4;
+const FAST_PATH_MIN_CODE_INTEL = 2;
+const HIGH_CONFIDENCE_SCORE = 0.75;
+// Hard wall-clock budget for follow-up planning, enforced between turns and
+// within each turn via races. The first hybrid search is always run; this only
+// bounds optional planner/tool rounds before answer generation starts.
+const PLANNING_BUDGET_MS = 3_000;
 const EVIDENCE_LINES = 24;
 const SNIPPET_CHARS = 160;
+
+export type PlannerMode = 'off' | 'on_demand' | 'always';
+
+interface SearchStats {
+  lexical: number;
+  vector: number;
+  zoekt: number;
+  scip: number;
+  elapsedMs: number;
+}
+
+export interface PlannerEvidence {
+  poolSize: number;
+  highConfidenceHits: number;
+  codeIntelHits: number;
+}
 
 export type PlannerTool =
   | { tool: 'search'; query: string }
@@ -102,6 +120,50 @@ export function parsePlannerOutput(raw: string): PlannerOutput | null {
   return { done, tools };
 }
 
+export function plannerModeFromEnv(env: Pick<Env, 'AGENTIC_PLANNER_MODE'>): PlannerMode {
+  const raw = env.AGENTIC_PLANNER_MODE?.trim().toLowerCase();
+  if (raw === 'always' || raw === 'true' || raw === '1') return 'always';
+  if (raw === 'off' || raw === 'false' || raw === '0') return 'off';
+  return 'on_demand';
+}
+
+export function shouldRunPlanner(
+  question: string,
+  evidence: PlannerEvidence,
+  mode: PlannerMode = 'on_demand',
+): boolean {
+  if (mode === 'off') return false;
+  if (mode === 'always') return true;
+  if (asksForDeepTrace(question)) return true;
+  return !hasStrongFirstPassEvidence(evidence);
+}
+
+function asksForDeepTrace(question: string): boolean {
+  return /\b(trace|callers?|callees?|references?|implementations?|where\s+used|call\s+graph|dependency\s+chain|root\s+cause|breaking\s+change|migration\s+plan|impact\s+analysis|across\s+repos?|cross[-\s]?repos?)\b/i.test(
+    question,
+  );
+}
+
+export function plannerEvidence(chunks: Iterable<RetrievedChunk>): PlannerEvidence {
+  let poolSize = 0;
+  let highConfidenceHits = 0;
+  let codeIntelHits = 0;
+  for (const chunk of chunks) {
+    poolSize += 1;
+    if (chunk.score >= HIGH_CONFIDENCE_SCORE) highConfidenceHits += 1;
+    if (chunk.source === 'zoekt' || chunk.source === 'scip') codeIntelHits += 1;
+  }
+  return { poolSize, highConfidenceHits, codeIntelHits };
+}
+
+function hasStrongFirstPassEvidence(evidence: PlannerEvidence): boolean {
+  return (
+    evidence.poolSize >= FAST_PATH_MIN_POOL &&
+    evidence.highConfidenceHits >= FAST_PATH_MIN_HIGH_CONFIDENCE &&
+    evidence.codeIntelHits >= FAST_PATH_MIN_CODE_INTEL
+  );
+}
+
 function validateTool(t: unknown): PlannerTool | null {
   if (typeof t !== 'object' || t === null) return null;
   const o = t as Record<string, unknown>;
@@ -162,42 +224,58 @@ export async function agenticRetrieve(
   const startedAt = Date.now();
   const pool = new Map<string, RetrievedChunk>();
   onProgress?.('is searching the codebase…');
-  await runSearch(env, query, parsed, allowlist, pool);
+  const searchStats = await runSearch(env, query, parsed, allowlist, pool);
 
   let turns = 0;
-  for (; turns < MAX_TURNS; turns++) {
-    if (pool.size >= MAX_POOL) break;
-    let remaining = PLANNING_BUDGET_MS - (Date.now() - startedAt);
-    if (remaining <= 0) break;
+  const plannerMode = plannerModeFromEnv(env);
+  const evidence = plannerEvidence(pool.values());
+  const plannerNeeded = shouldRunPlanner(question, evidence, plannerMode);
+  const planningStartedAt = Date.now();
+  if (plannerNeeded) {
+    for (; turns < MAX_TURNS; turns++) {
+      if (pool.size >= MAX_POOL) break;
+      let remaining = PLANNING_BUDGET_MS - (Date.now() - planningStartedAt);
+      if (remaining <= 0) break;
 
-    const plan = await withDeadline(planNext(env, question, pool), remaining);
-    if (!plan || plan.done || plan.tools.length === 0) break;
-    onProgress?.(
-      turns === 0
-        ? 'is following the code trail…'
-        : 'is digging deeper into the code…',
-    );
+      const plan = await withDeadline(planNext(env, question, pool), remaining);
+      if (!plan || plan.done || plan.tools.length === 0) break;
+      onProgress?.(
+        turns === 0
+          ? 'is following the code trail…'
+          : 'is digging deeper into the code…',
+      );
 
-    remaining = PLANNING_BUDGET_MS - (Date.now() - startedAt);
-    if (remaining <= 0) break;
-    await withDeadline(
-      Promise.all(
-        plan.tools.map((t) =>
-          execTool(env, t, allowlist, pool).catch((err) =>
-            console.warn('agent tool failed', {
-              tool: t.tool,
-              error: (err as Error).message,
-            }),
+      remaining = PLANNING_BUDGET_MS - (Date.now() - planningStartedAt);
+      if (remaining <= 0) break;
+      await withDeadline(
+        Promise.all(
+          plan.tools.map((t) =>
+            execTool(env, t, allowlist, pool).catch((err) =>
+              console.warn('agent tool failed', {
+                tool: t.tool,
+                error: (err as Error).message,
+              }),
+            ),
           ),
         ),
-      ),
-      remaining,
-    );
+        remaining,
+      );
+    }
   }
 
   console.log('agentic retrieval done', {
     turns,
+    plannerMode,
+    plannerSkipped: !plannerNeeded,
     poolSize: pool.size,
+    evidence,
+    sources: {
+      lexical: searchStats.lexical,
+      vector: searchStats.vector,
+      zoekt: searchStats.zoekt,
+      scip: searchStats.scip,
+    },
+    searchMs: searchStats.elapsedMs,
     elapsedMs: Date.now() - startedAt,
   });
 
@@ -279,7 +357,8 @@ async function runSearch(
   parsed: ParsedQuery,
   allowlist: string[],
   pool: Map<string, RetrievedChunk>,
-): Promise<void> {
+): Promise<SearchStats> {
+  const startedAt = Date.now();
   const [lexical, vectorRaw, zoekt, scip] = await Promise.all([
     safe(lexicalSearch(env, parsed, allowlist)),
     safe(vectorSearch(env, queryText, allowlist)),
@@ -288,6 +367,13 @@ async function runSearch(
   ]);
   const vector = await hydrateContent(env, vectorRaw);
   addToPool(pool, [...scip, ...zoekt, ...vector, ...lexical]);
+  return {
+    lexical: lexical.length,
+    vector: vector.length,
+    zoekt: zoekt.length,
+    scip: scip.length,
+    elapsedMs: Date.now() - startedAt,
+  };
 }
 
 async function execTool(
