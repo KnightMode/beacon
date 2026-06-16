@@ -1,0 +1,23 @@
+name = "beacon-zoekt-search"
+main = "src/index.ts"
+compatibility_date = "2026-06-16"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+# Set as a secret in production when the endpoint is not otherwise private:
+#   wrangler secret put ZOEKT_SEARCH_TOKEN
+ZOEKT_SEARCH_TOKEN = ""
+ZOEKT_R2_SYNC_INTERVAL_SECONDS = "60"
+
+[[containers]]
+class_name = "ZoektContainer"
+image = "./Dockerfile"
+max_instances = 3
+
+[[durable_objects.bindings]]
+name = "ZOEKT_CONTAINER"
+class_name = "ZoektContainer"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["ZoektContainer"]

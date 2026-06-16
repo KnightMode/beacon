@@ -3,7 +3,9 @@ import { buildFtsMatch } from '../src/retrieval/lexical.js';
 import { parseQuery } from '../src/retrieval/queryUnderstanding.js';
 import { parsePlannerOutput } from '../src/retrieval/agent.js';
 import { detectIntent, parseIndexRepoTarget } from '../src/intent.js';
+import { needsStagedPrPlan } from '../src/actions/stagedPrPlan.js';
 import { scopeAllowlist } from '../src/retrieval/pipeline.js';
+import { normalizeZoektResponse } from '../src/retrieval/zoekt.js';
 import { citedMarkers } from '../src/format.js';
 import { getAllowlistedRepoIds } from '../src/allowlist.js';
 
@@ -91,6 +93,20 @@ describe('index intents', () => {
   });
 });
 
+describe('needsStagedPrPlan', () => {
+  it('detects explicitly breaking or cross-repo create-pr requests', () => {
+    expect(needsStagedPrPlan('migrate all consumers for this breaking API change', '')).toBe(
+      true,
+    );
+  });
+
+  it('does not trigger only because retrieved context mentions dependencies', () => {
+    expect(
+      needsStagedPrPlan('fix the typo in the readme', '"dependencies": {"x": "1.0.0"}'),
+    ).toBe(false);
+  });
+});
+
 describe('buildFtsMatch', () => {
   it('quotes needles as prefix phrases joined with OR', () => {
     const match = buildFtsMatch(parseQuery('where is verifySlackSignature used'));
@@ -133,13 +149,13 @@ describe('parsePlannerOutput', () => {
   it('parses tool requests', () => {
     const out = parsePlannerOutput(
       '{"done": false, "tools": [{"tool":"search","query":"webhook hmac"},' +
-        '{"tool":"callers","symbol":"verifySlackSignature"}]}',
+        '{"tool":"definitions","symbol":"verifySlackSignature"}]}',
     );
     expect(out).toEqual({
       done: false,
       tools: [
         { tool: 'search', query: 'webhook hmac' },
-        { tool: 'callers', symbol: 'verifySlackSignature' },
+        { tool: 'definitions', symbol: 'verifySlackSignature' },
       ],
     });
   });
@@ -175,5 +191,57 @@ describe('parsePlannerOutput', () => {
     expect(parsePlannerOutput('I could not decide.')).toBeNull();
     expect(parsePlannerOutput('{not json}')).toBeNull();
     expect(parsePlannerOutput('')).toBeNull();
+  });
+});
+
+describe('normalizeZoektResponse', () => {
+  it('accepts Beacon normalized search responses', () => {
+    expect(
+      normalizeZoektResponse({
+        matches: [
+          {
+            repo: 'knightmode/beacon',
+            path: 'src/index.ts',
+            line: 7,
+            snippet: 'export default app',
+            score: 0.9,
+          },
+        ],
+      }),
+    ).toEqual([
+      {
+        repo: 'knightmode/beacon',
+        path: 'src/index.ts',
+        startLine: 7,
+        endLine: 7,
+        snippet: 'export default app',
+        score: 0.9,
+      },
+    ]);
+  });
+
+  it('accepts a thin zoekt-webserver proxy response shape', () => {
+    expect(
+      normalizeZoektResponse({
+        Result: {
+          Files: [
+            {
+              Repository: 'knightmode/beacon',
+              FileName: 'workers/slack-bot/src/index.ts',
+              Matches: [{ LineNum: 42, Line: 'processCreatePrJob(env, job)' }],
+            },
+          ],
+        },
+      }),
+    ).toEqual([
+      {
+        repo: 'knightmode/beacon',
+        path: 'workers/slack-bot/src/index.ts',
+        startLine: 42,
+        endLine: 42,
+        snippet: 'processCreatePrJob(env, job)',
+        score: 0.85,
+      },
+    ]);
   });
 });

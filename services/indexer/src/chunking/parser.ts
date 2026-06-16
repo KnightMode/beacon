@@ -16,10 +16,11 @@ import { log } from '../logger.js';
 const require = createRequire(import.meta.url);
 
 export type TSNode = Parser.SyntaxNode;
-export type GrammarKey = 'go' | 'typescript' | 'tsx' | 'javascript' | 'python';
+export type GrammarKey = 'go' | 'java' | 'typescript' | 'tsx' | 'javascript' | 'python';
 
 const WASM_FILES: Record<GrammarKey, string> = {
   go: 'tree-sitter-go.wasm',
+  java: 'tree-sitter-java.wasm',
   typescript: 'tree-sitter-typescript.wasm',
   tsx: 'tree-sitter-tsx.wasm',
   javascript: 'tree-sitter-javascript.wasm',
@@ -68,6 +69,7 @@ export function grammarKeyFor(
   language: string | null,
 ): GrammarKey | null {
   if (language === 'go') return 'go';
+  if (language === 'java') return 'java';
   if (language === 'python') return 'python';
   if (language === 'javascript') return 'javascript';
   if (language === 'typescript') {

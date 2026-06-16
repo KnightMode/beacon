@@ -248,7 +248,10 @@ function collectCalls(spec: LangSpec, defNode: TSNode): string[] {
 }
 
 function calleeName(callNode: TSNode): string | null {
-  const fn = callNode.childForFieldName('function');
+  const fn =
+    callNode.childForFieldName('function') ??
+    callNode.childForFieldName('name') ??
+    callNode.childForFieldName('type');
   if (!fn) return null;
   const text = fn.text.trim();
   const lastSegment = text.split('.').pop() ?? text;
@@ -261,6 +264,14 @@ function importModules(node: TSNode, key: GrammarKey): string[] {
     const names: TSNode[] = [];
     findByTypes(node, new Set(['dotted_name']), names);
     return names.map((n) => n.text);
+  }
+  if (key === 'java') {
+    const text = node.text
+      .replace(/^import\s+/, '')
+      .replace(/^static\s+/, '')
+      .replace(/;$/, '')
+      .trim();
+    return text ? [text] : [];
   }
   // ts / go: extract the string literal module path
   const strings: TSNode[] = [];

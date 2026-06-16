@@ -55,8 +55,28 @@ const PYTHON_SPEC: LangSpec = {
   classLike: new Set(['class_definition']),
 };
 
+const JAVA_SPEC: LangSpec = {
+  definitions: {
+    class_declaration: CHUNK_TYPES.CLASS,
+    interface_declaration: CHUNK_TYPES.INTERFACE,
+    enum_declaration: CHUNK_TYPES.TYPE,
+    record_declaration: CHUNK_TYPES.TYPE,
+    method_declaration: CHUNK_TYPES.METHOD,
+    constructor_declaration: CHUNK_TYPES.METHOD,
+  },
+  imports: new Set(['import_declaration']),
+  calls: new Set(['method_invocation', 'object_creation_expression']),
+  classLike: new Set([
+    'class_declaration',
+    'interface_declaration',
+    'enum_declaration',
+    'record_declaration',
+  ]),
+};
+
 const SPECS: Record<GrammarKey, LangSpec> = {
   go: GO_SPEC,
+  java: JAVA_SPEC,
   typescript: TS_LIKE,
   tsx: TS_LIKE,
   javascript: TS_LIKE,
