@@ -127,7 +127,7 @@ dedicated `PIPELINE_DISPATCH_TOKEN` can be used only to trigger the workflow;
 tenant repo contents are read with GitHub App installation tokens.
 
 **Key vars** (`wrangler.toml`): `LLM_MODEL`, `EMBEDDING_MODEL`,
-`AGENTIC_RETRIEVAL`, `PIPELINE_DISPATCH_REPO`.
+`AGENTIC_RETRIEVAL`, `AGENTIC_PLANNER_MODE`, `PIPELINE_DISPATCH_REPO`.
 
 ## 5. GitHub App (tenant access and webhooks)
 

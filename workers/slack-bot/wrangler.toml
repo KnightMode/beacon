@@ -13,6 +13,9 @@ EMBEDDING_MODEL = "@cf/google/embeddinggemma-300m"
 LLM_MODEL = "@cf/moonshotai/kimi-k2.6"
 # Agentic retrieval planner loop for Q&A; set to "false" to force single-shot.
 AGENTIC_RETRIEVAL = "true"
+# Run the planner only when first-pass evidence is weak or the question asks for
+# deeper call/reference tracing. Use "always" for maximum depth, "off" for none.
+AGENTIC_PLANNER_MODE = "on_demand"
 # Optional Zoekt search endpoint. Leave empty to use D1 FTS only.
 ZOEKT_SEARCH_URL = ""
 # Bot user id is used to strip the leading mention from app_mention text.
