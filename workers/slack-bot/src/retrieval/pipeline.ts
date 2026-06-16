@@ -15,6 +15,8 @@ import { hydrateContent } from './db.js';
 import { rerank } from './rerank.js';
 import { packContext, type PackedContext } from './pack.js';
 import { agenticRetrieve, type ProgressFn } from './agent.js';
+import { zoektSearch } from './zoekt.js';
+import { scipSearch } from './scip.js';
 
 export interface RetrievalOutcome {
   parsed: ParsedQuery;
@@ -86,16 +88,18 @@ export async function retrieve(
     };
   }
 
-  const [lexical, vectorRaw] = await Promise.all([
+  const [lexical, vectorRaw, zoekt, scip] = await Promise.all([
     safe(lexicalSearch(env, parsed, allowlist)),
     safe(vectorSearch(env, query, allowlist)),
+    safe(zoektSearch(env, parsed, allowlist)),
+    safe(scipSearch(env, parsed, allowlist)),
   ]);
   const vector = await hydrateContent(env, vectorRaw);
 
-  const seeds = rerank(parsed, [vector, lexical], 8);
+  const seeds = rerank(parsed, [scip, zoekt, vector, lexical], 8);
   const graph = await safe(graphExpand(env, seeds, allowlist));
 
-  const ranked = rerank(parsed, [vector, lexical, graph]);
+  const ranked = rerank(parsed, [scip, zoekt, vector, lexical, graph]);
   const packed = packContext(ranked);
 
   return {

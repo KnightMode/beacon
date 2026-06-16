@@ -6,12 +6,17 @@ export interface Env {
   CREATE_PR_QUEUE?: Queue<import('./jobs/createPrQueue.js').CreatePrJob>;
   ANSWER_QUEUE?: Queue<import('./jobs/answerQueue.js').AnswerJob>;
   INDEX_QUEUE?: Queue<import('@scintel/shared').IndexJob>;
+  ZOEKT_SEARCH?: Fetcher;
 
   // Vars
   EMBEDDING_MODEL: string;
   LLM_MODEL: string;
   /** Set to "false" to disable the agentic retrieval planner loop for Q&A. */
   AGENTIC_RETRIEVAL?: string;
+  /** Optional Zoekt-compatible search endpoint. When unset, D1 FTS remains the lexical path. */
+  ZOEKT_SEARCH_URL?: string;
+  /** Optional bearer token used when calling ZOEKT_SEARCH_URL. */
+  ZOEKT_SEARCH_TOKEN?: string;
   SLACK_BOT_USER_ID: string;
   /** Default `owner/repo` when create-PR issues omit a repo (optional). */
   DEFAULT_PR_REPO?: string;

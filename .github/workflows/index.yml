@@ -57,7 +57,16 @@ jobs:
         with:
           node-version: 22
           cache: npm
+      - uses: actions/setup-go@v6
+        if: ${{ vars.BEACON_CODE_INTEL_MODE != 'off' }}
+        with:
+          go-version: '1.25.9'
       - run: npm ci --workspace=@scintel/indexer --include-workspace-root
+      - name: Install Zoekt indexer
+        if: ${{ vars.BEACON_CODE_INTEL_MODE != 'off' }}
+        run: |
+          go install github.com/sourcegraph/zoekt/cmd/zoekt-index@v0.0.0-20260605122240-893a523804f1
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
       - name: Run indexer
         working-directory: services/indexer
         # Untrusted payload fields are passed as env (never interpolated into the
@@ -80,6 +89,7 @@ jobs:
           INPUT_FILES: ${{ github.event.inputs.files }}
           INPUT_REMOVED: ${{ github.event.inputs.removed_files }}
           INPUT_FORCE: ${{ github.event.inputs.force }}
+          INDEX_RESULT_JSON: ${{ runner.temp }}/beacon-index-result.json
           # indexer runtime config:
           GITHUB_APP_ID: ${{ vars.BEACON_GITHUB_APP_ID }}
           GITHUB_APP_PRIVATE_KEY: ${{ secrets.BEACON_GITHUB_APP_PRIVATE_KEY }}
@@ -88,6 +98,32 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_D1_DATABASE_ID: '27722a79-10d9-4bfc-aa53-1d65a80c8f79'
           CLOUDFLARE_VECTORIZE_INDEX: 'code-chunks'
+          # Optional production code-intel foundation. Heavy generation still
+          # runs in GitHub Actions; live Zoekt queries are served separately.
+          CODE_INTEL_MODE: ${{ vars.BEACON_CODE_INTEL_MODE || 'best_effort' }}
+          CODE_INTEL_ARTIFACT_BASE_URI: ${{ vars.BEACON_CODE_INTEL_ARTIFACT_BASE_URI || format('r2://{0}/{1}', vars.BEACON_CODE_INTEL_BUCKET || 'beacon-code-intel', vars.BEACON_ZOEKT_R2_PREFIX || 'zoekt') }}
+          ZOEKT_INDEX_BIN: 'zoekt-index'
+          ZOEKT_INDEX_DIR: ${{ runner.temp }}/beacon-zoekt-index
+          SCIP_COMMANDS_JSON: ${{ vars.BEACON_SCIP_COMMANDS_JSON }}
+          SCIP_FACTS_PATH: ${{ vars.BEACON_SCIP_FACTS_PATH }}
           # loadConfig requires it but the CLI path does not use it.
           INDEXER_SHARED_SECRET: 'ci-cli-unused'
         run: node scripts/ci-index.mjs
+      - name: Provision code-intel R2 bucket
+        if: ${{ vars.BEACON_CODE_INTEL_MODE != 'off' }}
+        run: node scripts/provision-code-intel.mjs
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          BEACON_CODE_INTEL_BUCKET: ${{ vars.BEACON_CODE_INTEL_BUCKET || 'beacon-code-intel' }}
+          BEACON_ZOEKT_R2_PREFIX: ${{ vars.BEACON_ZOEKT_R2_PREFIX || 'zoekt' }}
+      - name: Sync Zoekt indexes to R2
+        if: ${{ vars.BEACON_CODE_INTEL_MODE != 'off' }}
+        run: node scripts/sync-zoekt-index-to-r2.mjs
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          BEACON_CODE_INTEL_BUCKET: ${{ vars.BEACON_CODE_INTEL_BUCKET || 'beacon-code-intel' }}
+          BEACON_ZOEKT_R2_PREFIX: ${{ vars.BEACON_ZOEKT_R2_PREFIX || 'zoekt' }}
+          ZOEKT_INDEX_DIR: ${{ runner.temp }}/beacon-zoekt-index
+          INDEX_RESULT_JSON: ${{ runner.temp }}/beacon-index-result.json

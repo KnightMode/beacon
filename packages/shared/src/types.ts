@@ -6,9 +6,15 @@
 
 import type {
   ChunkType,
+  CodeIndexArtifactStatus,
+  CodeIndexArtifactType,
   EdgeType,
   IndexStatus,
   JobType,
+  ScipReferenceRole,
+  ScipSymbolKind,
+  StagedPrPlanStatus,
+  StagedPrStepStatus,
 } from './constants.js';
 
 // ---------------------------------------------------------------------------
@@ -108,6 +114,46 @@ export interface CodeEdge {
   startLine: number | null;
 }
 
+export interface CodeIndexArtifact {
+  id: string;
+  repoId: string;
+  artifactType: CodeIndexArtifactType;
+  status: CodeIndexArtifactStatus;
+  commitSha: string;
+  language: string | null;
+  producer: string;
+  artifactUri: string | null;
+  contentHash: string | null;
+  metadataJson: string | null;
+  error: string | null;
+}
+
+export interface ScipSymbol {
+  id: string;
+  repoId: string;
+  symbol: string;
+  displayName: string | null;
+  kind: ScipSymbolKind;
+  language: string | null;
+  path: string;
+  startLine: number;
+  endLine: number;
+  definitionChunkId: string | null;
+  commitSha: string | null;
+}
+
+export interface ScipReference {
+  id: string;
+  repoId: string;
+  symbolId: string;
+  role: ScipReferenceRole;
+  path: string;
+  startLine: number;
+  endLine: number;
+  enclosingSymbol: string | null;
+  commitSha: string | null;
+}
+
 /** Metadata stored alongside each vector in Vectorize. */
 export interface VectorMetadata {
   tenant_id?: string;
@@ -185,6 +231,80 @@ export interface CodeEdgeRow {
   created_at: string;
 }
 
+export interface CodeIndexArtifactRow {
+  id: string;
+  repo_id: string;
+  artifact_type: CodeIndexArtifactType;
+  status: CodeIndexArtifactStatus;
+  commit_sha: string;
+  language: string | null;
+  producer: string;
+  artifact_uri: string | null;
+  content_hash: string | null;
+  metadata_json: string | null;
+  error: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ScipSymbolRow {
+  id: string;
+  repo_id: string;
+  symbol: string;
+  display_name: string | null;
+  kind: ScipSymbolKind;
+  language: string | null;
+  path: string;
+  start_line: number;
+  end_line: number;
+  definition_chunk_id: string | null;
+  commit_sha: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ScipReferenceRow {
+  id: string;
+  repo_id: string;
+  symbol_id: string;
+  role: ScipReferenceRole;
+  path: string;
+  start_line: number;
+  end_line: number;
+  enclosing_symbol: string | null;
+  commit_sha: string | null;
+  created_at: string;
+}
+
+export interface StagedPrPlanRow {
+  id: string;
+  tenant_id: string | null;
+  repo_id: string | null;
+  source_channel: string | null;
+  source_thread_ts: string | null;
+  title: string;
+  status: StagedPrPlanStatus;
+  impact_json: string;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface StagedPrStepRow {
+  id: string;
+  plan_id: string;
+  step_order: number;
+  repo_id: string;
+  title: string;
+  status: StagedPrStepStatus;
+  depends_on_step_ids_json: string;
+  validation_json: string;
+  rollback_json: string;
+  pr_url: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface RepoIndexStatusRow {
   repo_id: string;
   status: IndexStatus;
@@ -254,7 +374,7 @@ export interface RetrievedChunk {
   /** Combined relevance score after reranking. */
   score: number;
   /** Where the chunk came from, for debugging/observability. */
-  source: 'lexical' | 'vector' | 'graph';
+  source: 'lexical' | 'vector' | 'graph' | 'zoekt' | 'scip';
 }
 
 export interface Citation {
