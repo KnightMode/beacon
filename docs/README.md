@@ -5,6 +5,7 @@ The [README](../README.md) is the pitch. This is everything else.
 | Doc | What's inside |
 |---|---|
 | [Architecture](./architecture.md) | How a question becomes a cited answer: workers, indexer, retrieval, the code graph, the stack. |
+| [Zoekt + SCIP foundation](./code-intel-foundation.md) | Production code-intel foundation: Zoekt search, SCIP facts, GHA indexing, Container query serving, staged PR plans. |
 | [Setup](./setup.md) | End-to-end install: Cloudflare resources, GitHub PAT + App, Slack app, secrets, deploy. |
 | [Usage](./usage.md) | Every Slack command, how to index repos, and how to trigger indexing manually. |
 | [Security model](./security.md) | Signature verification, prompt-injection posture, secret redaction, and the auth boundary. |

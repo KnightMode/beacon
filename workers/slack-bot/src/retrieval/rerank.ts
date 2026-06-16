@@ -10,6 +10,8 @@ import type { ParsedQuery } from './queryUnderstanding.js';
 
 const SOURCE_WEIGHT: Record<RetrievedChunk['source'], number> = {
   vector: 1.0,
+  scip: 1.05,
+  zoekt: 1.0,
   lexical: 0.85,
   graph: 0.6,
 };

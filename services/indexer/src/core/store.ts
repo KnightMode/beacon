@@ -6,7 +6,10 @@
 import {
   type CodeChunk,
   type CodeEdge,
+  type CodeIndexArtifact,
   type IndexStatus,
+  type ScipReference,
+  type ScipSymbol,
   parseRepoRef,
   repoIdFor as sharedRepoIdFor,
 } from '@scintel/shared';
@@ -290,6 +293,101 @@ export async function insertEdges(
       [
         e.id, e.repoId, e.edgeType, e.fromNodeId, e.toNodeId,
         e.fromSymbol, e.toSymbol, e.fileId, e.startLine,
+      ],
+    );
+  }
+}
+
+export async function upsertCodeIndexArtifact(
+  d1: D1Client,
+  artifact: CodeIndexArtifact,
+): Promise<void> {
+  await d1.exec(
+    `INSERT INTO code_index_artifacts
+       (id, repo_id, artifact_type, status, commit_sha, language, producer,
+        artifact_uri, content_hash, metadata_json, error, updated_at)
+     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, datetime('now'))
+     ON CONFLICT(id) DO UPDATE SET
+       status = excluded.status,
+       artifact_uri = excluded.artifact_uri,
+       content_hash = excluded.content_hash,
+       metadata_json = excluded.metadata_json,
+       error = excluded.error,
+       updated_at = datetime('now')`,
+    [
+      artifact.id,
+      artifact.repoId,
+      artifact.artifactType,
+      artifact.status,
+      artifact.commitSha,
+      artifact.language ?? '',
+      artifact.producer,
+      artifact.artifactUri,
+      artifact.contentHash,
+      artifact.metadataJson,
+      artifact.error,
+    ],
+  );
+}
+
+export async function replaceScipFactsForRepo(
+  d1: D1Client,
+  repoId: string,
+  symbols: ScipSymbol[],
+  references: ScipReference[],
+): Promise<void> {
+  await d1.exec(`DELETE FROM scip_references WHERE repo_id = ?1`, [repoId]);
+  await d1.exec(`DELETE FROM scip_symbols WHERE repo_id = ?1`, [repoId]);
+
+  for (const s of symbols) {
+    await d1.exec(
+      `INSERT INTO scip_symbols
+         (id, repo_id, symbol, display_name, kind, language, path, start_line,
+          end_line, definition_chunk_id, commit_sha, updated_at)
+       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, datetime('now'))
+       ON CONFLICT(id) DO UPDATE SET
+         display_name = excluded.display_name,
+         kind = excluded.kind,
+         language = excluded.language,
+         path = excluded.path,
+         start_line = excluded.start_line,
+         end_line = excluded.end_line,
+         definition_chunk_id = excluded.definition_chunk_id,
+         commit_sha = excluded.commit_sha,
+         updated_at = datetime('now')`,
+      [
+        s.id,
+        s.repoId,
+        s.symbol,
+        s.displayName,
+        s.kind,
+        s.language,
+        s.path,
+        s.startLine,
+        s.endLine,
+        s.definitionChunkId,
+        s.commitSha,
+      ],
+    );
+  }
+
+  for (const r of references) {
+    await d1.exec(
+      `INSERT INTO scip_references
+         (id, repo_id, symbol_id, role, path, start_line, end_line,
+          enclosing_symbol, commit_sha)
+       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
+       ON CONFLICT(id) DO NOTHING`,
+      [
+        r.id,
+        r.repoId,
+        r.symbolId,
+        r.role,
+        r.path,
+        r.startLine,
+        r.endLine,
+        r.enclosingSymbol,
+        r.commitSha,
       ],
     );
   }

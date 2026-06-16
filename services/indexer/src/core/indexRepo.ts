@@ -49,6 +49,10 @@ import {
   fileIdFor,
 } from './store.js';
 import { log } from '../logger.js';
+import {
+  runCodeIntelArtifacts,
+  shouldRunCodeIntel,
+} from '../codeintel/artifacts.js';
 
 const EMBED_BATCH = 50;
 const FILE_CONCURRENCY = 6;
@@ -62,6 +66,9 @@ export interface IndexResult {
   chunksWritten: number;
   edgesWritten: number;
   filesRemoved: number;
+  codeIntelArtifacts: number;
+  scipSymbols: number;
+  scipReferences: number;
 }
 
 export async function indexRepo(
@@ -122,6 +129,9 @@ export async function indexRepo(
       chunksWritten: 0,
       edgesWritten: 0,
       filesRemoved: 0,
+      codeIntelArtifacts: 0,
+      scipSymbols: 0,
+      scipReferences: 0,
     };
   }
 
@@ -205,8 +215,12 @@ export async function indexRepo(
     let chunksWritten = 0;
     let edgesWritten = 0;
 
+    const needsTarball =
+      targets.length > 0 ||
+      (shouldRunCodeIntel(config) &&
+        (effectiveJob.jobType === 'FULL_INDEX' || removed.length > 0));
     const tarball =
-      targets.length > 0
+      needsTarball
         ? await github.downloadTarball(repo.owner, repo.name, commitSha)
         : new Map<string, string>();
     const priorHashes = await getFileContentHashes(
@@ -253,6 +267,15 @@ export async function indexRepo(
       edgesWritten += stat.edgesWritten;
     }
 
+    const codeIntel = await runCodeIntelArtifacts({
+      d1,
+      config,
+      repoId,
+      repoFullName: job.repoFullName,
+      commitSha,
+      files: tarball,
+    });
+
     if (filesIndexed > 0 && filesIndexed % STATUS_UPDATE_INTERVAL !== 0) {
       await updateIndexStatus(d1, repoId, {
         status: 'INDEXING',
@@ -281,6 +304,9 @@ export async function indexRepo(
       chunksWritten,
       edgesWritten,
       filesRemoved,
+      codeIntelArtifacts: codeIntel.artifactsWritten,
+      scipSymbols: codeIntel.scipSymbols,
+      scipReferences: codeIntel.scipReferences,
     });
 
     return {
@@ -290,6 +316,9 @@ export async function indexRepo(
       chunksWritten,
       edgesWritten,
       filesRemoved,
+      codeIntelArtifacts: codeIntel.artifactsWritten,
+      scipSymbols: codeIntel.scipSymbols,
+      scipReferences: codeIntel.scipReferences,
     };
   } catch (err) {
     const message = (err as Error).message;

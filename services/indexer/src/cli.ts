@@ -6,6 +6,7 @@
  *   npm run index -- <owner/repo> --incremental a.go b.ts # INCREMENTAL_INDEX
  *   npm run index -- <owner/repo> --incremental a.go --removed b.ts
  *   npm run index -- <owner/repo> --installation-id 123   # GitHub App auth
+ *   npm run index -- <owner/repo> --result-json /tmp/result.json
  *   npm run index -- --help
  *
  * `--help` works without any environment configuration.
@@ -23,6 +24,7 @@ Usage:
   npm run index -- <owner/repo> --commit <sha>           FULL_INDEX at a commit
   npm run index -- <owner/repo> --installation-id <id>    Use GitHub App auth
   npm run index -- <owner/repo> --tenant-id <id>          Tag tenant vectors
+  npm run index -- <owner/repo> --result-json <path>      Write machine-readable result JSON
   npm run index -- <owner/repo> --incremental <files...> INCREMENTAL re-index
   npm run index -- <owner/repo> --incremental <files...> --removed <files...>
                                                          also delete removed files
@@ -52,6 +54,7 @@ async function run(): Promise<void> {
   let commitSha: string | undefined;
   let tenantId: string | undefined;
   let installationId: number | undefined;
+  let resultJsonPath: string | undefined;
   let force = false;
   const incrementalFiles: string[] = [];
   const removedFiles: string[] = [];
@@ -72,6 +75,8 @@ async function run(): Promise<void> {
         return;
       }
       installationId = parsed;
+    } else if (arg === '--result-json') {
+      resultJsonPath = requiredArgValue(argv, ++i, '--result-json');
     } else if (arg === '--force') {
       force = true;
     } else if (arg === '--incremental') {
@@ -121,6 +126,10 @@ async function run(): Promise<void> {
       '...\n',
   );
   const result = await indexRepo(config, job);
+  if (resultJsonPath) {
+    const { writeFile } = await import('node:fs/promises');
+    await writeFile(resultJsonPath, `${JSON.stringify(result, null, 2)}\n`, 'utf8');
+  }
   process.stdout.write(`Done: ${JSON.stringify(result, null, 2)}\n`);
 }
 

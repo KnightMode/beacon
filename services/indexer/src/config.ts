@@ -33,6 +33,16 @@ export interface IndexerConfig {
     embeddingDimensions: number;
     llm: string;
   };
+
+  codeIntel: {
+    mode: 'off' | 'best_effort' | 'required';
+    workDir?: string;
+    artifactBaseUri?: string;
+    zoektIndexBin: string;
+    zoektIndexDir?: string;
+    scipCommandsJson?: string;
+    scipFactsPath?: string;
+  };
 }
 
 function required(name: string): string {
@@ -71,5 +81,23 @@ export function loadConfig(): IndexerConfig {
       ),
       llm: process.env.LLM_MODEL?.trim() || DEFAULT_LLM_MODEL,
     },
+    codeIntel: {
+      mode: codeIntelMode(process.env.CODE_INTEL_MODE),
+      workDir: optional('CODE_INTEL_WORK_DIR'),
+      artifactBaseUri: optional('CODE_INTEL_ARTIFACT_BASE_URI'),
+      zoektIndexBin: process.env.ZOEKT_INDEX_BIN?.trim() || 'zoekt-index',
+      zoektIndexDir: optional('ZOEKT_INDEX_DIR'),
+      scipCommandsJson: optional('SCIP_COMMANDS_JSON'),
+      scipFactsPath: optional('SCIP_FACTS_PATH'),
+    },
   };
+}
+
+function codeIntelMode(value: string | undefined): 'off' | 'best_effort' | 'required' {
+  const normalized = (value ?? 'off').trim().toLowerCase();
+  if (normalized === 'required') return 'required';
+  if (normalized === 'best_effort' || normalized === 'best-effort' || normalized === 'true') {
+    return 'best_effort';
+  }
+  return 'off';
 }
