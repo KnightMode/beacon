@@ -24,6 +24,7 @@ import { rerank } from './rerank.js';
 import { packContext } from './pack.js';
 import { zoektSearch } from './zoekt.js';
 import { scipSearch, fetchScipDefinitions, fetchScipReferences } from './scip.js';
+import { runWorkersAi } from '../workersAi.js';
 
 const MAX_TURNS = 2;
 const MAX_TOOLS_PER_TURN = 3;
@@ -304,7 +305,7 @@ async function planNext(
   ].join('\n');
 
   try {
-    const res = (await env.AI.run(env.LLM_MODEL as keyof AiModels, {
+    const res = await runWorkersAi<PlannerLlmResponse>(env, env.LLM_MODEL as keyof AiModels, {
       messages: [
         { role: 'system', content: PLANNER_SYSTEM },
         { role: 'user', content: user },
@@ -312,7 +313,7 @@ async function planNext(
       max_tokens: 400,
       temperature: 0,
       chat_template_kwargs: { thinking: false },
-    } as never)) as unknown as PlannerLlmResponse;
+    }, { label: 'retrieval-planner' });
 
     const text =
       (typeof res.response === 'string' && res.response) ||

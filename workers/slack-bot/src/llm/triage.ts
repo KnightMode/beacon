@@ -6,6 +6,7 @@
  */
 
 import type { Env } from '../env.js';
+import { runWorkersAi } from '../workersAi.js';
 
 const TRIAGE_SYSTEM_PROMPT = `You are a CI-failure triage assistant for an engineering team. Write concise Slack mrkdwn.
 
@@ -78,7 +79,7 @@ export async function generateTriage(
   }
   parts.push('', 'Produce the triage analysis now.');
 
-  const res = (await env.AI.run(env.LLM_MODEL as keyof AiModels, {
+  const res = await runWorkersAi<LlmResponse>(env, env.LLM_MODEL as keyof AiModels, {
     messages: [
       { role: 'system', content: TRIAGE_SYSTEM_PROMPT },
       { role: 'user', content: parts.join('\n') },
@@ -86,7 +87,7 @@ export async function generateTriage(
     max_tokens: 1024,
     temperature: 0.2,
     chat_template_kwargs: { thinking: false },
-  } as never)) as unknown as LlmResponse;
+  }, { label: 'ci-triage' });
 
   return extractText(res).trim() || 'No triage analysis was generated.';
 }

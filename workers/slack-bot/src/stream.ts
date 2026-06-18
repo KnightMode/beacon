@@ -23,6 +23,7 @@ import {
 } from './history.js';
 import { markFirstCitedAnswer } from './tenant.js';
 import { slackPostJson } from './slackClient.js';
+import { userFacingAiError } from './workersAi.js';
 
 // Steady flush cadence for appendStream. Token reading and Slack writes are
 // decoupled (reader fills a buffer, a timer drains it), so the stream renders
@@ -215,12 +216,12 @@ export async function streamAnswer(env: Env, t: StreamTarget): Promise<void> {
       await markFirstCitedAnswer(env, t.teamId).catch(() => undefined);
     }
   } catch (err) {
-    const message = (err as Error).message;
+    const message = userFacingAiError(err);
     if (ts) {
       await call(env, 'chat.stopStream', {
         channel: t.channel,
         ts,
-        chunks: [markdown(`:warning: Something went wrong: ${message}`)],
+        chunks: [markdown(`:warning: ${message}`)],
       }, t.teamId).catch(() => undefined);
     } else {
       // Stream never opened — fall back to a normal post so the user still gets

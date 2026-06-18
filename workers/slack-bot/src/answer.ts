@@ -8,6 +8,7 @@ import { retrieveSmart } from './retrieval/pipeline.js';
 import { generateAnswer } from './llm.js';
 import { buildRetrievalText, type Turn } from './history.js';
 import { buildAnswerMessage, type SlackMessage } from './format.js';
+import { userFacingAiError } from './workersAi.js';
 
 export interface BuildAnswerResult {
   message: SlackMessage;
@@ -35,7 +36,7 @@ export async function buildAnswer(
     return {
       message: buildAnswerMessage(
         question,
-        `Sorry — something went wrong answering that: ${(err as Error).message}`,
+        userFacingAiError(err),
         [],
       ),
       hadCitations: false,
