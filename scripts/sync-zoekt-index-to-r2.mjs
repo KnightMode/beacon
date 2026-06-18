@@ -44,7 +44,7 @@ async function syncShardSet({ repoPrefix, files }) {
   for (const file of files) {
     const rel = path.basename(file);
     const key = prefixedKey(rel);
-    runWrangler(['r2', 'object', 'put', `${bucket}/${key}`, '--file', file]);
+    runWrangler(['r2', 'object', 'put', `${bucket}/${key}`, '--file', file, '--remote']);
     newKeys.push(key);
   }
 
@@ -53,7 +53,9 @@ async function syncShardSet({ repoPrefix, files }) {
   const newSet = new Set(newKeys);
   for (const key of oldManifest.keys) {
     if (!newSet.has(key)) {
-      runWrangler(['r2', 'object', 'delete', `${bucket}/${key}`, '--force'], { ignoreMissing: true });
+      runWrangler(['r2', 'object', 'delete', `${bucket}/${key}`, '--force', '--remote'], {
+        ignoreMissing: true,
+      });
     }
   }
 
@@ -96,7 +98,7 @@ async function readRemoteManifest(repoPrefix) {
   const tmp = await mkdtemp(path.join(tmpdir(), 'beacon-zoekt-manifest-'));
   const file = path.join(tmp, 'manifest.json');
   const key = manifestKey(repoPrefix);
-  const result = runWrangler(['r2', 'object', 'get', `${bucket}/${key}`, '--file', file], {
+  const result = runWrangler(['r2', 'object', 'get', `${bucket}/${key}`, '--file', file, '--remote'], {
     ignoreMissing: true,
   });
   if (!result.ok) return { keys: [] };
@@ -119,7 +121,15 @@ async function writeRemoteManifest(repoPrefix, keys) {
     `${JSON.stringify({ version: 1, repoPrefix, keys, updatedAt: new Date().toISOString() }, null, 2)}\n`,
     'utf8',
   );
-  runWrangler(['r2', 'object', 'put', `${bucket}/${manifestKey(repoPrefix)}`, '--file', file]);
+  runWrangler([
+    'r2',
+    'object',
+    'put',
+    `${bucket}/${manifestKey(repoPrefix)}`,
+    '--file',
+    file,
+    '--remote',
+  ]);
 }
 
 function manifestKey(repoPrefix) {
