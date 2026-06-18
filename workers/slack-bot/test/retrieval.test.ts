@@ -156,6 +156,26 @@ describe('rerank', () => {
     expect(ranked[0]?.id).toBe('same');
     expect(ranked[0]?.sources).toEqual(['vector', 'zoekt']);
   });
+
+  it('does not promote unrelated code-intel chunks solely by source', () => {
+    const parsed = parseQuery('How does the indexer chunk markdown files?');
+    const scip = chunk({
+      id: 'scip-noise',
+      source: 'scip',
+      score: 0.95,
+      path: 'workers/slack-bot/src/stream.ts',
+    });
+    const markdown = chunk({
+      id: 'markdown',
+      source: 'lexical',
+      score: 0.9,
+      path: 'services/indexer/src/chunking/markdownChunker.ts',
+    });
+
+    const ranked = rerank(parsed, [[scip], [markdown]], 2);
+
+    expect(ranked[0]?.id).toBe('markdown');
+  });
 });
 
 function chunk(overrides: Partial<RetrievedChunk>): RetrievedChunk {
@@ -289,6 +309,16 @@ describe('stripAbstentionCitations', () => {
       ),
     ).toBe(
       'Failures enqueue triage jobs [1]. The context does not show the Slack block formatting [2].',
+    );
+  });
+
+  it('removes citations when an answer opens with a clear cannot-answer statement', () => {
+    expect(
+      stripAbstentionCitations(
+        "I can't answer this question from the provided context [1]. The context mentions weather forecasts [2].",
+      ),
+    ).toBe(
+      "I can't answer this question from the provided context. The context mentions weather forecasts.",
     );
   });
 });

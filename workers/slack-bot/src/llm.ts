@@ -122,9 +122,11 @@ export async function generateAnswer(
 }
 
 const ABSTENTION_PATTERNS = [
+  /\bi (cannot|can't|could not|couldn't) answer (this|that)? ?(question )?(from|using) (the )?(provided )?context\b/i,
   /\bcontext (does not|doesn't|did not|didn't) (contain|include|show|provide|cover)\b/i,
   /\bprovided context (does not|doesn't|did not|didn't) (contain|include|show|provide|cover)\b/i,
   /\bretrieved (documents|files|snippets|context) (do not|don't|does not|doesn't) (cover|contain|include|show)\b/i,
+  /\bnone of the (retrieved|provided) (documents|files|snippets|context|context blocks) (describe|cover|contain|include|show)\b/i,
   /\bi (could not|couldn't|cannot|can't) find\b/i,
   /\bi do not see\b|\bi don't see\b/i,
   /\bnot enough (context|information|evidence)\b/i,
