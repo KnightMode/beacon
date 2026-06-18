@@ -1,22 +1,31 @@
 import { describe, it, expect } from 'vitest';
 import { scoreCase, fileMatches, citedMarkers } from '../src/score.js';
-import type { EvalAskResponse, GoldenCase } from '../src/types.js';
+import type {
+  EvalAskResponse,
+  EvalCitationSource,
+  GoldenCase,
+} from '../src/types.js';
 
 function response(
   answer: string,
-  paths: string[],
+  paths: Array<
+    | string
+    | { path: string; source?: EvalCitationSource; sources?: EvalCitationSource[] }
+  >,
   repo = 'knightmode/beacon',
 ): EvalAskResponse {
   return {
     ok: true,
     question: 'q',
     answer,
-    citations: paths.map((path) => ({
+    citations: paths.map((entry) => ({
       repoFullName: repo,
-      path,
+      path: typeof entry === 'string' ? entry : entry.path,
       startLine: 1,
       endLine: 10,
       commitSha: 'abc',
+      source: typeof entry === 'string' ? undefined : entry.source,
+      sources: typeof entry === 'string' ? undefined : entry.sources,
     })),
     usedChunks: paths.length,
     candidates: paths.length,
@@ -66,6 +75,7 @@ describe('scoreCase', () => {
     expect(s.citationPrecision).toBe(1);
     expect(s.citationF1).toBe(1);
     expect(s.mustPassRate).toBe(1);
+    expect(s.sourceRecall).toBeNull();
     expect(s.groundedness).toBe(1);
     expect(s.composite).toBe(1);
   });
@@ -106,5 +116,36 @@ describe('scoreCase', () => {
     };
     const r = response('Verified here [1].', ['src/signature.ts']);
     expect(scoreCase(c, r).composite).toBe(1);
+  });
+
+  it('rewards cited markers that cover expected retrieval sources', () => {
+    const c: GoldenCase = {
+      ...goldenCase,
+      expectedCitationSources: ['zoekt'],
+    };
+    const r = response('Verified via HMAC [1].', [
+      {
+        path: 'workers/x/src/signature.ts',
+        source: 'lexical',
+        sources: ['lexical', 'zoekt'],
+      },
+    ]);
+    const s = scoreCase(c, r);
+    expect(s.sourceRecall).toBe(1);
+    expect(s.composite).toBe(1);
+  });
+
+  it('penalizes answers that cite the right file but miss expected retrieval sources', () => {
+    const c: GoldenCase = {
+      ...goldenCase,
+      expectedCitationSources: ['scip'],
+    };
+    const r = response('Verified via HMAC [1].', [
+      { path: 'workers/x/src/signature.ts', source: 'lexical' },
+    ]);
+    const s = scoreCase(c, r);
+    expect(s.citationF1).toBe(1);
+    expect(s.sourceRecall).toBe(0);
+    expect(s.composite).toBeLessThan(1);
   });
 });

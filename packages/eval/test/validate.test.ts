@@ -29,6 +29,20 @@ describe('validateDataset', () => {
     expect(issues.some((i) => i.problem.includes('invalid regex'))).toBe(true);
   });
 
+  it('flags unknown expected citation sources', () => {
+    const issues = validateDataset([
+      {
+        id: 'a',
+        question: 'q',
+        answerMust: ['x'],
+        expectedCitationSources: ['unknown'],
+      },
+    ]);
+    expect(
+      issues.some((i) => i.problem.includes('unknown source "unknown"')),
+    ).toBe(true);
+  });
+
   it('flags a contradictory positive+negative case', () => {
     const issues = validateDataset([
       { id: 'a', question: 'q', expectNoAnswer: true, answerMust: ['x'] },

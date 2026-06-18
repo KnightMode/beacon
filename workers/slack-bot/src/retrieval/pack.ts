@@ -27,9 +27,10 @@ export function packContext(
   chunks.forEach((c, idx) => {
     if (budget <= 0) return;
     const body = c.content.slice(0, PER_CHUNK_CHAR_CAP);
+    const sources = formatSources(c);
     const header =
       `[${idx + 1}] ${c.repoFullName}/${c.path}:${c.startLine}-${c.endLine}` +
-      (c.symbol ? ` (${c.chunkType} ${c.symbol})` : ` (${c.chunkType})`);
+      (c.symbol ? ` (${c.chunkType} ${c.symbol}; ${sources})` : ` (${c.chunkType}; ${sources})`);
     const block = `${header}\n\`\`\`${c.language ?? ''}\n${body}\n\`\`\``;
     if (block.length > budget && used.length > 0) return;
     blocks.push(block);
@@ -47,4 +48,9 @@ export function packContext(
   });
 
   return { contextText: blocks.join('\n\n'), used, citations };
+}
+
+function formatSources(c: RetrievedChunk): string {
+  const sources = [...new Set(c.sources?.length ? c.sources : [c.source])];
+  return `retrieved by ${sources.join(', ')}`;
 }

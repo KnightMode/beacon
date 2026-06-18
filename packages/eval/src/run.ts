@@ -154,6 +154,7 @@ async function runCase(opts: CliOptions, c: GoldenCase): Promise<CaseResult> {
         citationF1: null,
         groundedness: 0,
         mustPassRate: null,
+        sourceRecall: null,
         mustNotViolations: [],
         abstained: false,
         composite: 0,
@@ -212,8 +213,14 @@ function buildReport(opts: CliOptions, results: CaseResult[]): EvalReport {
   const f1s = results
     .map((r) => r.score.citationF1)
     .filter((x): x is number => x !== null);
+  const sourceRecalls = results
+    .map((r) => r.score.sourceRecall)
+    .filter((x): x is number => x !== null);
   const abstainCases = results.filter((r) =>
-    r.error === undefined && r.score.citationF1 === null && r.score.mustPassRate === null,
+    r.error === undefined &&
+    r.score.citationF1 === null &&
+    r.score.mustPassRate === null &&
+    r.score.sourceRecall === null,
   );
 
   return {
@@ -225,6 +232,7 @@ function buildReport(opts: CliOptions, results: CaseResult[]): EvalReport {
     summary: {
       compositeMean: mean(results.map((r) => r.score.composite)) ?? 0,
       citationF1Mean: mean(f1s),
+      sourceRecallMean: mean(sourceRecalls),
       abstainAccuracy: mean(abstainCases.map((r) => r.score.composite)),
       failures: results.filter((r) => r.error !== undefined).length,
       totalMs: results.reduce((s, r) => s + r.timings.totalMs, 0),
@@ -233,18 +241,19 @@ function buildReport(opts: CliOptions, results: CaseResult[]): EvalReport {
 }
 
 function printReport(report: EvalReport, baseline: EvalReport | null): void {
-  console.log('\ncase                          comp   f1     ground must   cited');
+  console.log('\ncase                          comp   f1     src    ground must   cited');
   for (const r of report.cases) {
     const fmt = (x: number | null): string =>
       x === null ? '  -  ' : x.toFixed(2).padEnd(5);
     console.log(
-      `${r.caseId.padEnd(30).slice(0, 30)}${fmt(r.score.composite)}  ${fmt(r.score.citationF1)}  ${fmt(r.score.groundedness)}  ${fmt(r.score.mustPassRate)}  ${r.citedFiles.length}${r.error ? '  ERROR' : ''}`,
+      `${r.caseId.padEnd(30).slice(0, 30)}${fmt(r.score.composite)}  ${fmt(r.score.citationF1)}  ${fmt(r.score.sourceRecall)}  ${fmt(r.score.groundedness)}  ${fmt(r.score.mustPassRate)}  ${r.citedFiles.length}${r.error ? '  ERROR' : ''}`,
     );
   }
   const s = report.summary;
   console.log(
     `\ncomposite mean: ${s.compositeMean.toFixed(4)}` +
       (s.citationF1Mean !== null ? ` | citation F1: ${s.citationF1Mean.toFixed(4)}` : '') +
+      (s.sourceRecallMean !== null ? ` | source recall: ${s.sourceRecallMean.toFixed(4)}` : '') +
       (s.abstainAccuracy !== null ? ` | abstain: ${s.abstainAccuracy.toFixed(2)}` : '') +
       ` | failures: ${s.failures} | wall: ${(s.totalMs / 1000).toFixed(1)}s`,
   );

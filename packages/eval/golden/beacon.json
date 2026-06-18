@@ -137,6 +137,7 @@
     "expectedFiles": [
       { "path": "workers/slack-bot/src/retrieval/zoekt.ts" }
     ],
+    "expectedCitationSources": ["zoekt"],
     "answerMust": ["hydrate|D1|chunk", "citation|context|pack"]
   },
   {
@@ -145,6 +146,7 @@
     "expectedFiles": [
       { "path": "workers/slack-bot/src/retrieval/scip.ts" }
     ],
+    "expectedCitationSources": ["scip"],
     "answerMust": ["scip_symbols|scip_references", "definition|reference"]
   },
   {
@@ -166,6 +168,61 @@
     "question": "How does the bot decide whether a message is a question, a PR review, or a create-PR request?",
     "expectedFiles": [{ "path": "workers/slack-bot/src/intent.ts" }],
     "answerMust": ["intent", "review|pull request|index"]
+  },
+  {
+    "id": "planner-mode-on-demand",
+    "question": "What is the default agentic planner mode for Q&A, and how is that mode interpreted?",
+    "expectedFiles": [
+      { "path": "workers/slack-bot/wrangler.toml" },
+      { "path": "workers/slack-bot/src/retrieval/agent.ts" }
+    ],
+    "answerMust": ["on_demand", "AGENTIC_PLANNER_MODE|plannerModeFromEnv"]
+  },
+  {
+    "id": "workers-ai-capacity-retry",
+    "question": "How does Beacon handle Workers AI 3040 or temporary capacity errors when generating answers?",
+    "expectedFiles": [
+      { "path": "workers/slack-bot/src/workersAi.ts" }
+    ],
+    "answerMust": ["3040|capacity", "retry|backoff|transient"]
+  },
+  {
+    "id": "answer-duration-footer",
+    "question": "Where is the answered-in timing added to Slack answers, and how is that duration formatted?",
+    "expectedFiles": [
+      { "path": "workers/slack-bot/src/answer.ts" },
+      { "path": "workers/slack-bot/src/format.ts" }
+    ],
+    "answerMust": ["answeredInMs|Answered in", "formatAnswerDuration|duration"]
+  },
+  {
+    "id": "code-intel-mode-workflow",
+    "question": "How is BEACON_CODE_INTEL_MODE interpreted by the indexing workflow, and what default still generates Zoekt and SCIP artifacts?",
+    "expectedFiles": [
+      { "path": ".github/workflows/index.yml" },
+      { "path": "services/indexer/src/config.ts" }
+    ],
+    "answerMust": ["best[_-]?effort", "CODE_INTEL_ENABLED|CODE_INTEL_MODE"]
+  },
+  {
+    "id": "remote-zoekt-r2-sync",
+    "question": "How are generated Zoekt shards synced to the remote R2 bucket used by the live search service?",
+    "expectedFiles": [
+      { "path": "scripts/sync-zoekt-index-to-r2.mjs" },
+      { "path": "scripts/provision-code-intel.mjs" }
+    ],
+    "expectedCitationSources": ["zoekt"],
+    "answerMust": ["--remote", "manifest|r2://|bucket"]
+  },
+  {
+    "id": "zoekt-service-binding",
+    "question": "How does the Slack bot query the Zoekt search service, and what configuration enables that service binding?",
+    "expectedFiles": [
+      { "path": "workers/slack-bot/src/retrieval/zoekt.ts" },
+      { "path": "workers/slack-bot/wrangler.toml" }
+    ],
+    "expectedCitationSources": ["zoekt"],
+    "answerMust": ["ZOEKT_SEARCH|service binding|fetch", "beacon-zoekt|ZOEKT_SEARCH_URL"]
   },
   {
     "id": "negative-k8s-certs",

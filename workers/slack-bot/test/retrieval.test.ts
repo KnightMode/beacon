@@ -7,10 +7,12 @@ import { needsStagedPrPlan } from '../src/actions/stagedPrPlan.js';
 import { scopeAllowlist } from '../src/retrieval/pipeline.js';
 import { normalizeZoektResponse } from '../src/retrieval/zoekt.js';
 import { packContext } from '../src/retrieval/pack.js';
+import { rerank } from '../src/retrieval/rerank.js';
 import { citedMarkers } from '../src/format.js';
 import { getAllowlistedRepoIds } from '../src/allowlist.js';
 import { buildRetrievalText } from '../src/history.js';
 import { stripAbstentionCitations } from '../src/llm.js';
+import type { RetrievedChunk } from '@scintel/shared';
 
 const REPOS = [
   'knightmode/slack-code-intelligence',
@@ -123,8 +125,57 @@ describe('packContext', () => {
 
     expect(packed.citations[0]?.source).toBe('zoekt');
     expect(packed.citations[0]?.sources).toEqual(['zoekt']);
+    expect(packed.contextText).toContain('retrieved by zoekt');
   });
 });
+
+describe('rerank', () => {
+  it('promotes chunks that are backed by code-intel sources', () => {
+    const parsed = parseQuery('How are Zoekt search hits hydrated?');
+    const vector = chunk({
+      id: 'same',
+      source: 'vector',
+      score: 0.9,
+      path: 'workers/slack-bot/src/retrieval/zoekt.ts',
+    });
+    const zoekt = chunk({
+      id: 'same',
+      source: 'zoekt',
+      score: 0.75,
+      path: 'workers/slack-bot/src/retrieval/zoekt.ts',
+    });
+    const lexical = chunk({
+      id: 'other',
+      source: 'lexical',
+      score: 1.1,
+      path: 'workers/slack-bot/src/retrieval/pipeline.ts',
+    });
+
+    const ranked = rerank(parsed, [[vector], [zoekt], [lexical]], 2);
+
+    expect(ranked[0]?.id).toBe('same');
+    expect(ranked[0]?.sources).toEqual(['vector', 'zoekt']);
+  });
+});
+
+function chunk(overrides: Partial<RetrievedChunk>): RetrievedChunk {
+  return {
+    id: 'chunk',
+    repoId: 'knightmode/beacon',
+    repoFullName: 'KnightMode/beacon',
+    path: 'src/a.ts',
+    language: 'typescript',
+    chunkType: 'function',
+    symbol: null,
+    startLine: 1,
+    endLine: 20,
+    content: 'export function example() {}',
+    commitSha: 'abc',
+    score: 0.8,
+    source: 'lexical',
+    ...overrides,
+  };
+}
 
 describe('index intents', () => {
   it('detects "index owner/repo"', () => {
