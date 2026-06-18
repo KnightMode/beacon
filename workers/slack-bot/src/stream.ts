@@ -109,6 +109,7 @@ function markdown(text: string): MarkdownChunk {
  * answer (no leading status text), then closed with citation blocks.
  */
 export async function streamAnswer(env: Env, t: StreamTarget): Promise<void> {
+  const startedAt = Date.now();
   let ts: string | undefined;
 
   // Best-effort status shimmer, updated as the work actually progresses; it
@@ -158,7 +159,10 @@ export async function streamAnswer(env: Env, t: StreamTarget): Promise<void> {
 
     if (outcome.packed.used.length === 0) {
       await write([markdown(NO_RESULTS_TEXT)]);
-      await call(env, 'chat.stopStream', { channel: t.channel, ts }, t.teamId);
+      const blocks = buildCitationBlocks([], undefined, {
+        answeredInMs: Date.now() - startedAt,
+      });
+      await call(env, 'chat.stopStream', { channel: t.channel, ts, blocks }, t.teamId);
       return;
     }
 
@@ -206,7 +210,9 @@ export async function streamAnswer(env: Env, t: StreamTarget): Promise<void> {
       await write([markdown("I couldn't generate an answer from the indexed content.")]);
     }
 
-    const blocks = buildCitationBlocks(outcome.packed.citations, fullText);
+    const blocks = buildCitationBlocks(outcome.packed.citations, fullText, {
+      answeredInMs: Date.now() - startedAt,
+    });
     await call(env, 'chat.stopStream', {
       channel: t.channel,
       ts,

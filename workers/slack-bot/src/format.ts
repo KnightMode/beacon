@@ -17,10 +17,15 @@ export interface SlackMessage {
   blocks: SlackBlock[];
 }
 
+export interface AnswerFooterOptions {
+  answeredInMs?: number;
+}
+
 export function buildAnswerMessage(
   question: string,
   answer: string,
   citations: Citation[],
+  footer: AnswerFooterOptions = {},
 ): SlackMessage {
   const blocks: SlackBlock[] = [
     {
@@ -33,7 +38,7 @@ export function buildAnswerMessage(
     },
   ];
 
-  blocks.push(...buildCitationBlocks(citations, answer));
+  blocks.push(...buildCitationBlocks(citations, answer, footer));
 
   return {
     response_type: 'in_channel',
@@ -61,6 +66,7 @@ export function citedMarkers(answerText: string): Set<number> {
 export function buildCitationBlocks(
   citations: Citation[],
   answerText?: string,
+  footer: AnswerFooterOptions = {},
 ): SlackBlock[] {
   let entries = citations.map((c, idx) => ({ c, n: idx + 1 }));
   if (answerText) {
@@ -83,11 +89,38 @@ export function buildCitationBlocks(
     elements: [
       {
         type: 'mrkdwn',
-        text: ':robot_face: Answered from indexed repository content — verify before relying on it.',
+        text: answerFooterText(footer),
       },
     ],
   });
   return blocks;
+}
+
+function answerFooterText({ answeredInMs }: AnswerFooterOptions): string {
+  const duration =
+    typeof answeredInMs === 'number'
+      ? `Answered in ${formatAnswerDuration(answeredInMs)} · `
+      : '';
+  return `${duration}:robot_face: Answered from indexed repository content — verify before relying on it.`;
+}
+
+export function formatAnswerDuration(ms: number): string {
+  const totalSeconds = Math.max(0, ms) / 1000;
+  if (totalSeconds < 1) return '<1s';
+  if (totalSeconds < 10) return `${roundToTenth(totalSeconds)}s`;
+  if (totalSeconds < 60) return `${Math.round(totalSeconds)}s`;
+
+  let minutes = Math.floor(totalSeconds / 60);
+  let seconds = Math.round(totalSeconds % 60);
+  if (seconds === 60) {
+    minutes += 1;
+    seconds = 0;
+  }
+  return seconds > 0 ? `${minutes}m ${seconds}s` : `${minutes}m`;
+}
+
+function roundToTenth(n: number): string {
+  return (Math.round(n * 10) / 10).toFixed(1).replace(/\.0$/, '');
 }
 
 function githubUrl(c: Citation): string {
