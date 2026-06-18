@@ -10,10 +10,15 @@ import type { ParsedQuery } from './queryUnderstanding.js';
 
 const SOURCE_WEIGHT: Record<RetrievedChunk['source'], number> = {
   vector: 1.0,
-  scip: 1.05,
-  zoekt: 1.0,
+  scip: 1.1,
+  zoekt: 1.08,
   lexical: 0.85,
   graph: 0.6,
+};
+
+const SOURCE_BONUS: Partial<Record<RetrievedChunk['source'], number>> = {
+  scip: 0.18,
+  zoekt: 0.15,
 };
 
 export function rerank(
@@ -40,7 +45,9 @@ export function rerank(
 
   const symbolSet = new Set(query.symbols);
   const scored = [...merged.values()].map((c) => {
-    let score = c.score * SOURCE_WEIGHT[c.source];
+    const sources = chunkSources(c);
+    let score = c.score * SOURCE_WEIGHT[c.source] + sourceBonus(sources);
+    if (sources.length > 1) score += 0.08;
     if (c.symbol && symbolSet.has(c.symbol)) score += 0.5;
     if (c.symbol && query.terms.includes(c.symbol.toLowerCase())) score += 0.15;
     if (query.intent === 'definition' && isDefinition(c)) score += 0.1;
@@ -60,6 +67,10 @@ function mergeSources(
   incoming: RetrievedChunk,
 ): RetrievedChunk['source'][] {
   return [...new Set([...chunkSources(existing), ...chunkSources(incoming)])];
+}
+
+function sourceBonus(sources: RetrievedChunk['source'][]): number {
+  return sources.reduce((score, source) => score + (SOURCE_BONUS[source] ?? 0), 0);
 }
 
 function isDefinition(c: RetrievedChunk): boolean {
