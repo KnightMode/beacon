@@ -9,6 +9,7 @@
 import type { Env } from './env.js';
 import type { PackedContext } from './retrieval/pack.js';
 import type { Turn } from './history.js';
+import { runWorkersAi } from './workersAi.js';
 
 const SYSTEM_PROMPT = `You are a precise, friendly code intelligence assistant for an engineering team.
 
@@ -106,14 +107,14 @@ export async function generateAnswer(
     return { text: NO_RESULTS_TEXT };
   }
 
-  const res = (await env.AI.run(env.LLM_MODEL as keyof AiModels, {
+  const res = await runWorkersAi<LlmResponse>(env, env.LLM_MODEL as keyof AiModels, {
     messages: buildMessages(question, packed, history),
     max_tokens: 1024,
     temperature: 0.2,
     // Disable reasoning/thinking on models that support it (e.g. Kimi K2.6)
     // so the token budget goes entirely to the visible answer.
     chat_template_kwargs: { thinking: false },
-  } as never)) as unknown as LlmResponse;
+  }, { label: 'answer' });
 
   return { text: extractText(res).trim() || 'No answer was generated.' };
 }
@@ -128,13 +129,13 @@ export async function* streamAnswerTokens(
   packed: PackedContext,
   history: Turn[] = [],
 ): AsyncGenerator<string> {
-  const stream = (await env.AI.run(env.LLM_MODEL as keyof AiModels, {
+  const stream = await runWorkersAi<ReadableStream<Uint8Array>>(env, env.LLM_MODEL as keyof AiModels, {
     messages: buildMessages(question, packed, history),
     max_tokens: 1024,
     temperature: 0.2,
     stream: true,
     chat_template_kwargs: { thinking: false },
-  } as never)) as unknown as ReadableStream<Uint8Array>;
+  }, { label: 'answer-stream' });
 
   const reader = stream.getReader();
   const decoder = new TextDecoder();
