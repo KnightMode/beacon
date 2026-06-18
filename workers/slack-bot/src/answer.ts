@@ -22,6 +22,7 @@ export async function buildAnswer(
   onProgress?: (stage: string) => void,
   teamId?: string,
 ): Promise<BuildAnswerResult> {
+  const startedAt = Date.now();
   try {
     const searchText = buildRetrievalText(history, question);
     const outcome = await retrieveSmart(env, question, searchText, onProgress, teamId);
@@ -29,7 +30,9 @@ export async function buildAnswer(
     const answer = await generateAnswer(env, question, outcome.packed, history);
     const citations = outcome.packed.citations;
     return {
-      message: buildAnswerMessage(question, answer.text, citations),
+      message: buildAnswerMessage(question, answer.text, citations, {
+        answeredInMs: Date.now() - startedAt,
+      }),
       hadCitations: citations.length > 0,
     };
   } catch (err) {
@@ -38,6 +41,7 @@ export async function buildAnswer(
         question,
         userFacingAiError(err),
         [],
+        { answeredInMs: Date.now() - startedAt },
       ),
       hadCitations: false,
     };
