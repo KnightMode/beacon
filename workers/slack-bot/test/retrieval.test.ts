@@ -229,7 +229,7 @@ describe('shouldRunPlanner', () => {
       shouldRunPlanner('how does ebpf wiremock router work?', {
         poolSize: 27,
         highConfidenceHits: 10,
-        codeIntelHits: 6,
+        codeIntelHits: 0,
       }),
     ).toBe(false);
   });
@@ -258,7 +258,7 @@ describe('shouldRunPlanner', () => {
     const strongEvidence = {
       poolSize: 27,
       highConfidenceHits: 10,
-      codeIntelHits: 6,
+      codeIntelHits: 0,
     };
     expect(
       shouldRunPlanner('trace all callers of handleRequest across repos', strongEvidence),
@@ -274,7 +274,7 @@ describe('shouldRunPlanner', () => {
     const strongEvidence = {
       poolSize: 27,
       highConfidenceHits: 10,
-      codeIntelHits: 6,
+      codeIntelHits: 0,
     };
     expect(shouldRunPlanner('anything', strongEvidence, 'always')).toBe(true);
     expect(
