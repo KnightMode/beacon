@@ -5,6 +5,7 @@
 
 import type { Env } from '../env.js';
 import type { Turn } from '../history.js';
+import { runWorkersAi } from '../workersAi.js';
 
 const REVIEW_SYSTEM_PROMPT = `You are a senior code reviewer for an engineering team.
 
@@ -80,12 +81,12 @@ export async function generatePrReview(
   indexedContext: string,
   history: Turn[] = [],
 ): Promise<string> {
-  const res = (await env.AI.run(env.LLM_MODEL as keyof AiModels, {
+  const res = await runWorkersAi<LlmResponse>(env, env.LLM_MODEL as keyof AiModels, {
     messages: buildReviewMessages(prSummary, diffContext, indexedContext, history),
     max_tokens: 1536,
     temperature: 0.2,
     chat_template_kwargs: { thinking: false },
-  } as never)) as unknown as LlmResponse;
+  }, { label: 'pr-review' });
 
   return extractText(res).trim() || 'No review was generated.';
 }
@@ -97,13 +98,13 @@ export async function* streamPrReviewTokens(
   indexedContext: string,
   history: Turn[] = [],
 ): AsyncGenerator<string> {
-  const stream = (await env.AI.run(env.LLM_MODEL as keyof AiModels, {
+  const stream = await runWorkersAi<ReadableStream<Uint8Array>>(env, env.LLM_MODEL as keyof AiModels, {
     messages: buildReviewMessages(prSummary, diffContext, indexedContext, history),
     max_tokens: 1536,
     temperature: 0.2,
     stream: true,
     chat_template_kwargs: { thinking: false },
-  } as never)) as unknown as ReadableStream<Uint8Array>;
+  }, { label: 'pr-review-stream' });
 
   const reader = stream.getReader();
   const decoder = new TextDecoder();

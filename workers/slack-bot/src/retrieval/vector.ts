@@ -6,15 +6,16 @@
 
 import type { ChunkType, RetrievedChunk } from '@scintel/shared';
 import type { Env } from '../env.js';
+import { runWorkersAi } from '../workersAi.js';
 
 interface EmbeddingResponse {
   data: number[][];
 }
 
 export async function embedQuery(env: Env, text: string): Promise<number[]> {
-  const res = (await env.AI.run(env.EMBEDDING_MODEL as keyof AiModels, {
+  const res = await runWorkersAi<EmbeddingResponse>(env, env.EMBEDDING_MODEL as keyof AiModels, {
     text: [text],
-  } as never)) as unknown as EmbeddingResponse;
+  }, { label: 'embedding' });
   return res.data[0] ?? [];
 }
 

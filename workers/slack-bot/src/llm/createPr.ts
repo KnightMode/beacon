@@ -5,6 +5,7 @@
 
 import type { Env } from '../env.js';
 import type { Turn } from '../history.js';
+import { runWorkersAi } from '../workersAi.js';
 
 export interface PrEdit {
   path: string;
@@ -115,12 +116,12 @@ async function runLlm(
   messages: Array<{ role: string; content: string }>,
   maxTokens = 4_096,
 ): Promise<string> {
-  const res = (await env.AI.run(env.LLM_MODEL as keyof AiModels, {
+  const res = await runWorkersAi<LlmResponse>(env, env.LLM_MODEL as keyof AiModels, {
     messages,
     max_tokens: maxTokens,
     temperature: 0.1,
     chat_template_kwargs: { thinking: false },
-  } as never)) as unknown as LlmResponse;
+  }, { label: 'create-pr' });
 
   return extractText(res).trim();
 }
