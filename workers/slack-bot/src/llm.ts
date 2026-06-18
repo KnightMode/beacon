@@ -132,11 +132,20 @@ const ABSTENTION_PATTERNS = [
 ];
 
 export function stripAbstentionCitations(answer: string): string {
-  if (!ABSTENTION_PATTERNS.some((pattern) => pattern.test(answer))) return answer;
+  if (!startsWithAbstention(answer)) return answer;
   return answer
     .replace(/\s*\[(\d{1,2})\]/g, '')
     .replace(/[ \t]{2,}/g, ' ')
     .trim();
+}
+
+function startsWithAbstention(answer: string): boolean {
+  const trimmed = answer.trimStart();
+  const firstSentence =
+    trimmed.match(/^[\s\S]{0,320}?(?:[.!?](?=\s|$)|$)/)?.[0] ??
+    trimmed.slice(0, 320);
+  const lead = firstSentence.slice(0, 320);
+  return ABSTENTION_PATTERNS.some((pattern) => pattern.test(lead));
 }
 
 /**

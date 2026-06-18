@@ -32,6 +32,7 @@ export interface EvalCitation {
   endLine: number;
   commitSha?: string | null;
   source?: 'lexical' | 'vector' | 'graph' | 'zoekt' | 'scip';
+  sources?: Array<'lexical' | 'vector' | 'graph' | 'zoekt' | 'scip'>;
 }
 
 /** Successful body of POST /eval/ask. */

@@ -122,6 +122,7 @@ describe('packContext', () => {
     ]);
 
     expect(packed.citations[0]?.source).toBe('zoekt');
+    expect(packed.citations[0]?.sources).toEqual(['zoekt']);
   });
 });
 
@@ -227,6 +228,16 @@ describe('stripAbstentionCitations', () => {
   it('keeps citation markers on grounded answers', () => {
     expect(stripAbstentionCitations('Slack signatures use HMAC [1].')).toBe(
       'Slack signatures use HMAC [1].',
+    );
+  });
+
+  it('keeps citation markers when a grounded answer has a later caveat', () => {
+    expect(
+      stripAbstentionCitations(
+        'Failures enqueue triage jobs [1]. The context does not show the Slack block formatting [2].',
+      ),
+    ).toBe(
+      'Failures enqueue triage jobs [1]. The context does not show the Slack block formatting [2].',
     );
   });
 });

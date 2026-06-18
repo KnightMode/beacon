@@ -27,12 +27,13 @@ export function rerank(
     for (const chunk of group) {
       const existing = merged.get(chunk.id);
       if (!existing) {
-        merged.set(chunk.id, { ...chunk });
+        merged.set(chunk.id, { ...chunk, sources: chunkSources(chunk) });
       } else {
         existing.score = Math.max(existing.score, chunk.score);
         if (existing.content === '' && chunk.content !== '') {
           existing.content = chunk.content;
         }
+        existing.sources = mergeSources(existing, chunk);
       }
     }
   }
@@ -48,6 +49,17 @@ export function rerank(
 
   scored.sort((a, b) => b.score - a.score);
   return diversify(scored.map((s) => s.chunk)).slice(0, topN);
+}
+
+function chunkSources(chunk: RetrievedChunk): RetrievedChunk['source'][] {
+  return [...new Set([...(chunk.sources ?? []), chunk.source])];
+}
+
+function mergeSources(
+  existing: RetrievedChunk,
+  incoming: RetrievedChunk,
+): RetrievedChunk['source'][] {
+  return [...new Set([...chunkSources(existing), ...chunkSources(incoming)])];
 }
 
 function isDefinition(c: RetrievedChunk): boolean {
