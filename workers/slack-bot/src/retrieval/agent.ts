@@ -31,7 +31,6 @@ const MAX_TOOLS_PER_TURN = 3;
 const MAX_POOL = 60;
 const FAST_PATH_MIN_POOL = 8;
 const FAST_PATH_MIN_HIGH_CONFIDENCE = 4;
-const FAST_PATH_MIN_CODE_INTEL = 2;
 const HIGH_CONFIDENCE_SCORE = 0.75;
 // Hard wall-clock budget for follow-up planning, enforced between turns and
 // within each turn via races. The first hybrid search is always run; this only
@@ -160,8 +159,7 @@ export function plannerEvidence(chunks: Iterable<RetrievedChunk>): PlannerEviden
 function hasStrongFirstPassEvidence(evidence: PlannerEvidence): boolean {
   return (
     evidence.poolSize >= FAST_PATH_MIN_POOL &&
-    evidence.highConfidenceHits >= FAST_PATH_MIN_HIGH_CONFIDENCE &&
-    evidence.codeIntelHits >= FAST_PATH_MIN_CODE_INTEL
+    evidence.highConfidenceHits >= FAST_PATH_MIN_HIGH_CONFIDENCE
   );
 }
 
@@ -313,7 +311,7 @@ async function planNext(
       max_tokens: 400,
       temperature: 0,
       chat_template_kwargs: { thinking: false },
-    }, { label: 'retrieval-planner' });
+    }, { label: 'retrieval-planner', retries: 0 });
 
     const text =
       (typeof res.response === 'string' && res.response) ||
