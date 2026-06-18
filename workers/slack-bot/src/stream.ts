@@ -14,7 +14,7 @@
 import type { Env } from './env.js';
 import { retrieveSmart } from './retrieval/pipeline.js';
 import { streamAnswerTokens, NO_RESULTS_TEXT } from './llm.js';
-import { buildCitationBlocks } from './format.js';
+import { buildCitationBlocks, citedMarkers } from './format.js';
 import { buildAnswer } from './answer.js';
 import {
   fetchThreadHistory,
@@ -218,7 +218,7 @@ export async function streamAnswer(env: Env, t: StreamTarget): Promise<void> {
       ts,
       ...(blocks.length ? { blocks } : {}),
     }, t.teamId);
-    if (outcome.packed.citations.length > 0) {
+    if (citedMarkers(fullText).size > 0) {
       await markFirstCitedAnswer(env, t.teamId).catch(() => undefined);
     }
   } catch (err) {

@@ -11,6 +11,11 @@ import type { Env } from './env.js';
 import { retrieveSmart, retrieve } from './retrieval/pipeline.js';
 import { generateAnswer } from './llm.js';
 import { ackJson } from './slack.js';
+import {
+  isWorkersAiTransientError,
+  userFacingAiError,
+  workersAiErrorMessage,
+} from './workersAi.js';
 
 interface EvalAskRequest {
   question: string;
@@ -43,23 +48,34 @@ export async function handleEvalAsk(
   }
 
   const startedAt = Date.now();
-  const outcome =
-    body.agentic === false
-      ? await retrieve(env, body.question, body.searchText)
-      : await retrieveSmart(env, body.question, body.searchText);
-  const retrievalMs = Date.now() - startedAt;
+  try {
+    const outcome =
+      body.agentic === false
+        ? await retrieve(env, body.question, body.searchText)
+        : await retrieveSmart(env, body.question, body.searchText);
+    const retrievalMs = Date.now() - startedAt;
 
-  const answer = await generateAnswer(env, body.question, outcome.packed);
-  const llmMs = Date.now() - startedAt - retrievalMs;
+    const answer = await generateAnswer(env, body.question, outcome.packed);
+    const llmMs = Date.now() - startedAt - retrievalMs;
 
-  return ackJson({
-    ok: true,
-    question: body.question,
-    answer: answer.text,
-    citations: outcome.packed.citations,
-    usedChunks: outcome.packed.used.length,
-    candidates: outcome.candidates,
-    allowlist: outcome.allowlist,
-    timings: { retrievalMs, llmMs, totalMs: retrievalMs + llmMs },
-  });
+    return ackJson({
+      ok: true,
+      question: body.question,
+      answer: answer.text,
+      citations: outcome.packed.citations,
+      usedChunks: outcome.packed.used.length,
+      candidates: outcome.candidates,
+      allowlist: outcome.allowlist,
+      timings: { retrievalMs, llmMs, totalMs: retrievalMs + llmMs },
+    });
+  } catch (err) {
+    const transient = isWorkersAiTransientError(err);
+    return ackJson(
+      {
+        ok: false,
+        error: transient ? userFacingAiError(err) : workersAiErrorMessage(err),
+      },
+      transient ? 503 : 500,
+    );
+  }
 }

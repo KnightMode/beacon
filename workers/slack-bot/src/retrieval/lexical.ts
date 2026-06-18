@@ -35,11 +35,64 @@ const BM25_WEIGHTS = '8.0, 4.0, 1.0';
  * against FTS5 query syntax; the `*` keeps substring-ish recall for symbols.
  */
 export function buildFtsMatch(query: ParsedQuery): string {
-  const needles = [...new Set([...query.symbols, ...query.terms])]
+  const needles = [...searchNeedles(query)]
     .map((n) => n.trim())
     .filter((n) => n.length > 1)
     .slice(0, 10);
   return needles.map((n) => `"${n.replace(/"/g, '""')}"*`).join(' OR ');
+}
+
+function searchNeedles(query: ParsedQuery): string[] {
+  const needles: string[] = [];
+  const add = (value: string | null): void => {
+    if (!value) return;
+    const trimmed = value.trim();
+    if (trimmed.length > 1 && !needles.includes(trimmed)) needles.push(trimmed);
+  };
+
+  for (const symbol of query.symbols) add(symbol);
+  for (const identifier of identifierBigrams(query.terms)) add(identifier);
+  for (const term of query.terms) {
+    add(term);
+    for (const variant of termVariants(term)) add(variant);
+  }
+  return needles;
+}
+
+function identifierBigrams(terms: string[]): string[] {
+  const out: string[] = [];
+  for (let i = 0; i < terms.length - 1; i++) {
+    const a = terms[i]!;
+    const b = terms[i + 1]!;
+    if (a.length < 3 || b.length < 3) continue;
+    out.push(`${a}${b[0]!.toUpperCase()}${b.slice(1)}`);
+  }
+  return out;
+}
+
+function termVariants(term: string): string[] {
+  const variants = new Set<string>();
+  const singular = singularize(term);
+  if (singular && singular !== term) variants.add(singular);
+  const stemmed = stemPastTense(term);
+  if (stemmed && stemmed !== term) variants.add(stemmed);
+  return [...variants];
+}
+
+function singularize(term: string): string | null {
+  if (term.length <= 3) return null;
+  if (term.endsWith('ies') && term.length > 4) return `${term.slice(0, -3)}y`;
+  if (term.endsWith('ses') && term.length > 4) return term.slice(0, -2);
+  if (/(ches|shes|xes|zes)$/.test(term)) return term.slice(0, -2);
+  if (term.endsWith('s') && !term.endsWith('ss')) return term.slice(0, -1);
+  return null;
+}
+
+function stemPastTense(term: string): string | null {
+  if (term.length <= 4 || !term.endsWith('ed')) return null;
+  if (term.endsWith('ied')) return `${term.slice(0, -3)}y`;
+  if (term.endsWith('ated')) return term.slice(0, -1);
+  return term.slice(0, -2);
 }
 
 export async function lexicalSearch(

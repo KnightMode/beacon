@@ -46,7 +46,7 @@ or PR/review GitHub operations in `workers/slack-bot/src/github.ts`.
 
 Beacon ships a golden-set eval harness (`packages/eval`) that turns every
 retrieval or prompt change into a number instead of vibes. It scores end-to-end
-answer quality against a 24-case golden set with expected citations —
+answer quality against a 28-case golden set with expected citations —
 citation precision/recall/F1, groundedness, and regex checks — by hitting the
 deployed worker's `POST /eval/ask` route.
 

@@ -6,9 +6,11 @@ import { detectIntent, parseIndexRepoTarget } from '../src/intent.js';
 import { needsStagedPrPlan } from '../src/actions/stagedPrPlan.js';
 import { scopeAllowlist } from '../src/retrieval/pipeline.js';
 import { normalizeZoektResponse } from '../src/retrieval/zoekt.js';
+import { packContext } from '../src/retrieval/pack.js';
 import { citedMarkers } from '../src/format.js';
 import { getAllowlistedRepoIds } from '../src/allowlist.js';
 import { buildRetrievalText } from '../src/history.js';
+import { stripAbstentionCitations } from '../src/llm.js';
 
 const REPOS = [
   'knightmode/slack-code-intelligence',
@@ -99,6 +101,30 @@ describe('citedMarkers', () => {
   });
 });
 
+describe('packContext', () => {
+  it('preserves retrieval source on citations for eval attribution', () => {
+    const packed = packContext([
+      {
+        id: 'c1',
+        repoId: 'knightmode/beacon',
+        repoFullName: 'KnightMode/beacon',
+        path: 'workers/slack-bot/src/retrieval/zoekt.ts',
+        language: 'typescript',
+        chunkType: 'function',
+        symbol: 'zoektSearch',
+        startLine: 1,
+        endLine: 20,
+        content: 'export async function zoektSearch() {}',
+        commitSha: 'abc',
+        score: 0.9,
+        source: 'zoekt',
+      },
+    ]);
+
+    expect(packed.citations[0]?.source).toBe('zoekt');
+  });
+});
+
 describe('index intents', () => {
   it('detects "index owner/repo"', () => {
     expect(detectIntent('index KnightMode/some-repo')).toBe('index_repo');
@@ -137,10 +163,29 @@ describe('needsStagedPrPlan', () => {
 });
 
 describe('buildFtsMatch', () => {
+  it('drops question words from symbol extraction', () => {
+    expect(parseQuery('Where are Slack request signatures verified?').symbols).toEqual([
+      'Slack',
+    ]);
+  });
+
   it('quotes needles as prefix phrases joined with OR', () => {
     const match = buildFtsMatch(parseQuery('where is verifySlackSignature used'));
     expect(match).toContain('"verifySlackSignature"*');
     expect(match.split(' OR ').length).toBeGreaterThan(1);
+  });
+
+  it('adds identifier and singular variants for code search recall', () => {
+    const match = buildFtsMatch(parseQuery('How does the indexer chunk markdown files?'));
+
+    expect(match).toContain('"chunkMarkdown"*');
+    expect(match).toContain('"file"*');
+  });
+
+  it('adds singular variants for plural code terms', () => {
+    const match = buildFtsMatch(parseQuery('Where are Slack request signatures verified?'));
+
+    expect(match).toContain('"signature"*');
   });
 
   it('escapes double quotes inside needles', () => {
@@ -167,6 +212,22 @@ describe('buildFtsMatch', () => {
     const terms = Array.from({ length: 25 }, (_, i) => `term${i}xx`);
     const match = buildFtsMatch({ raw: '', symbols: [], terms, intent: 'general' });
     expect(match.split(' OR ').length).toBe(10);
+  });
+});
+
+describe('stripAbstentionCitations', () => {
+  it('removes citation markers from clear abstentions', () => {
+    expect(
+      stripAbstentionCitations(
+        "The provided context doesn't contain HR policy details [1][3].",
+      ),
+    ).toBe("The provided context doesn't contain HR policy details.");
+  });
+
+  it('keeps citation markers on grounded answers', () => {
+    expect(stripAbstentionCitations('Slack signatures use HMAC [1].')).toBe(
+      'Slack signatures use HMAC [1].',
+    );
   });
 });
 

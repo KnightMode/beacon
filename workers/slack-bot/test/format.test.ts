@@ -30,4 +30,44 @@ describe('answer duration formatting', () => {
 
     expect(JSON.stringify(blocks)).not.toContain('Answered in');
   });
+
+  it('does not list sources when the answer cites no markers', () => {
+    const blocks = buildCitationBlocks(
+      [
+        {
+          repoFullName: 'KnightMode/beacon',
+          path: 'src/a.ts',
+          startLine: 1,
+          endLine: 2,
+        },
+      ],
+      "I couldn't find that in the indexed repositories.",
+    );
+
+    expect(JSON.stringify(blocks)).not.toContain('*Sources*');
+  });
+
+  it('lists only sources cited by answer markers', () => {
+    const blocks = buildCitationBlocks(
+      [
+        {
+          repoFullName: 'KnightMode/beacon',
+          path: 'src/a.ts',
+          startLine: 1,
+          endLine: 2,
+        },
+        {
+          repoFullName: 'KnightMode/beacon',
+          path: 'src/b.ts',
+          startLine: 3,
+          endLine: 4,
+        },
+      ],
+      'The relevant behavior is here [2].',
+    );
+    const text = JSON.stringify(blocks);
+
+    expect(text).not.toContain('src/a.ts');
+    expect(text).toContain('src/b.ts');
+  });
 });

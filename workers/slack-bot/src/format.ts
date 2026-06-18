@@ -71,9 +71,7 @@ export function buildCitationBlocks(
   let entries = citations.map((c, idx) => ({ c, n: idx + 1 }));
   if (answerText) {
     const cited = citedMarkers(answerText);
-    if (cited.size > 0) {
-      entries = entries.filter((e) => cited.has(e.n));
-    }
+    entries = entries.filter((e) => cited.has(e.n));
   }
 
   const blocks: SlackBlock[] = [];
