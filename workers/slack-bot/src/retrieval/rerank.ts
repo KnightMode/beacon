@@ -10,8 +10,8 @@ import type { ParsedQuery } from './queryUnderstanding.js';
 
 const SOURCE_WEIGHT: Record<RetrievedChunk['source'], number> = {
   vector: 1.0,
-  scip: 1.1,
-  zoekt: 1.08,
+  scip: 1.0,
+  zoekt: 1.0,
   lexical: 0.85,
   graph: 0.6,
 };
@@ -44,10 +44,15 @@ export function rerank(
   }
 
   const symbolSet = new Set(query.symbols);
+  const needles = queryNeedles(query);
   const scored = [...merged.values()].map((c) => {
     const sources = chunkSources(c);
-    let score = c.score * SOURCE_WEIGHT[c.source] + sourceBonus(sources);
-    if (sources.length > 1) score += 0.08;
+    const pathAligned = matchesQueryPath(c, needles);
+    const queryAligned = pathAligned || matchesQuerySymbol(c, needles);
+    let score = c.score * SOURCE_WEIGHT[c.source];
+    if (pathAligned) score += 0.25;
+    if (queryAligned) score += sourceBonus(sources);
+    if (queryAligned && sources.length > 1) score += 0.08;
     if (c.symbol && symbolSet.has(c.symbol)) score += 0.5;
     if (c.symbol && query.terms.includes(c.symbol.toLowerCase())) score += 0.15;
     if (query.intent === 'definition' && isDefinition(c)) score += 0.1;
@@ -71,6 +76,37 @@ function mergeSources(
 
 function sourceBonus(sources: RetrievedChunk['source'][]): number {
   return sources.reduce((score, source) => score + (SOURCE_BONUS[source] ?? 0), 0);
+}
+
+function matchesQueryPath(c: RetrievedChunk, needles: string[]): boolean {
+  const path = c.path.toLowerCase();
+  const compactPath = compactIdentifier(c.path);
+  return needles.some(
+    (needle) => path.includes(needle) || compactPath.includes(compactIdentifier(needle)),
+  );
+}
+
+function matchesQuerySymbol(c: RetrievedChunk, needles: string[]): boolean {
+  if (!c.symbol) return false;
+  const symbol = c.symbol.toLowerCase();
+  const compactSymbol = compactIdentifier(c.symbol);
+  return needles.some(
+    (needle) => symbol.includes(needle) || compactSymbol.includes(compactIdentifier(needle)),
+  );
+}
+
+function queryNeedles(query: ParsedQuery): string[] {
+  const values = [...query.terms, ...query.symbols.map((s) => s.toLowerCase())];
+  return [...new Set(values.flatMap((value) => [value, singular(value)]))]
+    .filter((value) => value.length > 2);
+}
+
+function singular(value: string): string {
+  return value.endsWith('s') && value.length > 3 ? value.slice(0, -1) : value;
+}
+
+function compactIdentifier(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]/g, '');
 }
 
 function isDefinition(c: RetrievedChunk): boolean {

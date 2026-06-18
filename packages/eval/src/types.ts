@@ -75,6 +75,7 @@ export interface CaseResult {
   question: string;
   score: CaseScore;
   answer: string;
+  citations: EvalCitation[];
   citedFiles: string[];
   citationSources: Record<string, number>;
   usedCitationSources: Record<string, number>;
