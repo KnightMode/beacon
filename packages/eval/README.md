@@ -68,8 +68,10 @@ isn't set on the worker, a `401` means the token doesn't match, and an empty
 allowlist means nothing is indexed yet.
 
 Reports land in `results/latest.json` (plus a timestamped copy); the runner
-prints the delta vs `results/baseline.json` when one exists. `results/` is
-gitignored except `baseline.json`, so local runs stay local.
+prints the delta vs `results/baseline.json` when one exists. Per-case JSON also
+includes citation source counts (`lexical`, `vector`, `graph`, `zoekt`, `scip`)
+so retrieval-stage changes can be debugged without reading Worker logs.
+`results/` is gitignored except `baseline.json`, so local runs stay local.
 
 In CI, the `Eval` workflow (`.github/workflows/eval.yml`) is **manual**
 (`workflow_dispatch` — Actions tab → Eval → "Run workflow") and uses the
@@ -81,7 +83,7 @@ the scores.
 
 ## First-run calibration
 
-The golden set (24 cases) is an answer key written from reading the code, so
+The golden set (28 cases) is an answer key written from reading the code, so
 the **first run measures the answer key as much as the bot**. When a case
 scores low, check whether the bot was actually wrong or the case was too
 strict before "fixing" retrieval:

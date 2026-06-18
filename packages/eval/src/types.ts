@@ -31,6 +31,7 @@ export interface EvalCitation {
   startLine: number;
   endLine: number;
   commitSha?: string | null;
+  source?: 'lexical' | 'vector' | 'graph' | 'zoekt' | 'scip';
 }
 
 /** Successful body of POST /eval/ask. */
@@ -68,6 +69,8 @@ export interface CaseResult {
   score: CaseScore;
   answer: string;
   citedFiles: string[];
+  citationSources: Record<string, number>;
+  usedCitationSources: Record<string, number>;
   timings: EvalAskResponse['timings'];
   error?: string;
 }

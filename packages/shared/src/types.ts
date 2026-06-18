@@ -384,4 +384,6 @@ export interface Citation {
   endLine: number;
   /** Commit sha for a stable permalink; falls back to HEAD when absent. */
   commitSha?: string | null;
+  /** Retrieval stage that produced this citation, for eval/debugging. */
+  source?: RetrievedChunk['source'];
 }

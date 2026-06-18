@@ -7,7 +7,7 @@ import type { Env } from './env.js';
 import { retrieveSmart } from './retrieval/pipeline.js';
 import { generateAnswer } from './llm.js';
 import { buildRetrievalText, type Turn } from './history.js';
-import { buildAnswerMessage, type SlackMessage } from './format.js';
+import { buildAnswerMessage, citedMarkers, type SlackMessage } from './format.js';
 import { userFacingAiError } from './workersAi.js';
 
 export interface BuildAnswerResult {
@@ -33,7 +33,7 @@ export async function buildAnswer(
       message: buildAnswerMessage(question, answer.text, citations, {
         answeredInMs: Date.now() - startedAt,
       }),
-      hadCitations: citations.length > 0,
+      hadCitations: citedMarkers(answer.text).size > 0,
     };
   } catch (err) {
     return {
