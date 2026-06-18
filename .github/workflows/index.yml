@@ -51,6 +51,9 @@ jobs:
   index:
     name: Index
     runs-on: ubuntu-latest
+    env:
+      CODE_INTEL_MODE: ${{ vars.BEACON_CODE_INTEL_MODE || 'off' }}
+      CODE_INTEL_ENABLED: ${{ vars.BEACON_CODE_INTEL_MODE == 'best_effort' || vars.BEACON_CODE_INTEL_MODE == 'best-effort' || vars.BEACON_CODE_INTEL_MODE == 'required' || vars.BEACON_CODE_INTEL_MODE == 'true' }}
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
@@ -58,12 +61,12 @@ jobs:
           node-version: 22
           cache: npm
       - uses: actions/setup-go@v6
-        if: ${{ vars.BEACON_CODE_INTEL_MODE != 'off' }}
+        if: ${{ env.CODE_INTEL_ENABLED == 'true' }}
         with:
           go-version: '1.25.9'
       - run: npm ci --workspace=@scintel/indexer --include-workspace-root
       - name: Install Zoekt indexer
-        if: ${{ vars.BEACON_CODE_INTEL_MODE != 'off' }}
+        if: ${{ env.CODE_INTEL_ENABLED == 'true' }}
         run: |
           go install github.com/sourcegraph/zoekt/cmd/zoekt-index@v0.0.0-20260605122240-893a523804f1
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
@@ -100,7 +103,7 @@ jobs:
           CLOUDFLARE_VECTORIZE_INDEX: 'code-chunks'
           # Optional production code-intel foundation. Heavy generation still
           # runs in GitHub Actions; live Zoekt queries are served separately.
-          CODE_INTEL_MODE: ${{ vars.BEACON_CODE_INTEL_MODE || 'best_effort' }}
+          CODE_INTEL_MODE: ${{ env.CODE_INTEL_MODE }}
           CODE_INTEL_ARTIFACT_BASE_URI: ${{ vars.BEACON_CODE_INTEL_ARTIFACT_BASE_URI || format('r2://{0}/{1}', vars.BEACON_CODE_INTEL_BUCKET || 'beacon-code-intel', vars.BEACON_ZOEKT_R2_PREFIX || 'zoekt') }}
           ZOEKT_INDEX_BIN: 'zoekt-index'
           ZOEKT_INDEX_DIR: ${{ runner.temp }}/beacon-zoekt-index
@@ -110,7 +113,7 @@ jobs:
           INDEXER_SHARED_SECRET: 'ci-cli-unused'
         run: node scripts/ci-index.mjs
       - name: Provision code-intel R2 bucket
-        if: ${{ vars.BEACON_CODE_INTEL_MODE != 'off' }}
+        if: ${{ env.CODE_INTEL_ENABLED == 'true' }}
         run: node scripts/provision-code-intel.mjs
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -118,7 +121,7 @@ jobs:
           BEACON_CODE_INTEL_BUCKET: ${{ vars.BEACON_CODE_INTEL_BUCKET || 'beacon-code-intel' }}
           BEACON_ZOEKT_R2_PREFIX: ${{ vars.BEACON_ZOEKT_R2_PREFIX || 'zoekt' }}
       - name: Sync Zoekt indexes to R2
-        if: ${{ vars.BEACON_CODE_INTEL_MODE != 'off' }}
+        if: ${{ env.CODE_INTEL_ENABLED == 'true' }}
         run: node scripts/sync-zoekt-index-to-r2.mjs
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

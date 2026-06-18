@@ -70,6 +70,10 @@ BEACON_CODE_INTEL_BUCKET=beacon-code-intel
 BEACON_ZOEKT_R2_PREFIX=zoekt
 ```
 
+GitHub Actions defaults `BEACON_CODE_INTEL_MODE` to `off`. Set the repository
+variable to `best_effort` or `required` only when the extra Zoekt/SCIP artifact
+generation cost is acceptable for indexing runs.
+
 Slack worker:
 
 ```text
