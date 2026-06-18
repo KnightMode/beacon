@@ -28,6 +28,7 @@ Per case (`src/score.ts` — treat it as locked, like autoresearch's
 | Citation F1 | 0.5 | file-level precision/recall of citations the answer actually used vs `expectedFiles` |
 | answerMust | 0.3 | fraction of required regexes matching the answer |
 | Groundedness | 0.2 | fraction of `[n]` markers that map to a real citation |
+| Source recall | 0.2 | optional recall over `expectedCitationSources` such as `zoekt` or `scip` |
 
 Weights renormalize over the parts a case defines. Any `answerMustNot` match
 zeroes the case. Negative cases (`expectNoAnswer`) score 1 iff the answer
@@ -83,7 +84,7 @@ the scores.
 
 ## First-run calibration
 
-The golden set (28 cases) is an answer key written from reading the code, so
+The golden set (34 cases) is an answer key written from reading the code, so
 the **first run measures the answer key as much as the bot**. When a case
 scores low, check whether the bot was actually wrong or the case was too
 strict before "fixing" retrieval:
@@ -108,6 +109,7 @@ Add cases to `golden/beacon.json` (or new files, selected via `--dataset`):
   "id": "unique-id",
   "question": "Where are Slack request signatures verified?",
   "expectedFiles": [{ "path": "workers/slack-bot/src/signature.ts" }], // suffix-tolerant
+  "expectedCitationSources": ["zoekt"], // optional: require cited markers from these backends
   "answerMust": ["hmac|sha-?256"],     // case-insensitive regexes
   "answerMustNot": ["kubectl"],        // hard fail if matched
   "expectNoAnswer": false               // true for abstain cases

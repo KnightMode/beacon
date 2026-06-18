@@ -6,6 +6,8 @@
 
 import type { GoldenCase } from './types.js';
 
+const CITATION_SOURCES = new Set(['lexical', 'vector', 'graph', 'zoekt', 'scip']);
+
 export interface ValidationIssue {
   caseId: string;
   problem: string;
@@ -35,11 +37,14 @@ export function validateDataset(cases: unknown): ValidationIssue[] {
     }
 
     const positive =
-      (c.expectedFiles?.length ?? 0) > 0 || (c.answerMust?.length ?? 0) > 0;
+      (c.expectedFiles?.length ?? 0) > 0 ||
+      (c.answerMust?.length ?? 0) > 0 ||
+      (c.expectedCitationSources?.length ?? 0) > 0;
     if (c.expectNoAnswer && positive) {
       issues.push({
         caseId: id,
-        problem: 'expectNoAnswer cannot be combined with expectedFiles/answerMust',
+        problem:
+          'expectNoAnswer cannot be combined with expectedFiles/answerMust/expectedCitationSources',
       });
     }
     if (!c.expectNoAnswer && !positive) {
@@ -52,6 +57,15 @@ export function validateDataset(cases: unknown): ValidationIssue[] {
     for (const exp of c.expectedFiles ?? []) {
       if (!exp.path || typeof exp.path !== 'string') {
         issues.push({ caseId: id, problem: 'expectedFiles entry missing "path"' });
+      }
+    }
+
+    for (const source of c.expectedCitationSources ?? []) {
+      if (!CITATION_SOURCES.has(source)) {
+        issues.push({
+          caseId: id,
+          problem: `expectedCitationSources has unknown source ${JSON.stringify(source)}`,
+        });
       }
     }
 

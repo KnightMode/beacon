@@ -2,9 +2,10 @@
  * Pure scoring for one eval case. This file is the locked metric of the
  * harness (the prepare.py of the autoresearch analogy): retrieval/prompt
  * changes are judged by it, so it must not be tuned to make a change look
- * good. Composite weights: citation F1 0.5, answerMust 0.3, groundedness 0.2
- * (renormalized over the parts a case defines); any answerMustNot match
- * zeroes the case; negative cases score 1 iff the answer cites nothing.
+ * good. Composite weights: citation F1 0.5, answerMust 0.3, groundedness 0.2,
+ * expected citation source recall 0.2 (renormalized over the parts a case
+ * defines); any answerMustNot match zeroes the case; negative cases score 1 iff
+ * the answer cites nothing.
  */
 
 import type {
@@ -15,7 +16,12 @@ import type {
   GoldenCase,
 } from './types.js';
 
-const WEIGHTS = { citationF1: 0.5, mustPassRate: 0.3, groundedness: 0.2 };
+const WEIGHTS = {
+  citationF1: 0.5,
+  mustPassRate: 0.3,
+  groundedness: 0.2,
+  sourceRecall: 0.2,
+};
 
 /** [n] markers referenced in the answer (mirrors slack-bot format.ts). */
 export function citedMarkers(answerText: string): Set<number> {
@@ -89,17 +95,30 @@ export function scoreCase(c: GoldenCase, r: EvalAskResponse): CaseScore {
     new RegExp(p, 'i').test(r.answer),
   );
 
+  let sourceRecall: number | null = null;
+  if (c.expectedCitationSources && c.expectedCitationSources.length > 0) {
+    const citedSources = new Set(
+      validMarkers.flatMap((n) => citationSources(r.citations[n - 1])),
+    );
+    const hits = c.expectedCitationSources.filter((source) =>
+      citedSources.has(source),
+    ).length;
+    sourceRecall = hits / c.expectedCitationSources.length;
+  }
+
   return {
     citationPrecision,
     citationRecall,
     citationF1,
     groundedness,
     mustPassRate,
+    sourceRecall,
     mustNotViolations,
     abstained,
     composite: composite(c, {
       citationF1,
       mustPassRate,
+      sourceRecall,
       groundedness,
       mustNotViolations,
       abstained,
@@ -112,6 +131,7 @@ function composite(
   parts: {
     citationF1: number | null;
     mustPassRate: number | null;
+    sourceRecall: number | null;
     groundedness: number;
     mustNotViolations: string[];
     abstained: boolean;
@@ -129,8 +149,19 @@ function composite(
   if (parts.mustPassRate !== null) {
     components.push({ weight: WEIGHTS.mustPassRate, value: parts.mustPassRate });
   }
+  if (parts.sourceRecall !== null) {
+    components.push({ weight: WEIGHTS.sourceRecall, value: parts.sourceRecall });
+  }
 
   const totalWeight = components.reduce((s, p) => s + p.weight, 0);
   const weighted = components.reduce((s, p) => s + p.weight * p.value, 0);
   return weighted / totalWeight;
+}
+
+function citationSources(citation: EvalCitation): NonNullable<EvalCitation['source']>[] {
+  return citation.sources?.length
+    ? citation.sources
+    : citation.source
+      ? [citation.source]
+      : [];
 }

@@ -15,6 +15,8 @@ export interface GoldenCase {
   question: string;
   /** Files a correct answer should cite. Omit for negative (abstain) cases. */
   expectedFiles?: ExpectedFile[];
+  /** Retrieval backends a correct answer should cite from at least once. */
+  expectedCitationSources?: EvalCitationSource[];
   /** Case-insensitive regexes that must all match the answer text. */
   answerMust?: string[];
   /** Case-insensitive regexes that must NOT match the answer text (hard fail). */
@@ -24,6 +26,8 @@ export interface GoldenCase {
   notes?: string;
 }
 
+export type EvalCitationSource = 'lexical' | 'vector' | 'graph' | 'zoekt' | 'scip';
+
 /** Citation shape returned by the worker (mirrors @scintel/shared Citation). */
 export interface EvalCitation {
   repoFullName: string;
@@ -31,8 +35,8 @@ export interface EvalCitation {
   startLine: number;
   endLine: number;
   commitSha?: string | null;
-  source?: 'lexical' | 'vector' | 'graph' | 'zoekt' | 'scip';
-  sources?: Array<'lexical' | 'vector' | 'graph' | 'zoekt' | 'scip'>;
+  source?: EvalCitationSource;
+  sources?: EvalCitationSource[];
 }
 
 /** Successful body of POST /eval/ask. */
@@ -56,6 +60,8 @@ export interface CaseScore {
   groundedness: number;
   /** Fraction of answerMust regexes that matched. */
   mustPassRate: number | null;
+  /** Fraction of expected citation sources covered by cited markers. */
+  sourceRecall: number | null;
   /** answerMustNot regexes that matched (each is a hard fail). */
   mustNotViolations: string[];
   /** The answer used no citations (the abstain signal for negative cases). */
@@ -85,6 +91,7 @@ export interface EvalReport {
   summary: {
     compositeMean: number;
     citationF1Mean: number | null;
+    sourceRecallMean: number | null;
     abstainAccuracy: number | null;
     failures: number;
     totalMs: number;
