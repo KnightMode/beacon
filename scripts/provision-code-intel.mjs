@@ -41,11 +41,15 @@ async function putPrefixMarker() {
   const marker = path.join(dir, '.keep');
   await writeFile(marker, `created=${new Date().toISOString()}\n`, 'utf8');
   const key = prefix ? `${prefix}/.keep` : '.keep';
-  const result = spawnSync('npx', ['wrangler', 'r2', 'object', 'put', `${bucket}/${key}`, '--file', marker], {
-    cwd: process.cwd(),
-    encoding: 'utf8',
-    stdio: 'inherit',
-  });
+  const result = spawnSync(
+    'npx',
+    ['wrangler', 'r2', 'object', 'put', `${bucket}/${key}`, '--file', marker, '--remote'],
+    {
+      cwd: process.cwd(),
+      encoding: 'utf8',
+      stdio: 'inherit',
+    },
+  );
   if (result.status !== 0) {
     throw new Error(`wrangler r2 object put ${bucket}/${key} failed with exit code ${result.status}`);
   }
