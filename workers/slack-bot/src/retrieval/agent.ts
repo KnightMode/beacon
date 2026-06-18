@@ -25,7 +25,7 @@ import { packContext } from './pack.js';
 import { zoektSearch } from './zoekt.js';
 import { scipSearch, fetchScipDefinitions, fetchScipReferences } from './scip.js';
 
-const MAX_TURNS = 3;
+const MAX_TURNS = 2;
 const MAX_TOOLS_PER_TURN = 3;
 const MAX_POOL = 60;
 const FAST_PATH_MIN_POOL = 8;
