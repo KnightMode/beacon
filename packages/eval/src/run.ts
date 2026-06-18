@@ -128,12 +128,20 @@ async function runCase(opts: CliOptions, c: GoldenCase): Promise<CaseResult> {
           .map((n) => `${res.citations[n - 1].repoFullName}/${res.citations[n - 1].path}`),
       ),
     ];
+    const citationSources = sourceCounts(res.citations);
+    const usedCitationSources = sourceCounts(
+      markers
+        .filter((n) => n >= 1 && n <= res.citations.length)
+        .map((n) => res.citations[n - 1]!),
+    );
     return {
       caseId: c.id,
       question: c.question,
       score,
       answer: res.answer,
       citedFiles,
+      citationSources,
+      usedCitationSources,
       timings: res.timings,
     };
   } catch (err) {
@@ -152,10 +160,23 @@ async function runCase(opts: CliOptions, c: GoldenCase): Promise<CaseResult> {
       },
       answer: '',
       citedFiles: [],
+      citationSources: {},
+      usedCitationSources: {},
       timings: { retrievalMs: 0, llmMs: 0, totalMs: 0 },
       error: (err as Error).message,
     };
   }
+}
+
+function sourceCounts(
+  citations: Array<{ source?: string | null }>,
+): Record<string, number> {
+  const counts: Record<string, number> = {};
+  for (const citation of citations) {
+    const source = citation.source ?? 'unknown';
+    counts[source] = (counts[source] ?? 0) + 1;
+  }
+  return counts;
 }
 
 async function runPool(opts: CliOptions, cases: GoldenCase[]): Promise<CaseResult[]> {

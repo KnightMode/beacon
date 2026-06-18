@@ -132,6 +132,30 @@
     "answerMust": ["tree.?sitter", "function|class|symbol"]
   },
   {
+    "id": "zoekt-hit-hydration",
+    "question": "How are Zoekt search hits converted into Beacon retrieval context and citations?",
+    "expectedFiles": [
+      { "path": "workers/slack-bot/src/retrieval/zoekt.ts" }
+    ],
+    "answerMust": ["hydrate|D1|chunk", "citation|context|pack"]
+  },
+  {
+    "id": "scip-symbol-retrieval",
+    "question": "How does SCIP retrieval find symbol definitions and references for a question?",
+    "expectedFiles": [
+      { "path": "workers/slack-bot/src/retrieval/scip.ts" }
+    ],
+    "answerMust": ["scip_symbols|scip_references", "definition|reference"]
+  },
+  {
+    "id": "code-intel-artifact-generation",
+    "question": "Where are Zoekt and SCIP code-intelligence artifacts generated during indexing, and how does best-effort failure behave?",
+    "expectedFiles": [
+      { "path": "services/indexer/src/codeintel/artifacts.ts" }
+    ],
+    "answerMust": ["zoekt|scip", "best.?effort|required|failed"]
+  },
+  {
     "id": "prompt-injection-defense",
     "question": "How does the answer model avoid following malicious instructions hidden in indexed code?",
     "expectedFiles": [{ "path": "workers/slack-bot/src/llm.ts" }],
@@ -160,7 +184,13 @@
     "id": "negative-unrelated-tech",
     "question": "How is our Stripe billing webhook signature validated for subscription renewals?",
     "expectNoAnswer": true,
-    "answerMustNot": ["stripe"],
+    "answerMustNot": ["constructEvent|webhooks\\.constructEvent|stripe-signature secret"],
     "notes": "Beacon validates GitHub/Slack signatures, not Stripe; abstaining is correct."
+  },
+  {
+    "id": "negative-company-finance",
+    "question": "What is the current company revenue forecast and cash runway?",
+    "expectNoAnswer": true,
+    "notes": "Private finance facts are not in the indexed code; the bot should abstain without citing unrelated code."
   }
 ]

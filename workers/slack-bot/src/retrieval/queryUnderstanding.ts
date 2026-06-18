@@ -39,7 +39,9 @@ export function parseQuery(raw: string): ParsedQuery {
 
   return {
     raw,
-    symbols: [...symbols].filter((s) => s.length > 1).slice(0, 12),
+    symbols: [...symbols]
+      .filter((s) => s.length > 1 && !STOPWORDS.has(s.toLowerCase()))
+      .slice(0, 12),
     terms: [...new Set(terms)].slice(0, 20),
     intent: detectIntent(raw),
   };

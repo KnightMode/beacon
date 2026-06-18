@@ -3,7 +3,7 @@
 Foundations are in place; these are the highest-leverage next steps, roughly in
 order.
 
-1. **Eval harness** — ✅ shipped (`packages/eval`): a 24-case golden set with
+1. **Eval harness** — ✅ shipped (`packages/eval`): a 28-case golden set with
    expected citations scored against the deployed worker via `POST /eval/ask`
    (citation P/R/F1 + groundedness + regex checks; offline dataset validation +
    preflight; manual `Eval` workflow in CI). Next: grow the golden set from real
