@@ -41,6 +41,7 @@ export function packContext(
       endLine: c.endLine,
       commitSha: c.commitSha,
       source: c.source,
+      sources: c.sources ?? [c.source],
     });
     budget -= block.length;
   });

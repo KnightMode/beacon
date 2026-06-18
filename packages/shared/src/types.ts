@@ -375,6 +375,8 @@ export interface RetrievedChunk {
   score: number;
   /** Where the chunk came from, for debugging/observability. */
   source: 'lexical' | 'vector' | 'graph' | 'zoekt' | 'scip';
+  /** All retrieval stages that produced this chunk after de-duping. */
+  sources?: Array<RetrievedChunk['source']>;
 }
 
 export interface Citation {
@@ -386,4 +388,6 @@ export interface Citation {
   commitSha?: string | null;
   /** Retrieval stage that produced this citation, for eval/debugging. */
   source?: RetrievedChunk['source'];
+  /** All retrieval stages that found this citation's chunk. */
+  sources?: Array<RetrievedChunk['source']>;
 }
