@@ -169,12 +169,17 @@ async function runCase(opts: CliOptions, c: GoldenCase): Promise<CaseResult> {
 }
 
 function sourceCounts(
-  citations: Array<{ source?: string | null }>,
+  citations: Array<{ source?: string | null; sources?: Array<string | null> | null }>,
 ): Record<string, number> {
   const counts: Record<string, number> = {};
   for (const citation of citations) {
-    const source = citation.source ?? 'unknown';
-    counts[source] = (counts[source] ?? 0) + 1;
+    const sources = citation.sources?.length
+      ? citation.sources
+      : [citation.source ?? 'unknown'];
+    for (const source of sources) {
+      const key = source ?? 'unknown';
+      counts[key] = (counts[key] ?? 0) + 1;
+    }
   }
   return counts;
 }

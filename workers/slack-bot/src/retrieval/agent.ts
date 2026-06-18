@@ -340,14 +340,26 @@ function addToPool(pool: Map<string, RetrievedChunk>, chunks: RetrievedChunk[]):
     if (pool.size >= MAX_POOL && !pool.has(c.id)) continue;
     const existing = pool.get(c.id);
     if (!existing) {
-      pool.set(c.id, { ...c });
+      pool.set(c.id, { ...c, sources: chunkSources(c) });
     } else {
       existing.score = Math.max(existing.score, c.score);
       if (existing.content === '' && c.content !== '') {
         existing.content = c.content;
       }
+      existing.sources = mergeSources(existing, c);
     }
   }
+}
+
+function chunkSources(chunk: RetrievedChunk): RetrievedChunk['source'][] {
+  return [...new Set([...(chunk.sources ?? []), chunk.source])];
+}
+
+function mergeSources(
+  existing: RetrievedChunk,
+  incoming: RetrievedChunk,
+): RetrievedChunk['source'][] {
+  return [...new Set([...chunkSources(existing), ...chunkSources(incoming)])];
 }
 
 async function runSearch(
