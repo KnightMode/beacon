@@ -41,7 +41,7 @@ GitHub Actions. Nothing to operate, nothing to keep warm.
 1. **Verify** the Slack signature on every request.
 2. **Resolve tenant context** from the signed Slack `team_id`. Tenant-scoped
    installs use encrypted bot tokens stored by the admin portal; the static
-   `SLACK_BOT_TOKEN` remains a fallback for local/prototype paths.
+   `SLACK_BOT_TOKEN` remains a fallback for local/non-tenant development paths.
 3. **Route** the intent: question, index command, index status, notify-channel
    mapping, PR review, PR creation.
 4. **Retrieve** evidence with hybrid search:

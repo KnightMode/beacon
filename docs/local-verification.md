@@ -15,6 +15,7 @@ npm run e2e:local
 The runner:
 
 - creates fresh local D1 state under `.wrangler/e2e-state`
+- applies the full `packages/shared/schema.sql` fresh-install schema
 - starts `wrangler pages dev site` on a free localhost port
 - completes mock Slack OAuth
 - connects two mock GitHub installations to the same tenant
@@ -36,7 +37,9 @@ npm run db:local:init
 npm run dev:portal
 ```
 
-Wrangler loads secrets from `.dev.vars` at the repo root for `dev:portal`.
+`db:local:init` applies `packages/shared/schema.sql` and then runs the same
+safe admin/code-intel migration runner used by deploys. Wrangler loads secrets
+from `.dev.vars` at the repo root for `dev:portal`.
 The same encryption secret must appear in `workers/slack-bot/.dev.vars` when
 testing the bot against the shared local D1.
 
@@ -68,7 +71,7 @@ Create `workers/slack-bot/.dev.vars` with at least:
 
 ```
 SLACK_SIGNING_SECRET=local-dev-signing-secret
-SLACK_BOT_TOKEN=xoxb-fallback-token
+SLACK_BOT_TOKEN=replace-with-local-fallback-token
 SLACK_TOKEN_ENCRYPTION_SECRET=local-dev-slack-encryption-secret
 GITHUB_APP_ID=your-app-id-if-testing-real-github
 GITHUB_APP_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----"

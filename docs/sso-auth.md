@@ -54,11 +54,11 @@ Two levels, depending on how strict the tenant wants to be:
 
 - The tenant installs our GitHub App and picks repos. Everyone in the Slack
   workspace can query everything the tenant has indexed.
-- Current implementation: the admin repo picker uses short-lived installation
-  tokens minted from the App's private key; indexing and Slack-side PR actions
-  still use configured PATs.
-- Target implementation: all tenant GitHub reads should move to installation
-  tokens so long-lived PATs are not required for customer repo access.
+- Current implementation: the admin repo picker, Slack-side GitHub reads/writes,
+  and tenant indexing jobs use short-lived installation tokens minted from the
+  App's private key when a Slack tenant and selected repo grant are present.
+  `GITHUB_PAT` remains only for legacy local/non-tenant development paths and
+  as an optional workflow-dispatch token.
 
 ### Level 2 — per-user mirroring (opt-in, "strict mode")
 
@@ -78,7 +78,8 @@ Two levels, depending on how strict the tenant wants to be:
 - Indexer HTTP endpoint: shared bearer secret, plus the job itself carries
   the tenant context so the indexer can only write to that tenant's database
   and namespace.
-- Stripe webhooks: Stripe signature verification.
+- Billing webhooks: future work; any Stripe integration must verify Stripe
+  webhook signatures before updating tenant state.
 - Admin portal: Cloudflare Access protects deployed admin paths; the Pages app
   also uses a signed short-lived `beacon_admin_session` cookie after Slack
   OAuth.

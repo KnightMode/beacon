@@ -47,9 +47,11 @@ tenant-scoped rows:
 - `tenant_slack_installs`
 - `tenant_github_installations`
 - `pending_installation_repos`
+- `github_installation_repos`
 - `tenant_repos`
 - `tenant_onboarding_steps`
 - `tenant_ci_notify_channels`
+- `audit_events`
 - `repos`
 - `repo_index_status`
 

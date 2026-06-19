@@ -35,7 +35,7 @@ const MAX_FAILED_JOBS = 2;
 
 export async function processTriageJob(env: Env, job: TriageJob): Promise<void> {
   // Claim before doing any work. Tenant-scoped jobs dedupe per Slack workspace;
-  // legacy prototype jobs keep the original global (run, attempt) claim.
+  // Legacy non-tenant jobs keep the original global (run, attempt) claim.
   const claimed = await claimTriageRun(env, job);
   if (!claimed) {
     console.log('ci triage: duplicate run, skipping', {
