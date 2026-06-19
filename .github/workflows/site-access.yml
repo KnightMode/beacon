@@ -13,7 +13,7 @@ on:
       allowed_emails:
         description: 'Comma-separated email addresses allowed to log in with OTP'
         required: false
-        default: 'differentialcircuit@gmail.com'
+        default: ''
         type: string
       allowed_domains:
         description: 'Comma-separated email domains allowed to log in with OTP'
@@ -55,7 +55,7 @@ on:
       d1_database_id:
         description: 'Cloudflare D1 database id for the admin portal'
         required: false
-        default: '27722a79-10d9-4bfc-aa53-1d65a80c8f79'
+        default: ''
         type: string
       slack_client_id:
         description: 'Slack OAuth client id for the admin portal'
@@ -64,7 +64,7 @@ on:
       github_app_slug:
         description: 'GitHub App slug used by Connect GitHub'
         required: false
-        default: 'scintel-indexer'
+        default: ''
         type: string
       pipeline_dispatch_repo:
         description: 'Repo that receives repository_dispatch indexing events'
@@ -88,7 +88,7 @@ on:
       auth_domain:
         description: 'Zero Trust team domain for Access login'
         required: true
-        default: 'beacon-90k.cloudflareaccess.com'
+        default: ''
         type: string
       session_duration:
         description: 'Cloudflare Access session duration'
@@ -115,7 +115,7 @@ jobs:
         env:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          PAGES_CUSTOM_DOMAIN: askbeacon.dev
+          PAGES_CUSTOM_DOMAIN: ${{ inputs.site_hostname }}
       - name: Apply D1 admin schema
         run: node scripts/apply-admin-d1-migrations.mjs
         env:

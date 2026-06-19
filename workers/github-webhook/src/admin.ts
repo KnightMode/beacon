@@ -1,7 +1,7 @@
 /**
  * Dev-only admin endpoint: POST /admin/index  (Authorization: Bearer <ADMIN_TOKEN>)
  *
- * Lets the legacy prototype/dev path work without tenant GitHub App webhooks:
+ * Lets the legacy local/non-tenant path work without tenant GitHub App webhooks:
  * it upserts the repo, adds it to the allowlist, and enqueues a FULL_INDEX job.
  *
  * Body: { "repo": "owner/name", "commitSha"?: "..." }

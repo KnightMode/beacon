@@ -7,9 +7,9 @@
 -- Notes:
 --  * D1 is SQLite. Timestamps are stored as ISO-8601 TEXT (UTC).
 --  * Booleans are stored as INTEGER (0/1).
---  * `users` and `github_user_repo_permissions` are NOT used by the prototype
---    auth model (single PAT + static allowlist). They exist as clean extension
---    points for production per-user GitHub OAuth + permission sync.
+--  * `users` and `github_user_repo_permissions` are not enforced by the
+--    current default workspace-level auth model. They exist as extension points
+--    for strict per-user GitHub OAuth + permission sync.
 -- =============================================================================
 
 PRAGMA foreign_keys = ON;
@@ -203,7 +203,7 @@ CREATE TABLE IF NOT EXISTS repo_index_status (
 CREATE TABLE IF NOT EXISTS slack_workspaces (
   id            TEXT PRIMARY KEY,                   -- Slack team id
   team_name     TEXT,
-  bot_token     TEXT,                               -- xoxb- (prototype: usually a single env token)
+  bot_token     TEXT,                               -- legacy static workspace token
   bot_user_id   TEXT,
   installed_at  TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -347,7 +347,7 @@ CREATE TABLE IF NOT EXISTS staged_pr_steps (
   UNIQUE (plan_id, step_order)
 );
 
--- ---- Static repo allowlist (prototype auth) ---------------------------------
+-- ---- Static repo allowlist (legacy non-tenant/dev auth) ----------------------
 CREATE TABLE IF NOT EXISTS prototype_repo_allowlist (
   repo_id     TEXT PRIMARY KEY REFERENCES repos(id) ON DELETE CASCADE,
   full_name   TEXT NOT NULL,
@@ -386,7 +386,7 @@ CREATE TABLE IF NOT EXISTS tenant_ci_triage_runs (
   PRIMARY KEY (run_id, run_attempt, slack_team_id)
 );
 
--- ---- Future production auth (NOT used by prototype) --------------------------
+-- ---- Future strict per-user auth --------------------------------------------
 CREATE TABLE IF NOT EXISTS users (
   id                TEXT PRIMARY KEY,               -- internal user id
   slack_user_id     TEXT UNIQUE,

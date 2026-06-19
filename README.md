@@ -14,6 +14,7 @@
   <a href="docs/setup.md">Setup</a> ·
   <a href="docs/usage.md">Usage</a> ·
   <a href="docs/security.md">Security</a> ·
+  <a href="docs/open-source.md">Open source</a> ·
   <a href="docs/roadmap.md">Roadmap</a> ·
   <a href="LICENSE">License</a>
 </p>
@@ -110,10 +111,11 @@ plumbing. Full walkthrough in [docs/architecture.md](docs/architecture.md).
 
 ## Licensing
 
-Beacon is proprietary software. This repository is not open source, and no
-permission is granted to use, copy, modify, distribute, sublicense, or sell the
-source code except under a separate written agreement with the copyright
-holder. See [LICENSE](LICENSE).
+Beacon's implementation is open source under the MIT License. This repository
+contains the Slack bot Worker, GitHub webhook Worker, Pages admin portal,
+Node-based indexer, Zoekt query container, shared D1 schema/migrations, eval
+harness, and deployment docs. See [LICENSE](LICENSE) and
+[docs/open-source.md](docs/open-source.md).
 
 ## Get started
 

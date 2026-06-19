@@ -8,6 +8,7 @@ The [README](../README.md) is the pitch. This is everything else.
 | [Zoekt + SCIP foundation](./code-intel-foundation.md) | Production code-intel foundation: Zoekt search, SCIP facts, GHA indexing, Container query serving, staged PR plans. |
 | [Setup](./setup.md) | End-to-end install: Cloudflare resources, GitHub PAT + App, Slack app, secrets, deploy. |
 | [Usage](./usage.md) | Every Slack command, how to index repos, and how to trigger indexing manually. |
+| [Open-source implementation](./open-source.md) | What is included in the MIT-licensed repo, what is not, and the public-release boundary. |
 | [Security model](./security.md) | Signature verification, prompt-injection posture, secret redaction, and the auth boundary. |
 | [Admin portal](./admin-portal.md) | Current Pages admin onboarding flow: Slack OAuth, GitHub App, repo picker, indexing status, and setup state. |
 | [Onboarding](./onboarding.md) | Customer setup flow as implemented today, plus what remains future work. |

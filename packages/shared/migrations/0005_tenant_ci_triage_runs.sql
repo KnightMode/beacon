@@ -1,7 +1,7 @@
 -- Migration 0005: per-tenant CI triage dedupe.
 --
 -- Legacy ci_triage_runs dedupes globally by (run_id, run_attempt). That is
--- correct for prototype/global notifications, but tenant notifications need one
+-- correct for legacy global notifications, but tenant notifications need one
 -- claim per Slack workspace when multiple tenants select the same repo.
 
 CREATE TABLE IF NOT EXISTS tenant_ci_triage_runs (

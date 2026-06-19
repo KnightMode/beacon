@@ -2,7 +2,7 @@
   "name": "@beacon/zoekt-search-container",
   "version": "0.1.0",
   "private": true,
-  "license": "UNLICENSED",
+  "license": "MIT",
   "type": "module",
   "scripts": {
     "dev": "wrangler dev",
