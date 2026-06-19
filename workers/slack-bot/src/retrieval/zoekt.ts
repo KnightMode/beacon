@@ -13,6 +13,20 @@ import type { ParsedQuery } from './queryUnderstanding.js';
 
 const DEFAULT_LIMIT = 20;
 const REQUEST_TIMEOUT_MS = 2_000;
+const MAX_ZOEKT_QUERY_TERMS = 8;
+const ZOEKT_QUERY_STOPWORDS = new Set([
+  'beacon',
+  'code',
+  'converted',
+  'generated',
+  'into',
+  'question',
+  'questions',
+  'search',
+  'service',
+  'used',
+  'using',
+]);
 
 export interface ZoektMatch {
   repo: string;
@@ -45,7 +59,7 @@ export async function zoektSearch(
 ): Promise<RetrievedChunk[]> {
   if ((!env.ZOEKT_SEARCH_URL && !env.ZOEKT_SEARCH) || allowlist.length === 0) return [];
 
-  const query = zoektQuery(parsed);
+  const query = buildZoektQuery(parsed);
   if (!query) return [];
 
   try {
@@ -59,10 +73,44 @@ export async function zoektSearch(
   }
 }
 
-function zoektQuery(parsed: ParsedQuery): string {
-  const raw = parsed.raw.trim();
-  if (raw) return raw;
-  return [...parsed.symbols, ...parsed.terms].join(' ').trim();
+export function buildZoektQuery(parsed: ParsedQuery): string {
+  const terms = uniqueZoektTerms([
+    ...parsed.symbols,
+    ...pathTerms(parsed.raw),
+    ...parsed.terms,
+  ])
+    .map((term) => term.trim())
+    .filter(isZoektQueryTerm);
+  const query = terms
+    .slice(0, MAX_ZOEKT_QUERY_TERMS)
+    .map(quoteZoektTerm)
+    .join(' or ');
+  return query || parsed.raw.trim();
+}
+
+function uniqueZoektTerms(terms: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const term of terms) {
+    const key = term.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(term);
+  }
+  return out;
+}
+
+function pathTerms(raw: string): string[] {
+  return raw.match(/\b[A-Za-z0-9_.-]+(?:\/[A-Za-z0-9_.-]+)+\b/g) ?? [];
+}
+
+function isZoektQueryTerm(term: string): boolean {
+  const normalized = term.toLowerCase();
+  return term.length > 2 && !ZOEKT_QUERY_STOPWORDS.has(normalized);
+}
+
+function quoteZoektTerm(term: string): string {
+  return /[^A-Za-z0-9_./-]/.test(term) ? JSON.stringify(term) : term;
 }
 
 async function fetchZoekt(

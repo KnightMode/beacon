@@ -5,7 +5,7 @@ import { parsePlannerOutput, shouldRunPlanner } from '../src/retrieval/agent.js'
 import { detectIntent, parseIndexRepoTarget } from '../src/intent.js';
 import { needsStagedPrPlan } from '../src/actions/stagedPrPlan.js';
 import { scopeAllowlist } from '../src/retrieval/pipeline.js';
-import { normalizeZoektResponse } from '../src/retrieval/zoekt.js';
+import { buildZoektQuery, normalizeZoektResponse } from '../src/retrieval/zoekt.js';
 import { packContext } from '../src/retrieval/pack.js';
 import { rerank } from '../src/retrieval/rerank.js';
 import { citedMarkers } from '../src/format.js';
@@ -175,6 +175,26 @@ describe('rerank', () => {
     const ranked = rerank(parsed, [[scip], [markdown]], 2);
 
     expect(ranked[0]?.id).toBe('markdown');
+  });
+});
+
+describe('buildZoektQuery', () => {
+  it('uses high-signal parsed terms instead of the raw natural-language question', () => {
+    const query = buildZoektQuery(
+      parseQuery('How are Zoekt search hits converted into Beacon retrieval context and citations?'),
+    );
+
+    expect(query).toBe('Zoekt or hits or retrieval or context or citations');
+    expect(query).not.toContain('How are');
+  });
+
+  it('keeps explicit symbols and path-like terms searchable', () => {
+    const query = buildZoektQuery(
+      parseQuery('How does `ZOEKT_SEARCH_URL` connect to workers/slack-bot/wrangler.toml?'),
+    );
+
+    expect(query).toContain('ZOEKT_SEARCH_URL');
+    expect(query).toContain('workers/slack-bot/wrangler.toml');
   });
 });
 
