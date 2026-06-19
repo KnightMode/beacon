@@ -18,13 +18,13 @@ const PATH_LABELS = {
   '/oauth/github/callback*': 'GitHub connection',
 };
 const organizationName = process.env.ACCESS_ORGANIZATION_NAME?.trim() || 'Beacon';
-const authDomain = cleanAuthDomain(process.env.ACCESS_AUTH_DOMAIN || 'beacon-90k.cloudflareaccess.com');
+const authDomain = cleanAuthDomain(requiredEnv('ACCESS_AUTH_DOMAIN'));
 const policyName = process.env.ACCESS_POLICY_NAME?.trim() || 'Allow approved email OTP';
 const sessionDuration = process.env.ACCESS_SESSION_DURATION?.trim() || '24h';
 const protectedPaths = splitCsv(
   process.env.ACCESS_PROTECTED_PATHS || '/admin*,/api/admin*,/oauth/slack/callback*,/oauth/github/callback*',
 ).map(normalizeAccessPath);
-const allowedEmails = splitCsv(process.env.ACCESS_ALLOWED_EMAILS || 'differentialcircuit@gmail.com');
+const allowedEmails = splitCsv(process.env.ACCESS_ALLOWED_EMAILS);
 const allowedDomains = splitCsv(process.env.ACCESS_ALLOWED_DOMAINS).map((domain) =>
   domain.replace(/^@/, '').toLowerCase(),
 );
@@ -53,8 +53,7 @@ const pagesD1DatabaseId = String(
   firstValue(
     process.env.PAGES_D1_DATABASE_ID,
     process.env.CLOUDFLARE_D1_DATABASE_ID,
-    '27722a79-10d9-4bfc-aa53-1d65a80c8f79',
-  ),
+  ) || '',
 ).trim();
 
 if (allowedEmails.length === 0 && allowedDomains.length === 0) {

@@ -19,7 +19,7 @@ export async function getAllowlistedRepoIds(
   if (tenantAccess) return tenantAccess.repoIds;
 
   // A Slack workspace id means this is a tenant-scoped request. If the
-  // workspace has not onboarded, do not fall back to the prototype allowlist.
+  // workspace has not onboarded, do not fall back to the legacy non-tenant allowlist.
   if (teamId) return [];
 
   const now = Date.now();

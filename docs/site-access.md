@@ -30,7 +30,7 @@ Optional secrets used by later onboarding steps:
 
 Optional repository variables used by later onboarding steps:
 
-- `BEACON_GITHUB_APP_SLUG` (defaults to `scintel-indexer`)
+- `BEACON_GITHUB_APP_SLUG`
 - `BEACON_GITHUB_APP_ID`
 
 ## Configure access
@@ -42,18 +42,19 @@ Cloudflare credentials locally:
 
 1. Open GitHub Actions.
 2. Run `Configure site Access`.
-3. Keep `site_hostname` as `askbeacon.dev`, unless you are protecting a
-   different hostname on the Pages project.
+3. Set `site_hostname` to the hostname on your Pages project. For the hosted
+   Beacon deployment this is `askbeacon.dev`.
 4. Keep `protected_paths` as
    `/admin*,/api/admin*,/oauth/slack/callback*,/oauth/github/callback*`.
 5. Keep `pages_project_name` as `beacon` and `pages_environment` as `production`,
    unless you are protecting another Pages project/environment.
 6. Enter `slack_client_id`, or set the repository variable `SLACK_CLIENT_ID`.
-7. Keep `d1_binding` as `DB`, `d1_database_name` as `scintel`, and
-   `d1_database_id` as `27722a79-10d9-4bfc-aa53-1d65a80c8f79`, unless you
-   created a different D1 database.
-8. Keep `github_app_slug`, `pipeline_dispatch_repo`, and
-   `pipeline_dispatch_event` unless those resources have different names.
+7. Keep `d1_binding` as `DB` and `d1_database_name` as `scintel` unless you
+   created different resources. Set `d1_database_id` or repository variable
+   `CLOUDFLARE_D1_DATABASE_ID` to your D1 database id.
+8. Set `github_app_slug`, or set repository variable `BEACON_GITHUB_APP_SLUG`.
+   Keep `pipeline_dispatch_repo` and `pipeline_dispatch_event` unless those
+   resources have different names.
 9. Enter either `allowed_emails`, `allowed_domains`, or both.
 
 The workflow writes the generated `ADMIN_CF_ACCESS_*` runtime vars directly to
@@ -66,7 +67,7 @@ is needed.
 Example values:
 
 ```text
-allowed_emails: differentialcircuit@gmail.com
+allowed_emails: admin@example.com
 allowed_domains: example.com
 site_hostname: askbeacon.dev
 protected_paths: /admin*,/api/admin*,/oauth/slack/callback*,/oauth/github/callback*
@@ -74,12 +75,12 @@ pages_project_name: beacon
 pages_environment: production
 d1_binding: DB
 d1_database_name: scintel
-d1_database_id: 27722a79-10d9-4bfc-aa53-1d65a80c8f79
+d1_database_id: <d1-database-id>
 slack_client_id: 1234567890.1234567890
-github_app_slug: scintel-indexer
+github_app_slug: beacon
 pipeline_dispatch_repo: KnightMode/beacon
 pipeline_dispatch_event: index-repo
-auth_domain: beacon-90k.cloudflareaccess.com
+auth_domain: your-team.cloudflareaccess.com
 session_duration: 24h
 ```
 
@@ -91,23 +92,23 @@ Access permissions:
 ```bash
 CLOUDFLARE_ACCOUNT_ID=<account-id> \
 CLOUDFLARE_API_TOKEN=<api-token> \
-ACCESS_ALLOWED_EMAILS=differentialcircuit@gmail.com \
+ACCESS_ALLOWED_EMAILS=admin@example.com \
 ACCESS_SITE_HOSTNAME=askbeacon.dev \
 ACCESS_PROTECTED_PATHS='/admin*,/api/admin*,/oauth/slack/callback*,/oauth/github/callback*' \
 ACCESS_PAGES_PROJECT_NAME=beacon \
 ACCESS_PAGES_ENVIRONMENT=production \
 PAGES_D1_BINDING=DB \
 PAGES_D1_DATABASE_NAME=scintel \
-PAGES_D1_DATABASE_ID=27722a79-10d9-4bfc-aa53-1d65a80c8f79 \
+PAGES_D1_DATABASE_ID=<d1-database-id> \
 PAGES_SLACK_CLIENT_ID=1234567890.1234567890 \
 PAGES_ADMIN_SESSION_SECRET=<session-secret> \
 PAGES_SLACK_CLIENT_SECRET=<slack-client-secret> \
 PAGES_SLACK_TOKEN_ENCRYPTION_SECRET=<token-encryption-secret> \
-PAGES_GITHUB_APP_SLUG=scintel-indexer \
+PAGES_GITHUB_APP_SLUG=beacon \
 PAGES_PIPELINE_DISPATCH_REPO=KnightMode/beacon \
 PAGES_PIPELINE_DISPATCH_EVENT=index-repo \
 PAGES_PIPELINE_DISPATCH_TOKEN=<github-token-with-repository-dispatch-access> \
-ACCESS_AUTH_DOMAIN=beacon-90k.cloudflareaccess.com \
+ACCESS_AUTH_DOMAIN=your-team.cloudflareaccess.com \
 npm run configure:site-access
 ```
 
@@ -115,8 +116,8 @@ The workflow creates or reuses the Zero Trust organization, creates or reuses a
 Cloudflare One-time PIN identity provider, creates or reuses path-scoped Access
 self-hosted applications for the admin paths, and creates or updates an allow
 policy named `Allow approved email OTP` on each application. It also applies the
-idempotent tenant migrations (`0004_tenants.sql` and
-`0005_tenant_ci_triage_runs.sql`) to the configured remote D1 database. It then
+same admin/code-intel migration runner used by deploys to the configured remote
+D1 database. It then
 updates the Pages project's `production` runtime variables with the Access
 issuer, audience, and optional in-app email/domain allow-list while preserving
 unrelated Pages environment variables, and it binds the Pages D1 `DB` binding to
@@ -139,22 +140,22 @@ SLACK_CLIENT_ID=<Slack OAuth client id>
 ADMIN_SESSION_SECRET=<GitHub Actions secret>
 SLACK_CLIENT_SECRET=<GitHub Actions secret>
 SLACK_TOKEN_ENCRYPTION_SECRET=<GitHub Actions secret>
-GITHUB_APP_SLUG=scintel-indexer
+GITHUB_APP_SLUG=beacon
 GITHUB_APP_ID=<GitHub App id>
 GITHUB_APP_PRIVATE_KEY=<GitHub Actions secret>
 PIPELINE_DISPATCH_REPO=KnightMode/beacon
 PIPELINE_DISPATCH_EVENT=index-repo
 PIPELINE_DISPATCH_TOKEN=<GitHub Actions secret>
-ADMIN_CF_ACCESS_ISSUER=https://beacon-90k.cloudflareaccess.com
+ADMIN_CF_ACCESS_ISSUER=https://your-team.cloudflareaccess.com
 ADMIN_CF_ACCESS_AUD=<comma-separated audience tags generated by Cloudflare Access>
-ADMIN_CF_ACCESS_ALLOWED_EMAILS=differentialcircuit@gmail.com
+ADMIN_CF_ACCESS_ALLOWED_EMAILS=admin@example.com
 ADMIN_CF_ACCESS_ALLOWED_DOMAINS=
 ```
 
 The workflow also writes this Pages binding:
 
 ```text
-DB=<D1 database id 27722a79-10d9-4bfc-aa53-1d65a80c8f79>
+DB=<D1 database id>
 ```
 
 If `ADMIN_CF_ACCESS_ISSUER` or `ADMIN_CF_ACCESS_AUD` is missing in a deployed

@@ -51,7 +51,7 @@ jobs:
           PAGES_PROJECT_NAME: beacon
           PAGES_ENVIRONMENT: production
           PAGES_D1_BINDING: DB
-          PAGES_D1_DATABASE_ID: ${{ vars.CLOUDFLARE_D1_DATABASE_ID || '27722a79-10d9-4bfc-aa53-1d65a80c8f79' }}
+          PAGES_D1_DATABASE_ID: ${{ vars.CLOUDFLARE_D1_DATABASE_ID }}
           PAGES_SLACK_CLIENT_ID: ${{ vars.SLACK_CLIENT_ID }}
           PAGES_GITHUB_APP_SLUG: ${{ vars.BEACON_GITHUB_APP_SLUG }}
           PAGES_GITHUB_APP_ID: ${{ vars.BEACON_GITHUB_APP_ID }}

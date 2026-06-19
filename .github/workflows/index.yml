@@ -99,7 +99,7 @@ jobs:
           GITHUB_PAT: ${{ secrets.INDEXER_GITHUB_PAT }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_D1_DATABASE_ID: '27722a79-10d9-4bfc-aa53-1d65a80c8f79'
+          CLOUDFLARE_D1_DATABASE_ID: ${{ vars.CLOUDFLARE_D1_DATABASE_ID }}
           CLOUDFLARE_VECTORIZE_INDEX: 'code-chunks'
           # Optional production code-intel foundation. Heavy generation still
           # runs in GitHub Actions; live Zoekt queries are served separately.

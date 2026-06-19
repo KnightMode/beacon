@@ -1,7 +1,7 @@
 /**
  * Per-grammar node-type maps used by the chunker. We walk the syntax tree by
  * node type (rather than compiling tree-sitter queries) to avoid query-compile
- * errors across grammar versions and keep the prototype robust.
+ * errors across grammar versions and keep indexing robust.
  */
 
 import { CHUNK_TYPES, type ChunkType } from '@scintel/shared';
