@@ -14,18 +14,24 @@ npx wrangler queues create scintel-index-jobs
 npx wrangler queues create scintel-index-jobs-dlq
 ```
 
-Databases created before FTS5 existed need the one-time, idempotent migration:
+`packages/shared/schema.sql` is the fresh-install baseline. It includes the
+repository tables, FTS5 search index, tenant onboarding tables, installation
+grant cache, code-intel artifact tables, SCIP facts, and staged PR plan tables.
+
+Databases created before FTS5 existed need the one-time, idempotent FTS
+migration:
 
 ```bash
 npx wrangler d1 execute scintel --remote --file=packages/shared/migrations/0001_chunks_fts.sql
 ```
 
-Multi-tenant admin portal support needs the tenant migrations:
+Existing deployed databases should use the safe migration runner instead of
+manually replaying every SQL file. It applies the current admin/control-plane
+migrations, guards the one-time `tenant_repos.installation_id` ALTER from
+`0006`, and applies the `0007_code_intel_foundation.sql` tables:
 
 ```bash
-npx wrangler d1 execute scintel --remote --file=packages/shared/migrations/0004_tenants.sql
-npx wrangler d1 execute scintel --remote --file=packages/shared/migrations/0005_tenant_ci_triage_runs.sql
-npx wrangler d1 execute scintel --remote --file=packages/shared/migrations/0006_installation_repo_grants.sql
+node scripts/apply-admin-d1-migrations.mjs scintel
 ```
 
 ## 2. GitHub credentials
@@ -75,26 +81,28 @@ deploy-managed slack-bot secrets from repo secrets before each slack-bot deploy:
 `SLACK_TOKEN_ENCRYPTION_SECRET`, `GITHUB_APP_ID`, `GITHUB_APP_PRIVATE_KEY`, and
 `EVAL_TOKEN`.
 
-For the Cloudflare Pages admin portal, the `Configure site Access` workflow
-updates the Pages project and redeploys it with:
+For the Cloudflare Pages admin portal, the `Deploy site` and
+`Configure site Access` workflows update the Pages project and redeploy it
+with:
 
 - **D1 binding:** `DB` pointing at the same `scintel` database.
-- **D1 tenant migrations:** `0004_tenants.sql`,
-  `0005_tenant_ci_triage_runs.sql`, and `0006_installation_repo_grants.sql`
-  applied to the remote database.
+- **D1 migrations:** the safe migration runner applies tenant onboarding,
+  per-tenant CI dedupe, installation-grant routing, and code-intel foundation
+  tables to the remote database.
 - **Secrets from GitHub Actions:** `ADMIN_SESSION_SECRET`, `SLACK_CLIENT_SECRET`,
   `SLACK_TOKEN_ENCRYPTION_SECRET`, `PIPELINE_DISPATCH_TOKEN`, and
   `BEACON_GITHUB_APP_PRIVATE_KEY` (written to Pages as `GITHUB_APP_PRIVATE_KEY`).
-- **Vars:** `SLACK_CLIENT_ID`, `GITHUB_APP_SLUG`, `GITHUB_APP_ID`, and
-  `PIPELINE_DISPATCH_REPO`.
+- **Vars:** `SLACK_CLIENT_ID`, `GITHUB_APP_SLUG`, `GITHUB_APP_ID`,
+  `PIPELINE_DISPATCH_REPO`, and `CLOUDFLARE_D1_DATABASE_ID`.
 - **Cloudflare Access vars:** `ADMIN_CF_ACCESS_ISSUER` and
   `ADMIN_CF_ACCESS_AUD` are required for deployed admin routes. Optionally set
   `ADMIN_CF_ACCESS_ALLOWED_EMAILS` or `ADMIN_CF_ACCESS_ALLOWED_DOMAINS` for an
   in-app allow-list that mirrors the Access policy.
 
-The Slack OAuth redirect URL is
-`https://askbeacon.dev/oauth/slack/callback`. The GitHub App setup callback is
-`https://askbeacon.dev/oauth/github/callback`.
+For the hosted Beacon deployment, the Slack OAuth redirect URL is
+`https://askbeacon.dev/oauth/slack/callback` and the GitHub App setup callback
+is `https://askbeacon.dev/oauth/github/callback`. For self-hosting, replace
+`askbeacon.dev` with your Pages hostname.
 
 If Slack OAuth redirects back with `Cannot read properties of undefined
 (reading 'batch')`, the Pages deployment does not have the `DB` binding yet.
@@ -127,7 +135,9 @@ dedicated `PIPELINE_DISPATCH_TOKEN` can be used only to trigger the workflow;
 tenant repo contents are read with GitHub App installation tokens.
 
 **Key vars** (`wrangler.toml`): `LLM_MODEL`, `EMBEDDING_MODEL`,
-`AGENTIC_RETRIEVAL`, `AGENTIC_PLANNER_MODE`, `PIPELINE_DISPATCH_REPO`.
+`AGENTIC_RETRIEVAL`, `AGENTIC_PLANNER_MODE`, `PIPELINE_DISPATCH_REPO`,
+`ZOEKT_SEARCH_URL`, `CODE_INTEL_MODE`, and the `BEACON_CODE_INTEL_*` repository
+variables used by the indexing workflow.
 
 ## 5. GitHub App (tenant access and webhooks)
 

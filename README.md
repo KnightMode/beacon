@@ -14,8 +14,17 @@
   <a href="docs/setup.md">Setup</a> ·
   <a href="docs/usage.md">Usage</a> ·
   <a href="docs/security.md">Security</a> ·
+  <a href="docs/open-source.md">Open source</a> ·
   <a href="docs/roadmap.md">Roadmap</a> ·
   <a href="LICENSE">License</a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/KnightMode/beacon/actions/workflows/ci.yml"><img src="https://github.com/KnightMode/beacon/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT"></a>
+  <img src="https://img.shields.io/badge/node-%E2%89%A520-339933?logo=node.js&logoColor=white" alt="Node >= 20">
+  <a href="https://developers.cloudflare.com/workers/"><img src="https://img.shields.io/badge/runtime-Cloudflare%20Workers-F38020?logo=cloudflare&logoColor=white" alt="Cloudflare Workers"></a>
+  <a href="CONTRIBUTING.md"><img src="https://img.shields.io/badge/PRs-welcome-brightgreen.svg" alt="PRs welcome"></a>
 </p>
 
 ## Demo
@@ -110,12 +119,38 @@ plumbing. Full walkthrough in [docs/architecture.md](docs/architecture.md).
 
 ## Licensing
 
-Beacon is proprietary software. This repository is not open source, and no
-permission is granted to use, copy, modify, distribute, sublicense, or sell the
-source code except under a separate written agreement with the copyright
-holder. See [LICENSE](LICENSE).
+Beacon's implementation is open source under the MIT License. This repository
+contains the Slack bot Worker, GitHub webhook Worker, Pages admin portal,
+Node-based indexer, Zoekt query container, shared D1 schema/migrations, eval
+harness, and deployment docs. See [LICENSE](LICENSE) and
+[docs/open-source.md](docs/open-source.md).
 
 ## Get started
 
 → **[Set it up](docs/setup.md)** · **[Use it](docs/usage.md)** ·
 **[Read the architecture](docs/architecture.md)**
+
+### Run it locally
+
+You don't need a cloud account to hack on Beacon. The basics:
+
+```bash
+git clone https://github.com/KnightMode/beacon.git
+cd beacon
+npm install
+npm run typecheck && npm test     # confirm a healthy checkout
+
+cp site/.dev.vars.example .dev.vars   # local-only, gitignored
+npm run db:local:init                 # local D1: schema + migrations
+npm run dev:portal                    # admin portal at http://127.0.0.1:8788
+```
+
+Full local workflow in [docs/development.md](docs/development.md) and
+[docs/local-verification.md](docs/local-verification.md).
+
+## Contributing
+
+Contributions are welcome. Please read **[CONTRIBUTING.md](CONTRIBUTING.md)** for
+the local setup, required checks, and PR flow, and our
+**[Code of Conduct](CODE_OF_CONDUCT.md)**. For security issues, follow
+**[SECURITY.md](SECURITY.md)** — please don't open a public issue for those.

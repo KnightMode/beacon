@@ -25,7 +25,8 @@ bot retrieval is restricted to repos selected for the requesting Slack team.
 
 Tenant GitHub access uses short-lived GitHub App installation tokens resolved
 from the selected repo's installation. Legacy PAT paths are for local/internal
-prototype traffic only and must not be used when a Slack `team_id` is present.
+non-tenant development traffic only and must not be used when a Slack
+`team_id` is present.
 
 User-level GitHub permissions are not enforced yet. The extension points for
 per-user access control are already in place:
