@@ -15,6 +15,17 @@ dist/
 .env.*
 !.env.example
 *.private-key.pem
+*.pem
+
+# Terraform (state holds secrets in plaintext — never commit)
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+crash.log
+crash.*.log
+.terraform.tfstate.lock.info
 
 # Logs
 *.log
