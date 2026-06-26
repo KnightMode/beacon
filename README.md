@@ -19,6 +19,14 @@
   <a href="LICENSE">License</a>
 </p>
 
+<p align="center">
+  <a href="https://github.com/KnightMode/beacon/actions/workflows/ci.yml"><img src="https://github.com/KnightMode/beacon/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT"></a>
+  <img src="https://img.shields.io/badge/node-%E2%89%A520-339933?logo=node.js&logoColor=white" alt="Node >= 20">
+  <a href="https://developers.cloudflare.com/workers/"><img src="https://img.shields.io/badge/runtime-Cloudflare%20Workers-F38020?logo=cloudflare&logoColor=white" alt="Cloudflare Workers"></a>
+  <a href="CONTRIBUTING.md"><img src="https://img.shields.io/badge/PRs-welcome-brightgreen.svg" alt="PRs welcome"></a>
+</p>
+
 ## Demo
 
 https://github.com/user-attachments/assets/011c8d06-e78d-4856-93fd-5f3bab9542a6
@@ -121,3 +129,28 @@ harness, and deployment docs. See [LICENSE](LICENSE) and
 
 → **[Set it up](docs/setup.md)** · **[Use it](docs/usage.md)** ·
 **[Read the architecture](docs/architecture.md)**
+
+### Run it locally
+
+You don't need a cloud account to hack on Beacon. The basics:
+
+```bash
+git clone https://github.com/KnightMode/beacon.git
+cd beacon
+npm install
+npm run typecheck && npm test     # confirm a healthy checkout
+
+cp site/.dev.vars.example .dev.vars   # local-only, gitignored
+npm run db:local:init                 # local D1: schema + migrations
+npm run dev:portal                    # admin portal at http://127.0.0.1:8788
+```
+
+Full local workflow in [docs/development.md](docs/development.md) and
+[docs/local-verification.md](docs/local-verification.md).
+
+## Contributing
+
+Contributions are welcome. Please read **[CONTRIBUTING.md](CONTRIBUTING.md)** for
+the local setup, required checks, and PR flow, and our
+**[Code of Conduct](CODE_OF_CONDUCT.md)**. For security issues, follow
+**[SECURITY.md](SECURITY.md)** — please don't open a public issue for those.

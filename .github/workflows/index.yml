@@ -42,6 +42,11 @@ on:
         required: false
         default: ''
 
+# Least privilege: the indexer reads the repo tree and writes only to external
+# services (D1, Vectorize) via Cloudflare tokens, never back to this repo.
+permissions:
+  contents: read
+
 # Serialize indexings of the same repo so two runs never overlap.
 concurrency:
   group: index-${{ github.event.client_payload.repo || github.event.inputs.repo }}

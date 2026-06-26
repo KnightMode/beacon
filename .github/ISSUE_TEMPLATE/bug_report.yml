@@ -1,0 +1,60 @@
+name: Bug report
+description: Report a problem with Beacon
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a bug. Please do **not** include
+        secrets, tokens, or private repo contents. For security issues, follow
+        [SECURITY.md](https://github.com/KnightMode/beacon/blob/main/SECURITY.md)
+        instead of opening a public issue.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: A clear description of the bug and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: How can we reproduce this? Commands, inputs, and the component involved.
+      placeholder: |
+        1. Run `npm run dev:portal`
+        2. ...
+        3. See error
+    validations:
+      required: true
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      options:
+        - slack-bot worker
+        - github-webhook worker
+        - admin portal (Pages Functions / site)
+        - indexer (services/indexer)
+        - zoekt-search container
+        - shared package / schema / migrations
+        - eval harness
+        - docs
+        - other / not sure
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Node version (`node -v`), OS, and whether this is local or deployed.
+    validations:
+      required: false
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs or output
+      description: Paste any relevant logs. Redact secrets, tokens, and private code.
+      render: shell
+    validations:
+      required: false

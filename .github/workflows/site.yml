@@ -21,6 +21,11 @@ on:
       - '.github/workflows/site.yml'
   workflow_dispatch: {}
 
+# Least privilege: deploys reach Cloudflare via CLOUDFLARE_API_TOKEN, never the
+# repo's GITHUB_TOKEN, so read-only access to repo contents is all that is needed.
+permissions:
+  contents: read
+
 concurrency:
   group: deploy-site-${{ github.ref }}
   cancel-in-progress: true
