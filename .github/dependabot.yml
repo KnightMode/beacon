@@ -1,0 +1,29 @@
+version: 2
+updates:
+  # npm workspaces (root package-lock.json covers all workspaces)
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    groups:
+      dev-dependencies:
+        dependency-type: "development"
+      production-dependencies:
+        dependency-type: "production"
+
+  # GitHub Actions used in .github/workflows
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+
+  # Container images
+  - package-ecosystem: "docker"
+    directory: "/services/indexer"
+    schedule:
+      interval: "weekly"
+  - package-ecosystem: "docker"
+    directory: "/containers/zoekt-search"
+    schedule:
+      interval: "weekly"

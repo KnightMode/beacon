@@ -17,6 +17,11 @@ on:
         type: string
         default: '0'
 
+# Least privilege: the eval harness only reads the repo and hits the deployed
+# worker over HTTP, so read-only access to repo contents is all that is needed.
+permissions:
+  contents: read
+
 jobs:
   eval:
     name: Run golden-set eval
