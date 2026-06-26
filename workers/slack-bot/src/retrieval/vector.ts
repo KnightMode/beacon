@@ -1,7 +1,7 @@
 /**
  * Vector search via the Vectorize binding. The query is embedded with the same
  * Workers AI model used at index time, then matches are filtered to the
- * allowlisted repos (prototype auth).
+ * allowlisted repos.
  */
 
 import type { ChunkType, RetrievedChunk } from '@scintel/shared';

@@ -19,6 +19,9 @@ npm run db:local:init
 npm run dev:portal
 ```
 
+`db:local:init` applies the full schema plus the safe admin/code-intel migration
+runner, so local Pages state matches the deployed admin/control-plane shape.
+
 In another terminal:
 
 ```bash

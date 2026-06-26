@@ -1,7 +1,7 @@
 /**
  * Lightweight, heuristic query understanding. Extracts candidate symbols/terms
  * and a coarse intent from the natural-language question. No LLM call here —
- * this stays cheap and deterministic for the prototype.
+ * this stays cheap and deterministic in the request path.
  */
 
 export interface ParsedQuery {

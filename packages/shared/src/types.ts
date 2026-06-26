@@ -26,7 +26,7 @@ export interface BaseIndexJob {
   jobType: JobType;
   repoId: string;
   repoFullName: string;
-  /** Slack workspace tenant id for tenant-scoped indexing. Omitted only by legacy dev/prototype jobs. */
+  /** Slack workspace tenant id for tenant-scoped indexing. Omitted only by legacy local/non-tenant jobs. */
   tenantId?: string;
   /** GitHub App installation that grants access to this repo. Required for tenant-scoped indexing. */
   installationId?: number;

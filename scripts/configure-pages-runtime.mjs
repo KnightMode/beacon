@@ -19,8 +19,7 @@ const pagesD1DatabaseId = String(
   firstValue(
     process.env.PAGES_D1_DATABASE_ID,
     process.env.CLOUDFLARE_D1_DATABASE_ID,
-    '27722a79-10d9-4bfc-aa53-1d65a80c8f79',
-  ),
+  ) || '',
 ).trim();
 
 const pagePlainVars = compactVars({

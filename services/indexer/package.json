@@ -2,7 +2,7 @@
   "name": "@scintel/indexer",
   "version": "0.1.0",
   "private": true,
-  "license": "UNLICENSED",
+  "license": "MIT",
   "type": "module",
   "main": "src/index.ts",
   "scripts": {
