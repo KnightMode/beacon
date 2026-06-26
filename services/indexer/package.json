@@ -14,13 +14,13 @@
   },
   "dependencies": {
     "@scintel/shared": "*",
-    "dotenv": "^16.4.7",
-    "express": "^4.21.2",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
     "tree-sitter-wasms": "^0.1.13",
-    "web-tree-sitter": "^0.22.6"
+    "web-tree-sitter": "^0.26.9"
   },
   "devDependencies": {
-    "@types/express": "^4.17.21",
+    "@types/express": "^5.0.6",
     "@types/node": "^22.10.2",
     "tsx": "^4.19.2",
     "typescript": "^5.6.3",
