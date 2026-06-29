@@ -195,6 +195,7 @@ export interface FileRow {
   language: string | null;
   size_bytes: number | null;
   content_hash: string | null;
+  git_blob_sha: string | null;
   commit_sha: string | null;
   created_at: string;
   updated_at: string;

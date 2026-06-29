@@ -38,7 +38,7 @@ import {
   upsertFile,
   chunkIdsForFile,
   chunkHashesForFile,
-  getFileContentHashes,
+  getFileBlobShas,
   deleteChunksByIds,
   deleteEdgesForFile,
   deleteFileData,
@@ -53,10 +53,12 @@ import {
   runCodeIntelArtifacts,
   shouldRunCodeIntel,
 } from '../codeintel/artifacts.js';
+import { partitionTargetsByBlobSha } from './blobSkip.js';
 
 const EMBED_BATCH = 50;
 const FILE_CONCURRENCY = 6;
 const EMBED_IN_FLIGHT = 2;
+const BLOB_FETCH_CONCURRENCY = 8;
 const STATUS_UPDATE_INTERVAL = 25;
 
 export interface IndexResult {
@@ -215,22 +217,58 @@ export async function indexRepo(
     let chunksWritten = 0;
     let edgesWritten = 0;
 
-    const needsTarball =
-      targets.length > 0 ||
-      (shouldRunCodeIntel(config) &&
-        (effectiveJob.jobType === 'FULL_INDEX' || removed.length > 0));
-    const tarball =
-      needsTarball
-        ? await github.downloadTarball(repo.owner, repo.name, commitSha)
-        : new Map<string, string>();
-    const priorHashes = await getFileContentHashes(
+    const priorBlobShas = await getFileBlobShas(
       d1,
       targets.map((e) => fileIdFor(repoId, e.path)),
     );
+    const { unchanged: blobUnchanged, work: workTargets } = partitionTargetsByBlobSha(
+      targets,
+      repoId,
+      priorBlobShas,
+      force,
+      fileIdFor,
+    );
+    filesIndexed += blobUnchanged.length;
+    if (blobUnchanged.length > 0) {
+      log.info('skipped unchanged files via git blob sha', {
+        repo: job.repoFullName,
+        skipped: blobUnchanged.length,
+        remaining: workTargets.length,
+      });
+    }
 
-    const progress = { filesIndexed: 0, chunksWritten: 0 };
+    let indexingContents = new Map<string, string>();
+    if (workTargets.length > 0) {
+      if (effectiveJob.jobType === 'INCREMENTAL_INDEX') {
+        indexingContents = await github.fetchBlobContents(
+          repo.owner,
+          repo.name,
+          workTargets,
+          BLOB_FETCH_CONCURRENCY,
+        );
+        log.info('sparse blob fetch for incremental index', {
+          repo: job.repoFullName,
+          fetched: indexingContents.size,
+          requested: workTargets.length,
+        });
+      } else {
+        indexingContents = await github.downloadTarball(repo.owner, repo.name, commitSha);
+      }
+    }
 
-    const fileStats = await mapPool(targets, FILE_CONCURRENCY, async (entry) => {
+    const needsCodeIntel =
+      shouldRunCodeIntel(config) &&
+      (effectiveJob.jobType === 'FULL_INDEX' || removed.length > 0 || workTargets.length > 0);
+    const codeIntelFiles =
+      needsCodeIntel && effectiveJob.jobType === 'FULL_INDEX'
+        ? indexingContents
+        : needsCodeIntel
+          ? await github.downloadTarball(repo.owner, repo.name, commitSha)
+          : new Map<string, string>();
+
+    const progress = { filesIndexed, chunksWritten: 0 };
+
+    const fileStats = await mapPool(workTargets, FILE_CONCURRENCY, async (entry) => {
       const stat = await indexOneFile({
         d1,
         vectorize,
@@ -243,8 +281,7 @@ export async function indexRepo(
         commitSha,
         force,
         entry,
-        tarball,
-        priorHashes,
+        contents: indexingContents,
         tenantId: job.tenantId,
       });
       if (stat.indexed) progress.filesIndexed++;
@@ -273,7 +310,7 @@ export async function indexRepo(
       repoId,
       repoFullName: job.repoFullName,
       commitSha,
-      files: tarball,
+      files: codeIntelFiles,
     });
 
     if (filesIndexed > 0 && filesIndexed % STATUS_UPDATE_INTERVAL !== 0) {
@@ -368,22 +405,21 @@ interface IndexOneFileInput {
   commitSha: string;
   force: boolean;
   entry: TreeEntry;
-  tarball: Map<string, string>;
-  priorHashes: Map<string, string>;
+  contents: Map<string, string>;
   tenantId?: string;
 }
 
 async function indexOneFile(input: IndexOneFileInput): Promise<FileIndexStat> {
-  const { d1, vectorize, ai, repoId, repoFullName, commitSha, force, entry, tarball, priorHashes } =
+  const { d1, vectorize, ai, repoId, repoFullName, commitSha, force, entry, contents } =
     input;
   const fileId = fileIdFor(repoId, entry.path);
   const language = detectLanguage(entry.path);
 
-  // Tarball is the fast path; fall back to the blob API for any path the tar
-  // parser failed to surface so no tree entry is ever silently dropped.
-  let raw = tarball.get(entry.path);
+  // Sparse map or tarball is the fast path; fall back to the blob API for any
+  // path the bulk fetch failed to surface so no tree entry is ever dropped.
+  let raw = contents.get(entry.path);
   if (raw === undefined) {
-    log.warn('file missing from tarball; falling back to blob API', {
+    log.warn('file missing from bulk fetch; falling back to blob API', {
       repo: repoFullName,
       path: entry.path,
     });
@@ -397,19 +433,13 @@ async function indexOneFile(input: IndexOneFileInput): Promise<FileIndexStat> {
   const content = raw;
   const fileHash = await sha256Hex(content);
 
-  if (!force) {
-    const priorHash = priorHashes.get(fileId);
-    if (priorHash === fileHash) {
-      return { indexed: true, chunksWritten: 0, edgesWritten: 0 };
-    }
-  }
-
   await upsertFile(d1, {
     repoId,
     path: entry.path,
     language,
     sizeBytes: entry.size ?? content.length,
     contentHash: fileHash,
+    gitBlobSha: entry.sha,
     commitSha,
   });
 
