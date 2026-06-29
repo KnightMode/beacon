@@ -143,20 +143,31 @@ export async function upsertFile(
     language: string | null;
     sizeBytes: number | null;
     contentHash: string;
+    gitBlobSha: string | null;
     commitSha: string | null;
   },
 ): Promise<string> {
   const id = fileIdFor(file.repoId, file.path);
   await d1.exec(
-    `INSERT INTO files (id, repo_id, path, language, size_bytes, content_hash, commit_sha, updated_at)
-     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, datetime('now'))
+    `INSERT INTO files (id, repo_id, path, language, size_bytes, content_hash, git_blob_sha, commit_sha, updated_at)
+     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, datetime('now'))
      ON CONFLICT(id) DO UPDATE SET
        language = excluded.language,
        size_bytes = excluded.size_bytes,
        content_hash = excluded.content_hash,
+       git_blob_sha = excluded.git_blob_sha,
        commit_sha = excluded.commit_sha,
        updated_at = datetime('now')`,
-    [id, file.repoId, file.path, file.language, file.sizeBytes, file.contentHash, file.commitSha],
+    [
+      id,
+      file.repoId,
+      file.path,
+      file.language,
+      file.sizeBytes,
+      file.contentHash,
+      file.gitBlobSha,
+      file.commitSha,
+    ],
   );
   return id;
 }
@@ -195,6 +206,28 @@ export async function getFileContentHash(
     [fileId],
   );
   return rows[0]?.content_hash ?? null;
+}
+
+/** Batch lookup of stored Git blob SHAs (one query per batch). */
+export async function getFileBlobShas(
+  d1: D1Client,
+  fileIds: string[],
+): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  const BATCH = 100;
+  for (let i = 0; i < fileIds.length; i += BATCH) {
+    const batch = fileIds.slice(i, i + BATCH);
+    if (batch.length === 0) continue;
+    const placeholders = batch.map(() => '?').join(',');
+    const rows = await d1.query<{ id: string; git_blob_sha: string | null }>(
+      `SELECT id, git_blob_sha FROM files WHERE id IN (${placeholders})`,
+      batch,
+    );
+    for (const row of rows) {
+      if (row.git_blob_sha) out.set(row.id, row.git_blob_sha);
+    }
+  }
+  return out;
 }
 
 /** Batch lookup of stored content hashes (one query per batch). */

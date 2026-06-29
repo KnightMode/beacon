@@ -197,6 +197,36 @@ export class GitHubClient {
   }
 
   /**
+   * Fetch only the listed tree entries via the Git blobs API. Used on
+   * incremental jobs so we don't download the full repo tarball.
+   */
+  async fetchBlobContents(
+    owner: string,
+    name: string,
+    entries: TreeEntry[],
+    concurrency = 8,
+  ): Promise<Map<string, string>> {
+    const files = new Map<string, string>();
+    if (entries.length === 0) return files;
+
+    let next = 0;
+    const workers = Array.from(
+      { length: Math.min(concurrency, entries.length) },
+      async () => {
+        for (;;) {
+          const i = next++;
+          if (i >= entries.length) return;
+          const entry = entries[i]!;
+          const content = await this.getBlobContent(owner, name, entry.sha);
+          if (content !== null) files.set(entry.path, content);
+        }
+      },
+    );
+    await Promise.all(workers);
+    return files;
+  }
+
+  /**
    * Download the repo tarball at a ref once and return repo-relative path → UTF-8
    * content. Replaces one git/blobs call per indexed file.
    */

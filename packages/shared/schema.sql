@@ -38,6 +38,7 @@ CREATE TABLE IF NOT EXISTS files (
   language     TEXT,                                -- detected language (e.g. "go", "typescript")
   size_bytes   INTEGER,
   content_hash TEXT,                                -- sha-256 of file contents
+  git_blob_sha TEXT,                                -- Git blob object sha (content-addressed skip)
   commit_sha   TEXT,
   created_at   TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at   TEXT NOT NULL DEFAULT (datetime('now')),

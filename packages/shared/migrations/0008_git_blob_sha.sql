@@ -1,0 +1,2 @@
+-- Add Git blob SHA to files for content-addressed skip before download.
+-- Applied via scripts/apply-admin-d1-migrations.mjs (guarded ALTER).

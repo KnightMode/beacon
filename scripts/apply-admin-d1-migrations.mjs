@@ -23,7 +23,17 @@ function main() {
   runFile('packages/shared/migrations/0005_tenant_ci_triage_runs.sql');
   applyInstallationGrantMigration();
   runFile('packages/shared/migrations/0007_code_intel_foundation.sql');
+  applyGitBlobShaMigration();
+  runFile('packages/shared/migrations/0008_git_blob_sha.sql');
   console.log('Admin D1 migrations applied.');
+}
+
+function applyGitBlobShaMigration() {
+  if (!columnExists('files', 'git_blob_sha')) {
+    runSql('ALTER TABLE files ADD COLUMN git_blob_sha TEXT');
+  } else {
+    console.log('files.git_blob_sha already exists; skipping ALTER TABLE.');
+  }
 }
 
 function applyInstallationGrantMigration() {
