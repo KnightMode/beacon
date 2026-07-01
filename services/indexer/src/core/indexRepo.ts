@@ -37,7 +37,8 @@ import {
   updateIndexStatus,
   upsertFile,
   chunkIdsForFile,
-  chunkHashesForFile,
+  getChunkHashesForFiles,
+  getChunkIdsForFiles,
   getFileBlobShas,
   deleteChunksByIds,
   deleteEdgesForFile,
@@ -55,10 +56,10 @@ import {
 } from '../codeintel/artifacts.js';
 import { partitionTargetsByBlobSha } from './blobSkip.js';
 
-const EMBED_BATCH = 50;
-const FILE_CONCURRENCY = 6;
-const EMBED_IN_FLIGHT = 2;
-const BLOB_FETCH_CONCURRENCY = 8;
+const EMBED_BATCH = 96;
+const FILE_CONCURRENCY = 8;
+const EMBED_IN_FLIGHT = 4;
+const BLOB_FETCH_CONCURRENCY = 12;
 const STATUS_UPDATE_INTERVAL = 25;
 
 export interface IndexResult {
@@ -259,20 +260,23 @@ export async function indexRepo(
     const needsCodeIntel =
       shouldRunCodeIntel(config) &&
       (effectiveJob.jobType === 'FULL_INDEX' || removed.length > 0 || workTargets.length > 0);
-    const codeIntelFiles =
-      needsCodeIntel && effectiveJob.jobType === 'FULL_INDEX'
-        ? indexingContents
-        : needsCodeIntel
-          ? await github.downloadTarball(repo.owner, repo.name, commitSha)
-          : new Map<string, string>();
+    const codeIntelTarballPromise =
+      needsCodeIntel && effectiveJob.jobType !== 'FULL_INDEX'
+        ? github.downloadTarball(repo.owner, repo.name, commitSha)
+        : null;
+
+    const workFileIds = workTargets.map((e) => fileIdFor(repoId, e.path));
+    const [priorChunkHashes, priorChunkIds] = await Promise.all([
+      force ? Promise.resolve(new Map<string, Map<string, string>>()) : getChunkHashesForFiles(d1, workFileIds),
+      getChunkIdsForFiles(d1, workFileIds),
+    ]);
 
     const progress = { filesIndexed, chunksWritten: 0 };
 
     const fileStats = await mapPool(workTargets, FILE_CONCURRENCY, async (entry) => {
+      const fileId = fileIdFor(repoId, entry.path);
       const stat = await indexOneFile({
         d1,
-        vectorize,
-        ai,
         github,
         owner: repo.owner,
         name: repo.name,
@@ -282,7 +286,8 @@ export async function indexRepo(
         force,
         entry,
         contents: indexingContents,
-        tenantId: job.tenantId,
+        priorChunkHashes: priorChunkHashes.get(fileId),
+        priorChunkIds: priorChunkIds.get(fileId),
       });
       if (stat.indexed) progress.filesIndexed++;
       progress.chunksWritten += stat.chunksWritten;
@@ -298,11 +303,28 @@ export async function indexRepo(
       return stat;
     });
 
+    const dirtyChunks: CodeChunk[] = [];
+    const staleVectorIds: string[] = [];
     for (const stat of fileStats) {
       if (stat.indexed) filesIndexed++;
       chunksWritten += stat.chunksWritten;
       edgesWritten += stat.edgesWritten;
+      dirtyChunks.push(...stat.dirtyChunks);
+      staleVectorIds.push(...stat.staleVectorIds);
     }
+
+    if (staleVectorIds.length > 0) {
+      await vectorize.deleteByIds(staleVectorIds);
+    }
+    await embedAndUpsert(ai, vectorize, job.repoFullName, dirtyChunks, job.tenantId);
+    await insertChunks(d1, dirtyChunks);
+
+    const codeIntelFiles =
+      needsCodeIntel && effectiveJob.jobType === 'FULL_INDEX'
+        ? indexingContents
+        : needsCodeIntel && codeIntelTarballPromise
+          ? await codeIntelTarballPromise
+          : new Map<string, string>();
 
     const codeIntel = await runCodeIntelArtifacts({
       d1,
@@ -391,12 +413,12 @@ interface FileIndexStat {
   indexed: boolean;
   chunksWritten: number;
   edgesWritten: number;
+  dirtyChunks: CodeChunk[];
+  staleVectorIds: string[];
 }
 
 interface IndexOneFileInput {
   d1: D1Client;
-  vectorize: VectorizeClient;
-  ai: WorkersAIClient;
   github: GitHubClient;
   owner: string;
   name: string;
@@ -406,12 +428,12 @@ interface IndexOneFileInput {
   force: boolean;
   entry: TreeEntry;
   contents: Map<string, string>;
-  tenantId?: string;
+  priorChunkHashes?: Map<string, string>;
+  priorChunkIds?: string[];
 }
 
 async function indexOneFile(input: IndexOneFileInput): Promise<FileIndexStat> {
-  const { d1, vectorize, ai, repoId, repoFullName, commitSha, force, entry, contents } =
-    input;
+  const { d1, repoId, repoFullName, commitSha, force, entry, contents } = input;
   const fileId = fileIdFor(repoId, entry.path);
   const language = detectLanguage(entry.path);
 
@@ -428,7 +450,13 @@ async function indexOneFile(input: IndexOneFileInput): Promise<FileIndexStat> {
       undefined;
   }
   if (raw === undefined || looksBinary(raw)) {
-    return { indexed: false, chunksWritten: 0, edgesWritten: 0 };
+    return {
+      indexed: false,
+      chunksWritten: 0,
+      edgesWritten: 0,
+      dirtyChunks: [],
+      staleVectorIds: [],
+    };
   }
   const content = raw;
   const fileHash = await sha256Hex(content);
@@ -453,35 +481,37 @@ async function indexOneFile(input: IndexOneFileInput): Promise<FileIndexStat> {
   });
   redactChunks(chunks);
 
+  let dirtyChunks: CodeChunk[] = [];
+  let staleVectorIds: string[] = [];
   let chunksWritten = 0;
 
   if (force) {
-    const oldIds = await chunkIdsForFile(d1, fileId);
-    if (oldIds.length) await vectorize.deleteByIds(oldIds);
+    staleVectorIds = input.priorChunkIds ?? [];
     await deleteFileData(d1, fileId);
-        await embedAndUpsert(ai, vectorize, repoFullName, chunks, input.tenantId);
-    await insertChunks(d1, chunks);
-    await insertEdges(d1, edges);
+    dirtyChunks = chunks;
     chunksWritten = chunks.length;
   } else {
-    const existing = await chunkHashesForFile(d1, fileId);
+    const existing = input.priorChunkHashes ?? new Map<string, string>();
     const newIds = new Set(chunks.map((c) => c.id));
-    const staleIds = [...existing.keys()].filter((id) => !newIds.has(id));
-    const dirty = chunks.filter((c) => existing.get(c.id) !== c.contentHash);
+    staleVectorIds = [...existing.keys()].filter((id) => !newIds.has(id));
+    dirtyChunks = chunks.filter((c) => existing.get(c.id) !== c.contentHash);
 
-    if (staleIds.length) {
-      await vectorize.deleteByIds(staleIds);
-      await deleteChunksByIds(d1, staleIds);
+    if (staleVectorIds.length) {
+      await deleteChunksByIds(d1, staleVectorIds);
     }
-    await deleteEdgesForFile(d1, fileId);
-    await insertEdges(d1, edges);
-
-    await embedAndUpsert(ai, vectorize, repoFullName, dirty, input.tenantId);
-    await insertChunks(d1, dirty);
-    chunksWritten = dirty.length;
+    chunksWritten = dirtyChunks.length;
   }
 
-  return { indexed: true, chunksWritten, edgesWritten: edges.length };
+  await deleteEdgesForFile(d1, fileId);
+  await insertEdges(d1, edges);
+
+  return {
+    indexed: true,
+    chunksWritten,
+    edgesWritten: edges.length,
+    dirtyChunks,
+    staleVectorIds,
+  };
 }
 
 async function mapPool<T, R>(

@@ -196,6 +196,61 @@ export async function chunkHashesForFile(
   return new Map(rows.map((r) => [r.id, r.content_hash]));
 }
 
+/** Batch lookup of chunk id -> content_hash per file (one query per file-id batch). */
+export async function getChunkHashesForFiles(
+  d1: D1Client,
+  fileIds: string[],
+): Promise<Map<string, Map<string, string>>> {
+  const out = new Map<string, Map<string, string>>();
+  const BATCH = 100;
+  for (let i = 0; i < fileIds.length; i += BATCH) {
+    const batch = fileIds.slice(i, i + BATCH);
+    if (batch.length === 0) continue;
+    const placeholders = batch.map(() => '?').join(',');
+    const rows = await d1.query<{
+      file_id: string;
+      id: string;
+      content_hash: string;
+    }>(
+      `SELECT file_id, id, content_hash FROM chunks WHERE file_id IN (${placeholders})`,
+      batch,
+    );
+    for (const row of rows) {
+      let fileMap = out.get(row.file_id);
+      if (!fileMap) {
+        fileMap = new Map();
+        out.set(row.file_id, fileMap);
+      }
+      fileMap.set(row.id, row.content_hash);
+    }
+  }
+  return out;
+}
+
+/** Batch lookup of chunk ids per file (for vector deletes on force reindex). */
+export async function getChunkIdsForFiles(
+  d1: D1Client,
+  fileIds: string[],
+): Promise<Map<string, string[]>> {
+  const out = new Map<string, string[]>();
+  const BATCH = 100;
+  for (let i = 0; i < fileIds.length; i += BATCH) {
+    const batch = fileIds.slice(i, i + BATCH);
+    if (batch.length === 0) continue;
+    const placeholders = batch.map(() => '?').join(',');
+    const rows = await d1.query<{ file_id: string; id: string }>(
+      `SELECT file_id, id FROM chunks WHERE file_id IN (${placeholders})`,
+      batch,
+    );
+    for (const row of rows) {
+      const ids = out.get(row.file_id);
+      if (ids) ids.push(row.id);
+      else out.set(row.file_id, [row.id]);
+    }
+  }
+  return out;
+}
+
 /** Stored content hash of a file row, if any (unchanged-file skip). */
 export async function getFileContentHash(
   d1: D1Client,
@@ -257,8 +312,12 @@ export async function deleteChunksByIds(
   d1: D1Client,
   ids: string[],
 ): Promise<void> {
-  for (const id of ids) {
-    await d1.exec(`DELETE FROM chunks WHERE id = ?1`, [id]);
+  const BATCH = 100;
+  for (let i = 0; i < ids.length; i += BATCH) {
+    const batch = ids.slice(i, i + BATCH);
+    if (batch.length === 0) continue;
+    const placeholders = batch.map(() => '?').join(',');
+    await d1.exec(`DELETE FROM chunks WHERE id IN (${placeholders})`, batch);
   }
 }
 
@@ -289,26 +348,65 @@ export async function deleteFileRow(d1: D1Client, fileId: string): Promise<void>
   await d1.exec(`DELETE FROM files WHERE id = ?1`, [fileId]);
 }
 
+const CHUNK_INSERT_ROW_PARAMS = 13;
+// D1 caps bound parameters at 100 per query.
+const CHUNK_INSERT_BATCH = Math.floor(100 / CHUNK_INSERT_ROW_PARAMS);
+const CHUNK_VALUE_ROW =
+  '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)';
+const EDGE_INSERT_ROW_PARAMS = 9;
+const EDGE_INSERT_BATCH = Math.floor(100 / EDGE_INSERT_ROW_PARAMS);
+
+function chunkInsertParams(c: CodeChunk): unknown[] {
+  return [
+    c.id,
+    c.repoId,
+    c.fileId,
+    c.path,
+    c.language,
+    c.chunkType,
+    c.symbol,
+    c.startLine,
+    c.endLine,
+    c.content,
+    c.contentHash,
+    c.commitSha,
+    c.redacted ? 1 : 0,
+  ];
+}
+
+function edgeInsertParams(e: CodeEdge): unknown[] {
+  return [
+    e.id,
+    e.repoId,
+    e.edgeType,
+    e.fromNodeId,
+    e.toNodeId,
+    e.fromSymbol,
+    e.toSymbol,
+    e.fileId,
+    e.startLine,
+  ];
+}
+
 export async function insertChunks(
   d1: D1Client,
   chunks: CodeChunk[],
 ): Promise<void> {
-  for (const c of chunks) {
+  for (let i = 0; i < chunks.length; i += CHUNK_INSERT_BATCH) {
+    const batch = chunks.slice(i, i + CHUNK_INSERT_BATCH);
+    if (batch.length === 0) continue;
+    const values = batch.map(() => CHUNK_VALUE_ROW).join(', ');
     await d1.exec(
       `INSERT INTO chunks
          (id, repo_id, file_id, path, language, chunk_type, symbol, start_line, end_line, content, content_hash, commit_sha, embedded, redacted)
-       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, 1, ?13)
+       VALUES ${values}
        ON CONFLICT(id) DO UPDATE SET
          content = excluded.content,
          content_hash = excluded.content_hash,
          commit_sha = excluded.commit_sha,
          embedded = 1,
          redacted = excluded.redacted`,
-      [
-        c.id, c.repoId, c.fileId, c.path, c.language, c.chunkType, c.symbol,
-        c.startLine, c.endLine, c.content, c.contentHash, c.commitSha,
-        c.redacted ? 1 : 0,
-      ],
+      batch.flatMap((c) => chunkInsertParams(c)),
     );
   }
 }
@@ -317,16 +415,16 @@ export async function insertEdges(
   d1: D1Client,
   edges: CodeEdge[],
 ): Promise<void> {
-  for (const e of edges) {
+  for (let i = 0; i < edges.length; i += EDGE_INSERT_BATCH) {
+    const batch = edges.slice(i, i + EDGE_INSERT_BATCH);
+    if (batch.length === 0) continue;
+    const values = batch.map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?)').join(', ');
     await d1.exec(
       `INSERT INTO code_edges
          (id, repo_id, edge_type, from_node_id, to_node_id, from_symbol, to_symbol, file_id, start_line)
-       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
+       VALUES ${values}
        ON CONFLICT(id) DO NOTHING`,
-      [
-        e.id, e.repoId, e.edgeType, e.fromNodeId, e.toNodeId,
-        e.fromSymbol, e.toSymbol, e.fileId, e.startLine,
-      ],
+      batch.flatMap((e) => edgeInsertParams(e)),
     );
   }
 }
