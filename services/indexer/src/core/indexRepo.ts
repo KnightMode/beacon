@@ -36,6 +36,7 @@ import {
   getRepoIndexInfo,
   updateIndexStatus,
   upsertFiles,
+  ensureFileRows,
   type FileRow,
   getChunkHashesForFiles,
   getChunkIdsForFiles,
@@ -284,6 +285,19 @@ export async function indexRepo(
       force ? Promise.resolve(new Map<string, Map<string, string>>()) : getChunkHashesForFiles(d1, workFileIds),
       force ? getChunkIdsForFiles(d1, workFileIds) : Promise.resolve(new Map<string, string[]>()),
     ]);
+
+    // chunks.file_id and code_edges.file_id have NOT NULL / FK references to
+    // files.id, so new files need a placeholder row before any chunk or edge
+    // write. Hash columns stay NULL until upsertFiles after chunks land.
+    await ensureFileRows(
+      d1,
+      workTargets.map((e) => ({
+        repoId,
+        path: e.path,
+        language: detectLanguage(e.path),
+        sizeBytes: e.size ?? null,
+      })),
+    );
 
     const progress = { filesIndexed, chunksWritten: 0 };
 
