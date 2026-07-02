@@ -391,6 +391,44 @@ export async function upsertFiles(d1: D1Client, rows: FileRow[]): Promise<void> 
   }
 }
 
+const FILE_ENSURE_ROW_PARAMS = 5;
+const FILE_ENSURE_BATCH = Math.floor(100 / FILE_ENSURE_ROW_PARAMS);
+
+/**
+ * Batched placeholder insert so chunks/code_edges (which have NOT NULL /
+ * FK references to files.id) can be written before the full file row is
+ * upserted by upsertFiles. ON CONFLICT DO NOTHING deliberately leaves
+ * content_hash/git_blob_sha untouched: a new file's placeholder keeps them
+ * NULL, so a crash before upsertFiles still re-indexes it (see blobSkip.ts).
+ */
+export async function ensureFileRows(
+  d1: D1Client,
+  rows: Array<{
+    repoId: string;
+    path: string;
+    language: string | null;
+    sizeBytes: number | null;
+  }>,
+): Promise<void> {
+  for (let i = 0; i < rows.length; i += FILE_ENSURE_BATCH) {
+    const batch = rows.slice(i, i + FILE_ENSURE_BATCH);
+    if (batch.length === 0) continue;
+    const values = batch.map(() => '(?, ?, ?, ?, ?)').join(', ');
+    await d1.exec(
+      `INSERT INTO files (id, repo_id, path, language, size_bytes)
+       VALUES ${values}
+       ON CONFLICT(id) DO NOTHING`,
+      batch.flatMap((f) => [
+        fileIdFor(f.repoId, f.path),
+        f.repoId,
+        f.path,
+        f.language,
+        f.sizeBytes,
+      ]),
+    );
+  }
+}
+
 const CHUNK_INSERT_ROW_PARAMS = 13;
 // D1 caps bound parameters at 100 per query.
 const CHUNK_INSERT_BATCH = Math.floor(100 / CHUNK_INSERT_ROW_PARAMS);

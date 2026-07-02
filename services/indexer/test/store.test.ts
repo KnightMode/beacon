@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { ScipReference, ScipSymbol } from '@scintel/shared';
 import {
+  ensureFileRows,
   fileIdFor,
   replaceScipFactsForRepo,
   upsertFiles,
@@ -95,6 +96,43 @@ describe('upsertFiles', () => {
   it('is a no-op for an empty row list', async () => {
     const { d1, execCalls } = fakeD1();
     await upsertFiles(d1, []);
+    expect(execCalls).toHaveLength(0);
+  });
+});
+
+describe('ensureFileRows', () => {
+  it('inserts placeholder rows without touching hash columns (20 rows/statement)', async () => {
+    const { d1, execCalls } = fakeD1();
+    const rows = Array.from({ length: 21 }, (_, i) => ({
+      repoId: 'acme/widget',
+      path: `src/file${i}.ts`,
+      language: 'ts',
+      sizeBytes: 100,
+    }));
+    await ensureFileRows(d1, rows);
+
+    // 5 bound params/row * 20 rows/statement = 100; 21 rows -> 2 statements.
+    expect(execCalls).toHaveLength(2);
+    expect(execCalls[0]!.params).toHaveLength(20 * 5);
+    expect(execCalls[1]!.params).toHaveLength(1 * 5);
+    for (const call of execCalls) {
+      expect(call.params.length).toBeLessThanOrEqual(100);
+      expect(call.sql).toContain('INSERT INTO files');
+      expect(call.sql).toContain('ON CONFLICT(id) DO NOTHING');
+      // Placeholder rows must not set the blob-skip markers.
+      expect(call.sql).not.toContain('content_hash');
+      expect(call.sql).not.toContain('git_blob_sha');
+    }
+
+    const allParams = execCalls.flatMap((c) => c.params);
+    for (const row of rows) {
+      expect(allParams).toContain(fileIdFor(row.repoId, row.path));
+    }
+  });
+
+  it('is a no-op for an empty row list', async () => {
+    const { d1, execCalls } = fakeD1();
+    await ensureFileRows(d1, []);
     expect(execCalls).toHaveLength(0);
   });
 });
