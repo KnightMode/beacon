@@ -65,7 +65,15 @@ export async function onRequestGet(context) {
       tenantId,
       userId: install.authed_user?.id || null,
     });
-    return redirect('/admin/onboarding/', { 'set-cookie': cookie });
+    // Returning workspaces that already finished onboarding land on the status
+    // dashboard instead of replaying the onboarding journey.
+    const tenant = await context.env.DB.prepare(
+      `SELECT onboarding_completed_at FROM tenants WHERE id = ?1`,
+    )
+      .bind(tenantId)
+      .first();
+    const destination = tenant?.onboarding_completed_at ? '/admin/' : '/admin/onboarding/';
+    return redirect(destination, { 'set-cookie': cookie });
   } catch (err) {
     console.error('Slack OAuth callback failed', err);
     if (new URL(context.request.url).pathname.endsWith('/callback.json')) {

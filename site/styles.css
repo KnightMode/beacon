@@ -2307,6 +2307,16 @@ code {
   background: var(--signal);
 }
 
+/* Signed-out: progress is unknown until Slack sign-in, so steps render dimmed
+   instead of claiming "Pending". */
+.setup-rail li[data-state="unknown"] {
+  opacity: 0.72;
+}
+
+.setup-rail li[data-state="unknown"] em {
+  color: var(--muted);
+}
+
 .status-pill[data-state="ready"],
 .status-pill[data-state="complete"] {
   border-color: color-mix(in oklch, var(--acid) 55%, var(--line));
@@ -3929,6 +3939,10 @@ code {
   border-color: color-mix(in oklch, var(--acid) 80%, var(--ink));
   opacity: 1;
   transform: rotate(-45deg) scale(1);
+}
+
+.journey-card[data-state="unknown"]:not(.is-active) {
+  opacity: 0.78;
 }
 
 .journey-card span {

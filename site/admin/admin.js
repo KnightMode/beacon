@@ -84,8 +84,9 @@
     state.summary = { integrations: {}, repos: [], completed: false };
     state.availableRepos.clear();
     state.selectedRepos.clear();
+    state.journeyStatuses.clear();
     renderTenant(state.summary);
-    renderSteps({});
+    renderSteps({}, { signedOut: true });
     renderRepos([]);
     renderRepoBrowser();
     updateLiveVisibility();
@@ -200,11 +201,12 @@
     });
   }
 
-  function renderSteps(steps) {
+  function renderSteps(steps, { signedOut = false } = {}) {
     const html = stepOrder
       .map((key, index) => {
-        const status = steps[key] || "PENDING";
-        return `<li data-state="${escapeHtml(status.toLowerCase())}">
+        const status = signedOut ? "Sign in to view" : steps[key] || "PENDING";
+        const stateToken = signedOut ? "unknown" : status.toLowerCase();
+        return `<li data-state="${escapeHtml(stateToken)}">
           <a href="${isOnboarding ? `#step-${escapeHtml(key)}` : "/admin/onboarding/"}">
             <span>${String(index + 1).padStart(2, "0")}</span>
             <strong>${escapeHtml(stepLabels[key])}</strong>
@@ -217,19 +219,19 @@
       node.innerHTML = html;
     });
     const completeCount = stepOrder.filter((key) => (steps[key] || "PENDING").toLowerCase() === "complete").length;
-    renderJourneyProgress(completeCount);
-    if (isOnboarding) renderJourneyCards(steps);
+    renderJourneyProgress(completeCount, { signedOut });
+    if (isOnboarding) renderJourneyCards(steps, { signedOut });
   }
 
-  function renderJourneyCards(steps) {
+  function renderJourneyCards(steps, { signedOut = false } = {}) {
     for (const key of stepOrder) {
-      const status = steps[key] || "PENDING";
-      const normalized = status.toLowerCase();
+      const status = signedOut ? "Sign in" : steps[key] || "PENDING";
+      const normalized = signedOut ? "unknown" : status.toLowerCase();
       const previousStatus = state.journeyStatuses.get(key);
       const button = $(`[data-journey-card="${key}"]`);
       if (button) {
         button.dataset.state = normalized;
-        if (previousStatus && previousStatus !== "complete" && normalized === "complete") {
+        if (previousStatus && previousStatus !== "complete" && previousStatus !== "unknown" && normalized === "complete") {
           flashClass(button, "just-completed", 900);
         }
       }
@@ -241,14 +243,14 @@
     }
   }
 
-  function renderJourneyProgress(completeCount) {
+  function renderJourneyProgress(completeCount, { signedOut = false } = {}) {
     const total = stepOrder.length;
-    setText("[data-journey-progress-count]", String(completeCount));
+    setText("[data-journey-progress-count]", signedOut ? "–" : String(completeCount));
     setText("[data-journey-progress-total]", String(total));
     const bar = $("[data-journey-progress-bar]");
-    if (bar) bar.style.setProperty("--p", `${Math.round((completeCount / total) * 100)}%`);
+    if (bar) bar.style.setProperty("--p", `${signedOut ? 0 : Math.round((completeCount / total) * 100)}%`);
     const pct = $("[data-journey-progress-pct]");
-    if (pct) pct.textContent = `${Math.round((completeCount / total) * 100)}%`;
+    if (pct) pct.textContent = signedOut ? "–" : `${Math.round((completeCount / total) * 100)}%`;
   }
 
   function initialJourneyStep(steps) {
