@@ -6,6 +6,7 @@ import {
   HttpError,
   markStep,
   redirect,
+  rememberAdminEmail,
   sessionCookie,
   validateOAuthState,
 } from '../../_lib/admin.js';
@@ -56,6 +57,7 @@ export async function onRequestGet(context) {
       ),
     ]);
     await markStep(context.env, tenantId, 'slack', 'COMPLETE');
+    await rememberAdminEmail(context, tenantId);
     await audit(context.env, tenantId, install.authed_user?.id, 'slack.connected', 'tenant', tenantId, {
       team: install.team,
       botUserId: install.bot_user_id,

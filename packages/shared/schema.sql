@@ -229,6 +229,15 @@ CREATE TABLE IF NOT EXISTS tenant_members (
   PRIMARY KEY (tenant_id, slack_user_id)
 );
 
+-- Cloudflare Access admin email -> tenant mapping. Lets the portal restore a
+-- workspace session after Access sign-in without redoing Slack OAuth.
+CREATE TABLE IF NOT EXISTS tenant_admin_emails (
+  email       TEXT NOT NULL,
+  tenant_id   TEXT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  updated_at  TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (email, tenant_id)
+);
+
 CREATE TABLE IF NOT EXISTS tenant_slack_installs (
   tenant_id          TEXT PRIMARY KEY REFERENCES tenants(id) ON DELETE CASCADE,
   slack_team_id      TEXT NOT NULL UNIQUE,
@@ -425,6 +434,7 @@ CREATE INDEX IF NOT EXISTS idx_ci_triage_repo         ON ci_triage_runs (repo_id
 CREATE INDEX IF NOT EXISTS idx_tenant_ci_triage_repo  ON tenant_ci_triage_runs (repo_id, slack_team_id);
 CREATE INDEX IF NOT EXISTS idx_perms_user             ON github_user_repo_permissions (user_id);
 CREATE INDEX IF NOT EXISTS idx_tenant_members_user    ON tenant_members (slack_user_id);
+CREATE INDEX IF NOT EXISTS idx_tenant_admin_emails_tenant ON tenant_admin_emails (tenant_id);
 CREATE INDEX IF NOT EXISTS idx_tenant_repos_repo      ON tenant_repos (repo_id);
 CREATE INDEX IF NOT EXISTS idx_tenant_repos_enabled   ON tenant_repos (tenant_id, enabled);
 CREATE INDEX IF NOT EXISTS idx_tenant_github_install  ON tenant_github_installations (installation_id);

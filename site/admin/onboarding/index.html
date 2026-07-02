@@ -100,7 +100,7 @@
               <span>Status</span>
               <strong data-slack-status>Disconnected</strong>
               <p>After Slack is connected, Beacon can finish setup for this workspace and keep future answers scoped to the right team.</p>
-              <a class="button button--primary" href="/api/admin/slack/start">Connect Slack</a>
+              <a class="button button--primary" data-connect-button="slack" href="/api/admin/slack/start">Connect Slack</a>
             </article>
             <aside class="journey-proof">
               <span>What this unlocks</span>
@@ -174,7 +174,7 @@
               <span>Status</span>
               <strong data-github-status>Disconnected</strong>
               <p>Beacon will only show repositories approved through this installation, so the next step starts from the right source list.</p>
-              <a class="button button--primary" href="/api/admin/github/start">Connect GitHub</a>
+              <a class="button button--primary" data-connect-button="github" href="/api/admin/github/start">Connect GitHub</a>
             </article>
             <aside class="journey-proof">
               <span>What this unlocks</span>
@@ -357,6 +357,6 @@
   </main>
 
   <script src="../../main.js?v=7"></script>
-  <script src="../admin.js?v=12"></script>
+  <script src="../admin.js?v=13"></script>
 </body>
 </html>

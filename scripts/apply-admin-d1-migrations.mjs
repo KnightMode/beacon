@@ -24,7 +24,9 @@ function main() {
   applyInstallationGrantMigration();
   runFile('packages/shared/migrations/0007_code_intel_foundation.sql');
   applyGitBlobShaMigration();
-  runFile('packages/shared/migrations/0008_git_blob_sha.sql');
+  // 0008_git_blob_sha.sql is comment-only (the ALTER is guarded above) and
+  // wrangler errors on SQL files without statements, so it is not runFile'd.
+  runFile('packages/shared/migrations/0009_tenant_admin_emails.sql');
   console.log('Admin D1 migrations applied.');
 }
 

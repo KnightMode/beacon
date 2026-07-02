@@ -189,8 +189,19 @@
     setText("[data-tenant-name]", tenantName);
     setConnState("[data-slack-status]", Boolean(data.integrations?.slack));
     setConnState("[data-github-status]", Boolean(data.integrations?.github));
+    renderConnectButton("slack", Boolean(data.integrations?.slack), "Slack");
+    renderConnectButton("github", Boolean(data.integrations?.github), "GitHub");
     setText("[data-repo-count]", String((data.repos || []).length));
     setText("[data-onboarding-state]", data.completed ? "Complete" : "In progress");
+  }
+
+  function renderConnectButton(key, connected, label) {
+    $$(`[data-connect-button="${key}"]`).forEach((node) => {
+      node.textContent = connected ? `✓ ${label} connected — reconnect` : `Connect ${label}`;
+      node.classList.toggle("button--primary", !connected);
+      node.classList.toggle("button--quiet", connected);
+      node.classList.toggle("is-connected", connected);
+    });
   }
 
   function setConnState(selector, on) {

@@ -38,6 +38,12 @@ export async function requireSession(context) {
 }
 
 export async function readSession(context) {
+  const session = await readSessionFromCookie(context);
+  if (session) return session;
+  return readSessionFromAccessIdentity(context);
+}
+
+async function readSessionFromCookie(context) {
   const raw = cookieValue(context.request.headers.get('cookie') || '', COOKIE);
   if (!raw) return null;
   const [payloadB64, sig] = raw.split('.');
@@ -47,6 +53,62 @@ export async function readSession(context) {
   const payload = JSON.parse(bytesToUtf8(base64UrlToBytes(payloadB64)));
   if (!payload.exp || payload.exp < Math.floor(Date.now() / 1000)) return null;
   return payload;
+}
+
+// Cloudflare Access is the portal's sign-in; the beacon session cookie only
+// exists after Slack OAuth. Without this fallback, a returning admin whose
+// cookie expired (or who is on a new browser) looks signed-out — every step
+// renders as pending — until they redo Connect Slack. The Access JWT is
+// already verified by the middleware on every protected route, so decoding
+// its email claim here is safe.
+async function readSessionFromAccessIdentity(context) {
+  const email = accessEmailFromRequest(context.request);
+  if (!email) return null;
+  try {
+    const row = await context.env.DB.prepare(
+      `SELECT tenant_id FROM tenant_admin_emails
+       WHERE email = ?1
+       ORDER BY updated_at DESC
+       LIMIT 1`,
+    )
+      .bind(email)
+      .first();
+    if (!row?.tenant_id) return null;
+    return { tenantId: row.tenant_id, userId: null, via: 'access' };
+  } catch {
+    // Table may not exist yet on an un-migrated database.
+    return null;
+  }
+}
+
+export function accessEmailFromRequest(request) {
+  const token = request.headers.get('cf-access-jwt-assertion');
+  if (!token) return null;
+  const payloadB64 = token.split('.')[1];
+  if (!payloadB64) return null;
+  try {
+    const payload = JSON.parse(bytesToUtf8(base64UrlToBytes(payloadB64)));
+    const email = String(payload.email || '').trim().toLowerCase();
+    return email || null;
+  } catch {
+    return null;
+  }
+}
+
+export async function rememberAdminEmail(context, tenantId) {
+  const email = accessEmailFromRequest(context.request);
+  if (!email || !tenantId) return;
+  try {
+    await context.env.DB.prepare(
+      `INSERT INTO tenant_admin_emails (email, tenant_id, updated_at)
+       VALUES (?1, ?2, datetime('now'))
+       ON CONFLICT(email, tenant_id) DO UPDATE SET updated_at = datetime('now')`,
+    )
+      .bind(email, tenantId)
+      .run();
+  } catch (err) {
+    logInternalError('Failed to remember admin email', err);
+  }
 }
 
 export async function sessionCookie(context, payload) {
