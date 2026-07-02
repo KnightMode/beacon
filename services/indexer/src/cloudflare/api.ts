@@ -1,4 +1,7 @@
+import { log } from '../logger.js';
+
 const BASE_URL = 'https://api.cloudflare.com/client/v4';
+const REQUEST_ATTEMPTS = 3;
 
 interface CloudflareEnvelope<T> {
   success: boolean;
@@ -29,11 +32,12 @@ export class CloudflareApiClient {
       headers['content-type'] = options.contentType ?? 'application/json';
     }
 
-    const res = await fetch(`${BASE_URL}/accounts/${this.accountId}${pathname}`, {
-      method: options.method ?? 'GET',
-      headers,
-      body,
-    });
+    const url = `${BASE_URL}/accounts/${this.accountId}${pathname}`;
+    const res = await this.fetchWithRetry(
+      url,
+      { method: options.method ?? 'GET', headers, body },
+      options.label,
+    );
     const text = await res.text();
     const payload = parseEnvelope<T>(text);
 
@@ -45,6 +49,54 @@ export class CloudflareApiClient {
     }
     return payload.result;
   }
+
+  /**
+   * fetch with retries on transient failures (5xx, 429, network errors). A
+   * single Cloudflare hiccup must not fail a whole indexing run that makes
+   * hundreds of API calls; mirrors GitHubClient#request.
+   */
+  private async fetchWithRetry(
+    url: string,
+    init: RequestInit,
+    label: string,
+    attempts = REQUEST_ATTEMPTS,
+  ): Promise<Response> {
+    let lastErr: Error | null = null;
+    for (let attempt = 1; attempt <= attempts; attempt++) {
+      let res: Response | null = null;
+      try {
+        res = await fetch(url, init);
+        if (res.status < 500 && res.status !== 429) return res;
+        lastErr = new Error(`status ${res.status}`);
+      } catch (err) {
+        lastErr = err as Error;
+      }
+      if (attempt === attempts) {
+        if (res) return res; // let the caller parse and surface the final error response
+        throw new Error(`${label} failed after ${attempts} attempts: ${url} (${lastErr?.message})`);
+      }
+      const delay = retryDelayMs(attempt, res);
+      log.warn('Cloudflare request failed; retrying', {
+        label,
+        url,
+        attempt,
+        error: lastErr?.message,
+      });
+      await new Promise((r) => setTimeout(r, delay));
+    }
+    // Unreachable (the loop above always returns or throws), but keeps TS happy.
+    throw lastErr ?? new Error(`${label} failed after ${attempts} attempts: ${url}`);
+  }
+}
+
+/** Retry-After (seconds) if present, else quadratic backoff with jitter. */
+function retryDelayMs(attempt: number, res: Response | null): number {
+  const retryAfter = res?.headers.get('retry-after');
+  if (retryAfter) {
+    const seconds = Number(retryAfter);
+    if (Number.isFinite(seconds) && seconds >= 0) return seconds * 1000;
+  }
+  return 500 * attempt * attempt + Math.random() * 250;
 }
 
 function serializeBody(body: unknown): string | undefined {

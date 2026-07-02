@@ -35,15 +35,17 @@ import {
   setRepoStatus,
   getRepoIndexInfo,
   updateIndexStatus,
-  upsertFile,
-  chunkIdsForFile,
+  upsertFiles,
+  type FileRow,
   getChunkHashesForFiles,
   getChunkIdsForFiles,
   getFileBlobShas,
   deleteChunksByIds,
+  deleteChunksByFileIds,
   deleteEdgesForFile,
+  deleteEdgesByFileIds,
   deleteFileData,
-  deleteFileRow,
+  deleteFilesByIds,
   insertChunks,
   insertEdges,
   countChunksForRepo,
@@ -203,16 +205,18 @@ export async function indexRepo(
 
     const { targets, removed } = selectTargets(effectiveJob, tree, byPath);
 
-    // Incremental: remove deleted files entirely.
-    let filesRemoved = 0;
-    for (const path of removed) {
-      const fileId = fileIdFor(repoId, path);
-      const ids = await chunkIdsForFile(d1, fileId);
-      if (ids.length) await vectorize.deleteByIds(ids);
-      await deleteFileData(d1, fileId);
-      await deleteFileRow(d1, fileId);
-      filesRemoved++;
+    // Incremental: remove deleted files entirely. Batched across all removed
+    // paths (rather than per-file) to bound D1/Vectorize round-trips.
+    const removedFileIds = removed.map((path) => fileIdFor(repoId, path));
+    if (removedFileIds.length > 0) {
+      const chunkIdsByFile = await getChunkIdsForFiles(d1, removedFileIds);
+      const removedChunkIds = [...chunkIdsByFile.values()].flat();
+      if (removedChunkIds.length) await vectorize.deleteByIds(removedChunkIds);
+      await deleteEdgesByFileIds(d1, removedFileIds);
+      await deleteChunksByFileIds(d1, removedFileIds);
+      await deleteFilesByIds(d1, removedFileIds);
     }
+    const filesRemoved = removedFileIds.length;
 
     let filesIndexed = 0;
     let chunksWritten = 0;
@@ -260,15 +264,25 @@ export async function indexRepo(
     const needsCodeIntel =
       shouldRunCodeIntel(config) &&
       (effectiveJob.jobType === 'FULL_INDEX' || removed.length > 0 || workTargets.length > 0);
+    // Created eagerly (parallel with the mapPool below) but awaited much
+    // later, so a rejection here must be caught at creation time — otherwise
+    // it fires as an unhandledRejection and kills the process even in
+    // best_effort mode. A caught failure degrades to "no snapshot" (null).
     const codeIntelTarballPromise =
       needsCodeIntel && effectiveJob.jobType !== 'FULL_INDEX'
-        ? github.downloadTarball(repo.owner, repo.name, commitSha)
+        ? github.downloadTarball(repo.owner, repo.name, commitSha).catch((err) => {
+            log.warn('code-intel tarball fetch failed', {
+              repo: job.repoFullName,
+              error: (err as Error).message,
+            });
+            return null;
+          })
         : null;
 
     const workFileIds = workTargets.map((e) => fileIdFor(repoId, e.path));
     const [priorChunkHashes, priorChunkIds] = await Promise.all([
       force ? Promise.resolve(new Map<string, Map<string, string>>()) : getChunkHashesForFiles(d1, workFileIds),
-      getChunkIdsForFiles(d1, workFileIds),
+      force ? getChunkIdsForFiles(d1, workFileIds) : Promise.resolve(new Map<string, string[]>()),
     ]);
 
     const progress = { filesIndexed, chunksWritten: 0 };
@@ -305,12 +319,14 @@ export async function indexRepo(
 
     const dirtyChunks: CodeChunk[] = [];
     const staleVectorIds: string[] = [];
+    const fileRows: FileRow[] = [];
     for (const stat of fileStats) {
       if (stat.indexed) filesIndexed++;
       chunksWritten += stat.chunksWritten;
       edgesWritten += stat.edgesWritten;
       dirtyChunks.push(...stat.dirtyChunks);
       staleVectorIds.push(...stat.staleVectorIds);
+      if (stat.fileRow) fileRows.push(stat.fileRow);
     }
 
     if (staleVectorIds.length > 0) {
@@ -318,13 +334,30 @@ export async function indexRepo(
     }
     await embedAndUpsert(ai, vectorize, job.repoFullName, dirtyChunks, job.tenantId);
     await insertChunks(d1, dirtyChunks);
+    // File rows are persisted only after chunks are durably written above: a
+    // retry after a failure here must still see the old git_blob_sha and
+    // re-index this file (via partitionTargetsByBlobSha) rather than
+    // blob-skipping it with its chunks permanently missing.
+    await upsertFiles(d1, fileRows);
 
-    const codeIntelFiles =
-      needsCodeIntel && effectiveJob.jobType === 'FULL_INDEX'
-        ? indexingContents
-        : needsCodeIntel && codeIntelTarballPromise
-          ? await codeIntelTarballPromise
-          : new Map<string, string>();
+    let codeIntelFiles: Map<string, string>;
+    if (needsCodeIntel && effectiveJob.jobType === 'FULL_INDEX') {
+      codeIntelFiles = indexingContents;
+    } else if (needsCodeIntel && codeIntelTarballPromise) {
+      const snapshot = await codeIntelTarballPromise;
+      if (snapshot === null) {
+        if (config.codeIntel.mode === 'required') {
+          throw new Error(
+            `code-intel tarball fetch failed for ${job.repoFullName}@${commitSha}`,
+          );
+        }
+        codeIntelFiles = new Map<string, string>();
+      } else {
+        codeIntelFiles = snapshot;
+      }
+    } else {
+      codeIntelFiles = new Map<string, string>();
+    }
 
     const codeIntel = await runCodeIntelArtifacts({
       d1,
@@ -415,6 +448,8 @@ interface FileIndexStat {
   edgesWritten: number;
   dirtyChunks: CodeChunk[];
   staleVectorIds: string[];
+  /** Null for skipped/binary files; otherwise written by indexRepo() after chunks land. */
+  fileRow: FileRow | null;
 }
 
 interface IndexOneFileInput {
@@ -456,12 +491,16 @@ async function indexOneFile(input: IndexOneFileInput): Promise<FileIndexStat> {
       edgesWritten: 0,
       dirtyChunks: [],
       staleVectorIds: [],
+      fileRow: null,
     };
   }
   const content = raw;
   const fileHash = await sha256Hex(content);
 
-  await upsertFile(d1, {
+  // Not persisted here: writing git_blob_sha/content_hash before chunks are
+  // durably embedded+inserted would let a later failure blob-skip this file
+  // forever on retry. indexRepo() upserts this row after insertChunks succeeds.
+  const fileRow: FileRow = {
     repoId,
     path: entry.path,
     language,
@@ -469,7 +508,7 @@ async function indexOneFile(input: IndexOneFileInput): Promise<FileIndexStat> {
     contentHash: fileHash,
     gitBlobSha: entry.sha,
     commitSha,
-  });
+  };
 
   const { chunks, edges } = await produceChunks({
     repoId,
@@ -511,6 +550,7 @@ async function indexOneFile(input: IndexOneFileInput): Promise<FileIndexStat> {
     edgesWritten: edges.length,
     dirtyChunks,
     staleVectorIds,
+    fileRow,
   };
 }
 

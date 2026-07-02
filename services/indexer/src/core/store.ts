@@ -135,53 +135,14 @@ export async function updateIndexStatus(
   );
 }
 
-export async function upsertFile(
-  d1: D1Client,
-  file: {
-    repoId: string;
-    path: string;
-    language: string | null;
-    sizeBytes: number | null;
-    contentHash: string;
-    gitBlobSha: string | null;
-    commitSha: string | null;
-  },
-): Promise<string> {
-  const id = fileIdFor(file.repoId, file.path);
-  await d1.exec(
-    `INSERT INTO files (id, repo_id, path, language, size_bytes, content_hash, git_blob_sha, commit_sha, updated_at)
-     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, datetime('now'))
-     ON CONFLICT(id) DO UPDATE SET
-       language = excluded.language,
-       size_bytes = excluded.size_bytes,
-       content_hash = excluded.content_hash,
-       git_blob_sha = excluded.git_blob_sha,
-       commit_sha = excluded.commit_sha,
-       updated_at = datetime('now')`,
-    [
-      id,
-      file.repoId,
-      file.path,
-      file.language,
-      file.sizeBytes,
-      file.contentHash,
-      file.gitBlobSha,
-      file.commitSha,
-    ],
-  );
-  return id;
-}
-
-/** Returns existing chunk ids for a file (used to also delete their vectors). */
-export async function chunkIdsForFile(
-  d1: D1Client,
-  fileId: string,
-): Promise<string[]> {
-  const rows = await d1.query<{ id: string }>(
-    `SELECT id FROM chunks WHERE file_id = ?1`,
-    [fileId],
-  );
-  return rows.map((r) => r.id);
+export interface FileRow {
+  repoId: string;
+  path: string;
+  language: string | null;
+  sizeBytes: number | null;
+  contentHash: string;
+  gitBlobSha: string | null;
+  commitSha: string | null;
 }
 
 /** Existing chunk id -> content_hash map for a file (unchanged-chunk skip). */
@@ -344,8 +305,90 @@ export async function deleteFileData(d1: D1Client, fileId: string): Promise<void
   await d1.exec(`DELETE FROM chunks WHERE file_id = ?1`, [fileId]);
 }
 
-export async function deleteFileRow(d1: D1Client, fileId: string): Promise<void> {
-  await d1.exec(`DELETE FROM files WHERE id = ?1`, [fileId]);
+/** Batched delete of code_edges for many files (removed-files cleanup). */
+export async function deleteEdgesByFileIds(
+  d1: D1Client,
+  fileIds: string[],
+): Promise<void> {
+  const BATCH = 100;
+  for (let i = 0; i < fileIds.length; i += BATCH) {
+    const batch = fileIds.slice(i, i + BATCH);
+    if (batch.length === 0) continue;
+    const placeholders = batch.map(() => '?').join(',');
+    await d1.exec(`DELETE FROM code_edges WHERE file_id IN (${placeholders})`, batch);
+  }
+}
+
+/** Batched delete of chunks for many files (removed-files cleanup). */
+export async function deleteChunksByFileIds(
+  d1: D1Client,
+  fileIds: string[],
+): Promise<void> {
+  const BATCH = 100;
+  for (let i = 0; i < fileIds.length; i += BATCH) {
+    const batch = fileIds.slice(i, i + BATCH);
+    if (batch.length === 0) continue;
+    const placeholders = batch.map(() => '?').join(',');
+    await d1.exec(`DELETE FROM chunks WHERE file_id IN (${placeholders})`, batch);
+  }
+}
+
+/** Batched delete of file rows by id (removed-files cleanup). */
+export async function deleteFilesByIds(
+  d1: D1Client,
+  ids: string[],
+): Promise<void> {
+  const BATCH = 100;
+  for (let i = 0; i < ids.length; i += BATCH) {
+    const batch = ids.slice(i, i + BATCH);
+    if (batch.length === 0) continue;
+    const placeholders = batch.map(() => '?').join(',');
+    await d1.exec(`DELETE FROM files WHERE id IN (${placeholders})`, batch);
+  }
+}
+
+const FILE_UPSERT_ROW_PARAMS = 8;
+// D1 caps bound parameters at 100 per query.
+const FILE_UPSERT_BATCH = Math.floor(100 / FILE_UPSERT_ROW_PARAMS);
+const FILE_VALUE_ROW = "(?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))";
+
+function fileUpsertParams(f: FileRow): unknown[] {
+  return [
+    fileIdFor(f.repoId, f.path),
+    f.repoId,
+    f.path,
+    f.language,
+    f.sizeBytes,
+    f.contentHash,
+    f.gitBlobSha,
+    f.commitSha,
+  ];
+}
+
+/**
+ * Batched file-row upsert. Callers must only invoke this after the file's
+ * chunks have been durably written (embedded + inserted) — persisting
+ * git_blob_sha/content_hash first would make a retry after a failed embed
+ * blob-skip the file forever (see blobSkip.ts).
+ */
+export async function upsertFiles(d1: D1Client, rows: FileRow[]): Promise<void> {
+  for (let i = 0; i < rows.length; i += FILE_UPSERT_BATCH) {
+    const batch = rows.slice(i, i + FILE_UPSERT_BATCH);
+    if (batch.length === 0) continue;
+    const values = batch.map(() => FILE_VALUE_ROW).join(', ');
+    await d1.exec(
+      `INSERT INTO files (id, repo_id, path, language, size_bytes, content_hash, git_blob_sha, commit_sha, updated_at)
+       VALUES ${values}
+       ON CONFLICT(id) DO UPDATE SET
+         language = excluded.language,
+         size_bytes = excluded.size_bytes,
+         content_hash = excluded.content_hash,
+         git_blob_sha = excluded.git_blob_sha,
+         commit_sha = excluded.commit_sha,
+         updated_at = datetime('now')`,
+      batch.flatMap((f) => fileUpsertParams(f)),
+    );
+  }
 }
 
 const CHUNK_INSERT_ROW_PARAMS = 13;
@@ -461,6 +504,44 @@ export async function upsertCodeIndexArtifact(
   );
 }
 
+const SCIP_SYMBOL_INSERT_ROW_PARAMS = 11;
+// D1 caps bound parameters at 100 per query.
+const SCIP_SYMBOL_INSERT_BATCH = Math.floor(100 / SCIP_SYMBOL_INSERT_ROW_PARAMS);
+const SCIP_SYMBOL_VALUE_ROW = "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))";
+const SCIP_REFERENCE_INSERT_ROW_PARAMS = 9;
+const SCIP_REFERENCE_INSERT_BATCH = Math.floor(100 / SCIP_REFERENCE_INSERT_ROW_PARAMS);
+const SCIP_REFERENCE_VALUE_ROW = '(?, ?, ?, ?, ?, ?, ?, ?, ?)';
+
+function scipSymbolInsertParams(s: ScipSymbol): unknown[] {
+  return [
+    s.id,
+    s.repoId,
+    s.symbol,
+    s.displayName,
+    s.kind,
+    s.language,
+    s.path,
+    s.startLine,
+    s.endLine,
+    s.definitionChunkId,
+    s.commitSha,
+  ];
+}
+
+function scipReferenceInsertParams(r: ScipReference): unknown[] {
+  return [
+    r.id,
+    r.repoId,
+    r.symbolId,
+    r.role,
+    r.path,
+    r.startLine,
+    r.endLine,
+    r.enclosingSymbol,
+    r.commitSha,
+  ];
+}
+
 export async function replaceScipFactsForRepo(
   d1: D1Client,
   repoId: string,
@@ -470,12 +551,15 @@ export async function replaceScipFactsForRepo(
   await d1.exec(`DELETE FROM scip_references WHERE repo_id = ?1`, [repoId]);
   await d1.exec(`DELETE FROM scip_symbols WHERE repo_id = ?1`, [repoId]);
 
-  for (const s of symbols) {
+  for (let i = 0; i < symbols.length; i += SCIP_SYMBOL_INSERT_BATCH) {
+    const batch = symbols.slice(i, i + SCIP_SYMBOL_INSERT_BATCH);
+    if (batch.length === 0) continue;
+    const values = batch.map(() => SCIP_SYMBOL_VALUE_ROW).join(', ');
     await d1.exec(
       `INSERT INTO scip_symbols
          (id, repo_id, symbol, display_name, kind, language, path, start_line,
           end_line, definition_chunk_id, commit_sha, updated_at)
-       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, datetime('now'))
+       VALUES ${values}
        ON CONFLICT(id) DO UPDATE SET
          display_name = excluded.display_name,
          kind = excluded.kind,
@@ -486,40 +570,21 @@ export async function replaceScipFactsForRepo(
          definition_chunk_id = excluded.definition_chunk_id,
          commit_sha = excluded.commit_sha,
          updated_at = datetime('now')`,
-      [
-        s.id,
-        s.repoId,
-        s.symbol,
-        s.displayName,
-        s.kind,
-        s.language,
-        s.path,
-        s.startLine,
-        s.endLine,
-        s.definitionChunkId,
-        s.commitSha,
-      ],
+      batch.flatMap((s) => scipSymbolInsertParams(s)),
     );
   }
 
-  for (const r of references) {
+  for (let i = 0; i < references.length; i += SCIP_REFERENCE_INSERT_BATCH) {
+    const batch = references.slice(i, i + SCIP_REFERENCE_INSERT_BATCH);
+    if (batch.length === 0) continue;
+    const values = batch.map(() => SCIP_REFERENCE_VALUE_ROW).join(', ');
     await d1.exec(
       `INSERT INTO scip_references
          (id, repo_id, symbol_id, role, path, start_line, end_line,
           enclosing_symbol, commit_sha)
-       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
+       VALUES ${values}
        ON CONFLICT(id) DO NOTHING`,
-      [
-        r.id,
-        r.repoId,
-        r.symbolId,
-        r.role,
-        r.path,
-        r.startLine,
-        r.endLine,
-        r.enclosingSymbol,
-        r.commitSha,
-      ],
+      batch.flatMap((r) => scipReferenceInsertParams(r)),
     );
   }
 }
