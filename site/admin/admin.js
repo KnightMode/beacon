@@ -823,9 +823,46 @@
     setText("[data-github-complete-status]", "GitHub install linked to this workspace.");
   }
 
+  // The admin paths sit behind separate Cloudflare Access apps. Right after a
+  // fresh Access sign-in the browser is only authorized for the page app, so
+  // the first fetch to /api/admin/* dies in Access's cross-origin login
+  // redirect. Detect that and hop through /api/admin/bootstrap once (a
+  // top-level navigation Access can authorize), then land back here.
+  const ACCESS_BOOTSTRAP_FLAG = "beaconAccessBootstrapped";
+
+  function isAccessBlockedError(err) {
+    if (err instanceof TypeError) return true;
+    return /request failed \((401|403)\)|cloudflare access/i.test(String(err?.message || ""));
+  }
+
+  function bootstrapAccessOnce(err) {
+    if (!isAccessBlockedError(err)) {
+      showError(err);
+      return;
+    }
+    let attempted = "1";
+    try {
+      attempted = window.sessionStorage.getItem(ACCESS_BOOTSTRAP_FLAG);
+      if (!attempted) window.sessionStorage.setItem(ACCESS_BOOTSTRAP_FLAG, "1");
+    } catch {
+      attempted = "1";
+    }
+    if (attempted) {
+      showError(err);
+      return;
+    }
+    const returnTo = `${window.location.pathname}${window.location.hash}`;
+    window.location.replace(`/api/admin/bootstrap?return=${encodeURIComponent(returnTo)}`);
+  }
+
   load()
     .then((authenticated) => {
+      try {
+        window.sessionStorage.removeItem(ACCESS_BOOTSTRAP_FLAG);
+      } catch {
+        // Ignore storage failures; the flag only guards the redirect loop.
+      }
       if (authenticated) startLiveUpdates();
     })
-    .catch(showError);
+    .catch(bootstrapAccessOnce);
 })();
