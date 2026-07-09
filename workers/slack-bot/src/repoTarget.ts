@@ -42,7 +42,7 @@ export async function getDefaultAllowlistedRepo(
   return repoTargetFromFullName(fullName);
 }
 
-/** Match phrases like "ebpf router repo" to allowlisted KnightMode/ebpf-wiremock-router. */
+/** Match natural-language repo aliases against allowlisted repo slug parts. */
 export async function fuzzyMatchAllowlistedRepo(
   env: Env,
   text: string,

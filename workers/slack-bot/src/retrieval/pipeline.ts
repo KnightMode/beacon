@@ -55,67 +55,16 @@ export async function retrieveSmart(
  */
 export function scopeAllowlist(query: string, allowlist: string[]): string[] {
   const q = query.toLowerCase();
-  const words = queryWords(q);
-  const scored = allowlist
-    .map((id) => ({ id, score: repoMentionScore(q, words, id) }))
-    .filter((entry) => entry.score >= 3)
-    .sort((a, b) => b.score - a.score);
-
-  if (scored.length === 0) return allowlist;
-  const best = scored[0]?.score ?? 0;
-  const matched = scored.filter((entry) => entry.score === best).map((entry) => entry.id);
+  const matched = allowlist.filter((id) => {
+    if (q.includes(id)) return true; // explicit owner/name
+    const name = id.split('/')[1] ?? '';
+    if (name.length < 3) return false;
+    const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    if (new RegExp(`\\b${escaped}\\b`).test(q)) return true;
+    const spaced = name.replace(/-/g, ' ');
+    return spaced !== name && q.includes(spaced);
+  });
   return matched.length > 0 ? matched : allowlist;
-}
-
-const REPO_SCOPE_STOPWORDS = new Set([
-  'the',
-  'and',
-  'for',
-  'with',
-  'this',
-  'that',
-  'then',
-  'does',
-  'work',
-  'file',
-  'files',
-  'import',
-  'imports',
-  'repo',
-  'repository',
-]);
-
-function queryWords(query: string): string[] {
-  return (
-    query
-      .match(/\b[a-z][a-z0-9-]{2,}\b/g)
-      ?.filter((word) => !REPO_SCOPE_STOPWORDS.has(word)) ?? []
-  );
-}
-
-function repoMentionScore(query: string, words: string[], repoId: string): number {
-  if (query.includes(repoId)) return 100; // explicit owner/name
-
-  const name = repoId.split('/')[1] ?? '';
-  if (name.length < 3) return 0;
-  const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  if (new RegExp(`\\b${escaped}\\b`).test(query)) return 80;
-
-  const spaced = name.replace(/-/g, ' ');
-  if (spaced !== name && query.includes(spaced)) return 70;
-
-  const parts = name
-    .toLowerCase()
-    .split(/[-_.]+/)
-    .filter((part) => part.length > 2);
-
-  let score = 0;
-  for (const part of parts) {
-    if (words.some((word) => word === part || word.includes(part) || part.includes(word))) {
-      score += 3;
-    }
-  }
-  return score;
 }
 
 export async function retrieve(

@@ -18,7 +18,6 @@ const REPOS = [
   'knightmode/slack-code-intelligence',
   'knightmode/aim',
   'spf13/viper',
-  'knightmode/ebpf-wiremock-router',
 ];
 
 describe('scopeAllowlist', () => {
@@ -40,12 +39,6 @@ describe('scopeAllowlist', () => {
     ).toEqual(['knightmode/slack-code-intelligence']);
   });
 
-  it('matches partial repo aliases like "ebpf report"', () => {
-    expect(scopeAllowlist('explain the ebpf report', REPOS)).toEqual([
-      'knightmode/ebpf-wiremock-router',
-    ]);
-  });
-
   it('keeps all repos when none are mentioned', () => {
     expect(scopeAllowlist('where is the webhook signature verified?', REPOS)).toEqual(
       REPOS,
@@ -57,18 +50,18 @@ describe('buildRetrievalText', () => {
   it('includes the previous assistant answer so "this" resolves to mentioned symbols', () => {
     const text = buildRetrievalText(
       [
-        { role: 'user', text: 'explain the ebpf report' },
+        { role: 'user', text: 'explain the payment report' },
         {
           role: 'assistant',
           text:
-            'The class is `EbpfTestReport` in `EbpfTestReport.java`.\n\n*Sources*\n[1] beacon/irrelevant.ts:1-2',
+            'The class is `PaymentTestReport` in `PaymentTestReport.java`.\n\n*Sources*\n[1] beacon/irrelevant.ts:1-2',
         },
       ],
       'which files import this then',
     );
 
-    expect(text).toContain('explain the ebpf report');
-    expect(text).toContain('EbpfTestReport.java');
+    expect(text).toContain('explain the payment report');
+    expect(text).toContain('PaymentTestReport.java');
     expect(text).toContain('which files import this then');
     expect(text).not.toContain('beacon/irrelevant.ts');
   });
@@ -399,7 +392,7 @@ describe('parsePlannerOutput', () => {
 describe('shouldRunPlanner', () => {
   it('keeps ordinary well-recalled questions on the fast path', () => {
     expect(
-      shouldRunPlanner('how does ebpf wiremock router work?', {
+      shouldRunPlanner('how does payment event router work?', {
         poolSize: 27,
         highConfidenceHits: 10,
         codeIntelHits: 0,
