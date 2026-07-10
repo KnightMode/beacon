@@ -1,4 +1,4 @@
-FROM golang:1.25.9-bookworm AS zoekt
+FROM golang:1.26.5-bookworm AS zoekt
 ARG ZOEKT_VERSION=v0.0.0-20260605122240-893a523804f1
 RUN go install github.com/sourcegraph/zoekt/cmd/zoekt-webserver@${ZOEKT_VERSION}
 
