@@ -61,7 +61,7 @@ jobs:
       CODE_INTEL_ENABLED: ${{ !vars.BEACON_CODE_INTEL_MODE || vars.BEACON_CODE_INTEL_MODE == 'best_effort' || vars.BEACON_CODE_INTEL_MODE == 'best-effort' || vars.BEACON_CODE_INTEL_MODE == 'required' || vars.BEACON_CODE_INTEL_MODE == 'true' }}
     steps:
       - uses: actions/checkout@v6
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
